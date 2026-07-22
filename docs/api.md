@@ -116,6 +116,7 @@ DELETE /api/machines/:id
 ```http
 GET /api/edge/health
 GET /api/edge/stmes/handshakes
+GET /api/edge/mqtt/messages
 POST /api/edge/opcua/read
 
 {
@@ -138,6 +139,8 @@ Erste Nachricht innerhalb von fünf Sekunden:
 Danach folgen Nachrichten vom Typ `auth.ok` und `edge.telemetry`. Ungültige Verbindungen werden mit Code 4401 geschlossen.
 
 OPC-UA-Nachrichten enthalten entweder einen sekündlichen `station.snapshot` mit DB151- und aktuellen Query-Signalen oder ein ereignisgetriebenes `stmes.handshake` für Anfrage, Verarbeitung, Antwort, Quittierung und Prozessabschluss. `GET /api/edge/stmes/handshakes` liefert das persistierte Journal für die Anzeige nach einem Seiten-Reload.
+
+MQTT-Nachrichten auf den konfigurierten Subscribe-Topics werden ebenfalls als `edge.telemetry` mit `source: "mqtt"` übertragen. `GET /api/edge/mqtt/messages` liefert die letzten 50 seit dem Backend-Start empfangenen Nachrichten für die initiale Browseranzeige.
 
 ## Health
 

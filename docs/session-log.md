@@ -270,3 +270,13 @@ _Letzte Aktualisierung: 2026-07-22T11:42:00+02:00_
 - Sidebar mit `shrink-0` gegen unbeabsichtigtes Zusammendrücken im Flex-Layout abgesichert.
 - Die Korrektur gilt zentral für Edge und alle anderen langen Fachseiten.
 - Kein Commit und kein Push durchgeführt.
+
+### [14:48] MQTT-Subscribe im Edge-Browser verifiziert
+**Prompt:** "teste mqtt subscribe es und zeig es im browser an"
+- Vorhandene Subscriptions und den MQTT-zu-WebSocket-Pfad geprüft.
+- Echte QoS-1-Testnachricht auf `mes/machines/demo-01/telemetry` publiziert und den Empfang als authentifizierte `edge.telemetry` mit `source: mqtt` verifiziert.
+- MQTT-Service um einen flüchtigen Verlauf der letzten 50 empfangenen Nachrichten ergänzt und über `GET /api/edge/mqtt/messages` bereitgestellt.
+- Edge-Seite um einen eigenen Bereich "MQTT Subscribe" mit Brokerstatus, Topic, Empfangszeit und dynamischer Payload-Darstellung erweitert.
+- Testpayload mit `temperature: 43.2`, `pressure: 6.4`, `state: running` live über WebSocket und anschließend über den Verlauf-Endpunkt gelesen.
+- Backend- und Frontend-Build sowie `git diff --check` erfolgreich; Edge-Route liefert HTTP 200.
+- Kein Commit und kein Push durchgeführt.

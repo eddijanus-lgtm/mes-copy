@@ -8,6 +8,8 @@ const INITIAL_STATE = {
   handshakeByResource: {},
   eventsByResource: {},
   changedAtByResource: {},
+  mqttByTopic: {},
+  mqttEvents: [],
   lastMessageAt: null,
   logs: [],
 };
@@ -79,6 +81,14 @@ function applyTelemetry(current, message) {
     telemetry: message,
     lastMessageAt: message.timestamp,
   };
+  if (message.source === "mqtt") {
+    const mqttEvent = { topic: message.topic, payload: message.payload, timestamp: message.timestamp };
+    return {
+      ...base,
+      mqttByTopic: { ...current.mqttByTopic, [message.topic]: mqttEvent },
+      mqttEvents: [...current.mqttEvents, mqttEvent].slice(-30),
+    };
+  }
   if (!resourceId) return base;
 
   if (message.payload.kind === "stmes.handshake") {

@@ -30,6 +30,10 @@ export class EdgeController {
   @Roles(UserRoleEnum.ADMIN, UserRoleEnum.OPERATOR, UserRoleEnum.VIEWER)
   mqttConnected() { return { connected: this.mqttGatewayService.isConnected() }; }
 
+  @Get('mqtt/messages')
+  @Roles(UserRoleEnum.ADMIN, UserRoleEnum.OPERATOR, UserRoleEnum.VIEWER)
+  getRecentMqttMessages() { return this.mqttGatewayService.getRecentTelemetry(); }
+
   @Post('mqtt/publish')
   @Roles(UserRoleEnum.ADMIN)
   async publishToMqtt(@Body() dto: MqttPublishDto) {

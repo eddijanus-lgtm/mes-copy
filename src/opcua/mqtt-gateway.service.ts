@@ -18,6 +18,7 @@ export class MqttGatewayService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(MqttGatewayService.name);
   private startupTimer?: NodeJS.Timeout;
   private readonly telemetryCallbacks = new Set<(event: EdgeTelemetryEvent) => void>();
+  private readonly recentTelemetry: Array<{ topic: string; payload: Record<string, unknown>; timestamp: string }> = [];
 
   constructor(private readonly configService: ConfigService) {}
 
@@ -62,7 +63,10 @@ export class MqttGatewayService implements OnModuleInit, OnModuleDestroy {
               try { callback(data); } catch (error) { this.logger.error('MQTT subscriber failed', error); }
             }
           }
-          this.emitTelemetry(topic, data);
+          const timestamp = new Date().toISOString();
+          this.recentTelemetry.unshift({ topic, payload: data, timestamp });
+          this.recentTelemetry.splice(50);
+          this.emitTelemetry(topic, data, timestamp);
         } catch (error) {
           this.logger.warn(`Invalid MQTT JSON on ${topic}: ${(error as Error).message}`);
         }
@@ -112,10 +116,14 @@ export class MqttGatewayService implements OnModuleInit, OnModuleDestroy {
     return () => this.telemetryCallbacks.delete(callback);
   }
 
-  private emitTelemetry(topic: string, payload: Record<string, unknown>) {
+  getRecentTelemetry() {
+    return [...this.recentTelemetry];
+  }
+
+  private emitTelemetry(topic: string, payload: Record<string, unknown>, timestamp = new Date().toISOString()) {
     const event: EdgeTelemetryEvent = {
       type: 'edge.telemetry',
-      timestamp: new Date().toISOString(),
+      timestamp,
       source: 'mqtt',
       topic,
       payload,

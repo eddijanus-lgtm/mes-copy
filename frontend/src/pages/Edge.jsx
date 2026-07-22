@@ -16,16 +16,18 @@ export default function EdgePage() {
   const [carriers, setCarriers] = useState([]);
   const [orders, setOrders] = useState([]);
   const [handshakeJournal, setHandshakeJournal] = useState([]);
+  const [mqttHistory, setMqttHistory] = useState([]);
   const [now, setNow] = useState(Date.now());
-  const { status, telemetryByResource, handshakeByResource, eventsByResource, changedAtByResource, lastMessageAt, logs } = useEdgeTelemetry();
+  const { status, telemetryByResource, handshakeByResource, eventsByResource, changedAtByResource, mqttEvents, lastMessageAt, logs } = useEdgeTelemetry();
 
   useEffect(() => {
     const loadStatus = () => api.get("/edge/health").then(setHealth).catch(() => setHealth(null));
-    const loadFlow = () => Promise.all([api.get("/carriers"), api.get("/orders"), api.get("/edge/stmes/handshakes")])
-      .then(([carrierData, orderData, journalData]) => {
+    const loadFlow = () => Promise.all([api.get("/carriers"), api.get("/orders"), api.get("/edge/stmes/handshakes"), api.get("/edge/mqtt/messages")])
+      .then(([carrierData, orderData, journalData, mqttData]) => {
         setCarriers(carrierData);
         setOrders(orderData);
         setHandshakeJournal(journalData);
+        setMqttHistory(mqttData);
       })
       .catch(() => {});
     loadStatus();
@@ -66,6 +68,8 @@ export default function EdgePage() {
         </div>
 
         <CarrierFlow order={demoOrder} carriers={demoCarriers} />
+
+        <MqttLivePanel messages={mqttEvents.length > 0 ? [...mqttEvents].reverse() : mqttHistory} connected={Boolean(health?.mqtt)} />
 
         {stations.length === 0 && <p className="rounded-lg border border-neutral-200 bg-white p-6 text-sm text-neutral-500">Warte auf Stationsdaten...</p>}
         {stations.map((message) => {
@@ -108,6 +112,45 @@ export default function EdgePage() {
         </details>
       </main>
     </div>
+  );
+}
+
+function MqttLivePanel({ messages, connected }) {
+  const visible = messages.slice(0, 8);
+  return (
+    <section className="rounded-xl border border-neutral-200 bg-white shadow-sm">
+      <div className="flex flex-col gap-2 border-b border-neutral-100 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-sky-600">MQTT Subscribe</p>
+          <h2 className="font-semibold text-neutral-900">Live-Nachrichten vom Broker</h2>
+        </div>
+        <span className={`inline-flex w-fit items-center gap-2 rounded-full px-3 py-1.5 text-xs font-semibold ${connected ? "bg-sky-50 text-sky-700" : "bg-red-50 text-red-700"}`}>
+          <span className={`h-2 w-2 rounded-full ${connected ? "animate-pulse bg-sky-500" : "bg-red-500"}`} />
+          {connected ? "abonniert" : "getrennt"}
+        </span>
+      </div>
+      <div className="p-4">
+        {visible.length === 0 && <p className="text-sm text-neutral-400">Noch keine MQTT-Nachricht empfangen.</p>}
+        <div className="grid gap-3 lg:grid-cols-2">
+          {visible.map((message, index) => (
+            <article key={`${message.timestamp}-${message.topic}-${index}`} className="rounded-lg border border-sky-100 bg-sky-50/50 p-4">
+              <div className="flex items-start justify-between gap-3">
+                <code className="break-all text-xs font-semibold text-sky-800">{message.topic}</code>
+                <time className="shrink-0 text-[10px] text-neutral-400">{formatTimestamp(message.timestamp)}</time>
+              </div>
+              <div className="mt-3 grid grid-cols-2 gap-2">
+                {Object.entries(message.payload || {}).map(([key, value]) => (
+                  <div key={key} className="rounded bg-white px-3 py-2">
+                    <p className="font-mono text-[10px] text-neutral-400">{key}</p>
+                    <p className="mt-0.5 break-all text-sm font-semibold text-neutral-800">{formatMqttValue(value)}</p>
+                  </div>
+                ))}
+              </div>
+            </article>
+          ))}
+        </div>
+      </div>
+    </section>
   );
 }
 
@@ -245,4 +288,8 @@ function isRecent(value, now) {
 
 function carrierStatus(status) {
   return ({ available: "Verfügbar", assigned: "Zugeordnet", in_process: "In Arbeit", completed: "Fertig", error: "Fehler" })[status] || status;
+}
+
+function formatMqttValue(value) {
+  return typeof value === "object" ? JSON.stringify(value) : String(value);
 }

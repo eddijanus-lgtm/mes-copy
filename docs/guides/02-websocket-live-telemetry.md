@@ -9,6 +9,8 @@ _Status: verified - 2026-07-22_
 3. Das Backend bestätigt mit `auth.ok`.
 4. OPC-UA- und MQTT-Ereignisse werden als `edge.telemetry` gesendet.
 
+Die Edge-Seite zeigt MQTT-Nachrichten in einem eigenen Subscribe-Bereich. Der Backend-Prozess hält die letzten 50 Nachrichten im Speicher, sodass sie über `GET /api/edge/mqtt/messages` auch nach einem Browser-Reload sichtbar sind; ein Backend-Neustart leert diesen flüchtigen Verlauf.
+
 ```json
 {
   "type": "edge.telemetry",
