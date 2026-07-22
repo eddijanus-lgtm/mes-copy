@@ -1,6 +1,5 @@
 import { useState, useEffect } from "react";
-
-const API = "/api";
+import { api } from "../api/client.js";
 
 export default function TracesPage() {
   const [traces, setTraces] = useState([]);
@@ -8,9 +7,9 @@ export default function TracesPage() {
   const [filter, setFilter] = useState("all");
 
   useEffect(() => {
-    fetch(API + "/traces").then((r) => r.ok ? r.json() : null).then((d) => {
+    api.get("/traces").then((d) => {
       setTraces(Array.isArray(d) ? d : []);
-    }).finally(() => setLoading(false));
+    }).catch(() => setTraces([])).finally(() => setLoading(false));
   }, []);
 
   const filtered = filter === "all" ? traces : traces.filter((t) => (t.category||"").toLowerCase() === filter.toLowerCase());

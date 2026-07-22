@@ -1,5 +1,6 @@
-import { Injectable, OnModuleInit, Logger } from '@nestjs/common';
+import { ForbiddenException, Injectable, Logger, OnModuleDestroy, OnModuleInit, ServiceUnavailableException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { EdgeTelemetryEvent } from './edge-telemetry';
 const mqtt = require('mqtt');
 
 const SUBSCRIPTION_TOPICS = [
@@ -9,21 +10,19 @@ const SUBSCRIPTION_TOPICS = [
   'mes/orders/+/+',
 ];
 
-function noOpErr() {}
-
 @Injectable()
-export class MqttGatewayService implements OnModuleInit {
+export class MqttGatewayService implements OnModuleInit, OnModuleDestroy {
   private client: any;
   private subscriptionCallbacks = new Map<string, Array<(data: any) => void>>();
   private reconnectAttempts = 0;
   private readonly logger = new Logger(MqttGatewayService.name);
+  private startupTimer?: NodeJS.Timeout;
+  private readonly telemetryCallbacks = new Set<(event: EdgeTelemetryEvent) => void>();
 
   constructor(private readonly configService: ConfigService) {}
 
   async onModuleInit() {
     const brokerUrl = this.configService.get('MQTT_BROKER_URL', 'mqtt://localhost:1883');
-    let connectedOnFirstTry = false;
-
     try {
       this.client = mqtt.connect(brokerUrl, {
         clientId: 'mes-edge-' + Date.now(),
@@ -31,44 +30,54 @@ export class MqttGatewayService implements OnModuleInit {
         reconnectPeriod: 30000,
       });
 
-      // Completely silence ALL internal MQTT events
-      for (const event of ['error', 'close', 'reconnect', 'offline', 'end', 'packetsend', 'packetreceive']) {
-        this.client?.on(event, noOpErr);
-      }
-
-      // Suppress unhandled process errors (mqtt-lib throws when broker unreachable)
-      process.removeAllListeners('uncaughtException');
-      process.on('uncaughtException', noOpErr);
-      process.removeAllListeners('unhandledRejection');
-      process.on('unhandledRejection', noOpErr);
-
-      setTimeout(() => {
-        if (!connectedOnFirstTry) {
+      this.startupTimer = setTimeout(() => {
+        if (!this.client?.connected) {
           this.logger.warn('MQTT broker not reachable at: ' + brokerUrl);
         }
       }, 8000);
 
       this.client.on('connect', () => {
-        connectedOnFirstTry = true;
         this.reconnectAttempts = 0;
         this.logger.log('Connected to MQTT broker at ' + brokerUrl);
         for (const topic of SUBSCRIPTION_TOPICS) {
-          try { this.client.subscribe(topic, noOpErr); } catch (_) {}
+          this.client.subscribe(topic, (error: Error | null) => {
+            if (error) this.logger.error(`MQTT subscription failed for ${topic}: ${error.message}`);
+          });
         }
       });
+      this.client.on('error', (error: Error) => this.logger.error('MQTT client error: ' + error.message));
+      this.client.on('offline', () => this.logger.warn('MQTT client is offline'));
+      this.client.on('reconnect', () => {
+        this.reconnectAttempts += 1;
+        this.logger.log(`MQTT reconnect attempt ${this.reconnectAttempts}`);
+      });
+      this.client.on('close', () => this.logger.warn('MQTT connection closed'));
 
       this.client.on('message', (topic: string, payload: Buffer) => {
         try {
           const data = JSON.parse(payload.toString());
           const callbacks = this.subscriptionCallbacks.get(topic);
-          if (callbacks) for (const cb of callbacks) cb(data);
-        } catch (_) {}
+          if (callbacks) {
+            for (const callback of callbacks) {
+              try { callback(data); } catch (error) { this.logger.error('MQTT subscriber failed', error); }
+            }
+          }
+          this.emitTelemetry(topic, data);
+        } catch (error) {
+          this.logger.warn(`Invalid MQTT JSON on ${topic}: ${(error as Error).message}`);
+        }
       });
 
     } catch (e: any) {
       this.logger.warn('Could not initialize MQTT connection: ' + e.message);
       this.client = null;
     }
+  }
+
+  async onModuleDestroy() {
+    if (this.startupTimer) clearTimeout(this.startupTimer);
+    if (!this.client) return;
+    await new Promise<void>((resolve) => this.client.end(false, {}, () => resolve()));
   }
 
   onMessage(topic: string, callback: (data: any) => void): () => void {
@@ -84,14 +93,35 @@ export class MqttGatewayService implements OnModuleInit {
   }
 
   async publish(topic: string, data: any): Promise<void> {
-    if (this.client?.connected) {
-      return new Promise<void>((resolve) => {
-        this.client.publish(topic, JSON.stringify(data), { qos: 1 }, () => resolve());
-      });
+    const allowedPrefixes = this.configService.get('MQTT_ALLOWED_TOPIC_PREFIXES', 'mes/').split(',');
+    if (!allowedPrefixes.some((prefix) => topic.startsWith(prefix))) {
+      throw new ForbiddenException('MQTT topic is not allowed');
     }
+    if (!this.client?.connected) throw new ServiceUnavailableException('MQTT broker is not connected');
+    return new Promise<void>((resolve, reject) => {
+      this.client.publish(topic, JSON.stringify(data), { qos: 1 }, (error: Error | null) => error ? reject(error) : resolve());
+    });
   }
 
   isConnected(): boolean {
     return !!this.client && this.client.connected;
+  }
+
+  onTelemetry(callback: (event: EdgeTelemetryEvent) => void): () => void {
+    this.telemetryCallbacks.add(callback);
+    return () => this.telemetryCallbacks.delete(callback);
+  }
+
+  private emitTelemetry(topic: string, payload: Record<string, unknown>) {
+    const event: EdgeTelemetryEvent = {
+      type: 'edge.telemetry',
+      timestamp: new Date().toISOString(),
+      source: 'mqtt',
+      topic,
+      payload,
+    };
+    for (const callback of this.telemetryCallbacks) {
+      try { callback(event); } catch (error) { this.logger.error('MQTT telemetry callback failed', error); }
+    }
   }
 }

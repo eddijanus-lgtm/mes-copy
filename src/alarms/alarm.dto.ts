@@ -1,5 +1,6 @@
 import { Transform } from 'class-transformer';
-import { IsEnum, IsNotEmpty, IsOptional, IsString, IsUUID } from 'class-validator';
+import { Type } from 'class-transformer';
+import { IsDate, IsEnum, IsNotEmpty, IsOptional, IsString, IsUUID } from 'class-validator';
 import type { AlarmSeverity } from './alarm.entity';
 
 export class CreateAlarmDto {
@@ -8,7 +9,7 @@ export class CreateAlarmDto {
   severity: AlarmSeverity;
 
   @IsNotEmpty()
-  @IsString()
+  @IsUUID()
   machine_id: string;
 
   @IsNotEmpty()
@@ -30,5 +31,7 @@ export class UpdateAlarmDto {
   message?: string;
 
   @IsOptional()
+  @Type(() => Date)
+  @IsDate()
   acknowledged_at?: Date;
 }

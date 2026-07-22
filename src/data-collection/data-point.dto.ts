@@ -1,4 +1,5 @@
-import { IsNotEmpty, IsNumber, IsString, IsUUID, IsOptional, IsEnum } from 'class-validator';
+import { Type } from 'class-transformer';
+import { IsDate, IsNotEmpty, IsNumber, IsString, IsUUID, IsOptional, IsEnum } from 'class-validator';
 
 export class CreateDataPointDto {
   @IsNotEmpty()
@@ -17,5 +18,14 @@ export class CreateDataPointDto {
   quality?: 'good' | 'bad' | 'uncertain';
 
   @IsOptional()
+  @Type(() => Date)
+  @IsDate()
   timestamp?: Date;
+}
+
+export class DataPointQueryDto {
+  @IsOptional()
+  @IsString()
+  @IsNotEmpty()
+  node_id?: string;
 }

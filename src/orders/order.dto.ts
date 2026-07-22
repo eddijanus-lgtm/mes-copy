@@ -1,4 +1,5 @@
-import { IsNotEmpty, IsString, IsUUID, IsOptional, Min, IsNumber } from 'class-validator';
+import { Type } from 'class-transformer';
+import { IsDate, IsEnum, IsInt, IsNotEmpty, IsOptional, IsString, IsUUID, Min } from 'class-validator';
 
 export class CreateOrderDto {
   @IsNotEmpty()
@@ -6,7 +7,7 @@ export class CreateOrderDto {
   name: string;
 
   @Min(1)
-  @IsNumber()
+  @IsInt()
   priority: number;
 
   @IsUUID()
@@ -17,21 +18,28 @@ export class CreateOrderDto {
   operation: string;
 
   @Min(1)
-  @IsNumber()
+  @IsInt()
   quantity: number;
 
   @IsOptional()
+  @Type(() => Date)
+  @IsDate()
   start_time?: Date;
 
   @IsOptional()
+  @Type(() => Date)
+  @IsDate()
   target_complete_time?: Date;
 }
 
 export class UpdateOrderDto {
   @IsOptional()
+  @IsEnum(['pending', 'in_progress', 'completed', 'cancelled', 'on_hold'])
   status?: 'pending' | 'in_progress' | 'completed' | 'cancelled' | 'on_hold';
 
   @IsOptional()
+  @Min(0)
+  @IsInt()
   completed_quantity?: number;
 
   @IsOptional()

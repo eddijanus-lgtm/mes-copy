@@ -1,32 +1,45 @@
-import { Controller, Get, Post, Patch, Delete, Body, Param } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Delete, Body, Param, ParseIntPipe, ParseUUIDPipe } from '@nestjs/common';
 import { OrdersService } from './orders.service';
-import type { CreateOrderDto, UpdateOrderDto } from './order.dto';
+import { CreateOrderDto, UpdateOrderDto } from './order.dto';
+import { Roles } from '../auth/roles.decorator';
+import { UserRoleEnum } from '../users/user.entity';
 
 @Controller('orders')
 export class OrdersController {
   constructor(private readonly ordersService: OrdersService) {}
 
   @Post()
+  @Roles(UserRoleEnum.ADMIN, UserRoleEnum.OPERATOR)
   create(@Body() dto: CreateOrderDto) { return this.ordersService.create(dto); }
 
   @Get()
+  @Roles(UserRoleEnum.ADMIN, UserRoleEnum.OPERATOR, UserRoleEnum.VIEWER)
   findAll() { return this.ordersService.findAll(); }
 
-  @Get(':id')
-  findOne(@Param('id') id: string) { return this.ordersService.findOne(id); }
-
-  @Patch(':id')
-  update(@Param('id') id: string, @Body() dto: UpdateOrderDto) { return this.ordersService.update(id, dto); }
-
-  @Delete(':id')
-  remove(@Param('id') id: string) { return this.ordersService.remove(id); }
-
-  @Patch(':id/progress/:completedQty')
-  updateProgress(@Param('id') id: string, @Param('completedQty') completedQty: number) { return this.ordersService.updateProgress(id, completedQty); }
+  @Get('active')
+  @Roles(UserRoleEnum.ADMIN, UserRoleEnum.OPERATOR, UserRoleEnum.VIEWER)
+  getActiveOrders() { return this.ordersService.getActiveOrders(); }
 
   @Get('line/:machineId/pending')
-  getPendingByLine(@Param('machineId') machineId: string) { return this.ordersService.getPendingByLine(machineId); }
+  @Roles(UserRoleEnum.ADMIN, UserRoleEnum.OPERATOR, UserRoleEnum.VIEWER)
+  getPendingByLine(@Param('machineId', ParseUUIDPipe) machineId: string) { return this.ordersService.getPendingByLine(machineId); }
 
-  @Get('active')
-  getActiveOrders() { return this.ordersService.getActiveOrders(); }
+  @Patch(':id/progress/:completedQty')
+  @Roles(UserRoleEnum.ADMIN, UserRoleEnum.OPERATOR)
+  updateProgress(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('completedQty', ParseIntPipe) completedQty: number,
+  ) { return this.ordersService.updateProgress(id, completedQty); }
+
+  @Get(':id')
+  @Roles(UserRoleEnum.ADMIN, UserRoleEnum.OPERATOR, UserRoleEnum.VIEWER)
+  findOne(@Param('id', ParseUUIDPipe) id: string) { return this.ordersService.findOne(id); }
+
+  @Patch(':id')
+  @Roles(UserRoleEnum.ADMIN, UserRoleEnum.OPERATOR)
+  update(@Param('id', ParseUUIDPipe) id: string, @Body() dto: UpdateOrderDto) { return this.ordersService.update(id, dto); }
+
+  @Delete(':id')
+  @Roles(UserRoleEnum.ADMIN)
+  remove(@Param('id', ParseUUIDPipe) id: string) { return this.ordersService.remove(id); }
 }

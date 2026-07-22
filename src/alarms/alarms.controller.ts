@@ -1,30 +1,39 @@
-import { Controller, Get, Post, Patch, Delete, Body, Param, HttpCode, HttpStatus } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Delete, Body, Param, HttpCode, HttpStatus, ParseUUIDPipe } from '@nestjs/common';
 import { AlarmsService } from './alarms.service';
-import type { CreateAlarmDto } from './alarm.dto';
+import { CreateAlarmDto, UpdateAlarmDto } from './alarm.dto';
+import { Roles } from '../auth/roles.decorator';
+import { UserRoleEnum } from '../users/user.entity';
 
 @Controller('alarms')
 export class AlarmsController {
   constructor(private readonly alarmsService: AlarmsService) {}
 
   @Post()
+  @Roles(UserRoleEnum.ADMIN, UserRoleEnum.OPERATOR)
   create(@Body() dto: CreateAlarmDto) { return this.alarmsService.create(dto); }
 
   @Get()
+  @Roles(UserRoleEnum.ADMIN, UserRoleEnum.OPERATOR, UserRoleEnum.VIEWER)
   findAll() { return this.alarmsService.findAll(); }
 
+  @Get('stats/active-count')
+  @Roles(UserRoleEnum.ADMIN, UserRoleEnum.OPERATOR, UserRoleEnum.VIEWER)
+  getActiveAlarmCount() { return this.alarmsService.setActiveCount(); }
+
   @Get(':id')
-  findOne(@Param('id') id: string) { return this.alarmsService.findOne(id); }
+  @Roles(UserRoleEnum.ADMIN, UserRoleEnum.OPERATOR, UserRoleEnum.VIEWER)
+  findOne(@Param('id', ParseUUIDPipe) id: string) { return this.alarmsService.findOne(id); }
 
   @Patch(':id')
-  update(@Param('id') id: string, @Body() dto: any) { return this.alarmsService.update(id, dto); }
+  @Roles(UserRoleEnum.ADMIN, UserRoleEnum.OPERATOR)
+  update(@Param('id', ParseUUIDPipe) id: string, @Body() dto: UpdateAlarmDto) { return this.alarmsService.update(id, dto); }
 
   @Post(':id/acknowledge')
+  @Roles(UserRoleEnum.ADMIN, UserRoleEnum.OPERATOR)
   @HttpCode(HttpStatus.OK)
-  acknowledge(@Param('id') id: string) { return this.alarmsService.acknowledge(id); }
+  acknowledge(@Param('id', ParseUUIDPipe) id: string) { return this.alarmsService.acknowledge(id); }
 
   @Delete(':id')
-  remove(@Param('id') id: string) { return this.alarmsService.remove(id); }
-
-  @Get('stats/active-count')
-  getActiveAlarmCount() { return this.alarmsService.setActiveCount(); }
+  @Roles(UserRoleEnum.ADMIN)
+  remove(@Param('id', ParseUUIDPipe) id: string) { return this.alarmsService.remove(id); }
 }

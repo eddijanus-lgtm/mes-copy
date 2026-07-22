@@ -1,21 +1,24 @@
 import { useState, useEffect } from "react";
 import StatCard from "../components/StatCard";
-
-const API = "/api";
+import { api } from "../api/client.js";
+import { Link } from "react-router-dom";
+import { useAuth } from "../providers/AuthProvider.jsx";
+import { canManageMachines } from "../utils/roles.js";
 
 export default function Dashboard() {
+  const { user } = useAuth();
   const [stats, setStats] = useState({ machines: 0, alarms: 0, health: false });
 
   useEffect(() => {
-    fetch(API + "/machines").then((r) => r.ok ? r.json() : null).then((m) => {
+    api.get("/machines").then((m) => {
       if (Array.isArray(m)) setStats((s) => ({ ...s, machines: m.length }));
-    });
-    fetch(API + "/alarms/stats/active-count").then((r) => r.ok ? r.json() : null).then((a) => {
+    }).catch(() => {});
+    api.get("/alarms/stats/active-count").then((a) => {
       if (typeof a === "number") setStats((s) => ({ ...s, alarms: a }));
-    });
-    fetch(API + "/edge/health").then((r) => r.ok ? r.json() : null).then((h) => {
+    }).catch(() => {});
+    api.get("/edge/health").then((h) => {
       if (h && h.ok) setStats((s) => ({ ...s, health: true }));
-    });
+    }).catch(() => {});
   }, []);
 
   return (
@@ -41,16 +44,13 @@ export default function Dashboard() {
 
           <div className="bg-white rounded-lg shadow-card border border-neutral-200 p-5">
             <h3 className="text-sm font-semibold text-neutral-700 mb-4">Schnellzugriff</h3>
-            <div className="grid grid-cols-2 gap-3">
-              {["/machines", "Neue Station"].map((_, i) => (
-                <a
-                  key={i}
-                  href={i === 0 ? "/machines" : "#"}
-                  className="flex items-center justify-center gap-2 px-4 py-3 rounded-lg font-medium text-sm transition-colors duration-150 bg-brand-primary text-white hover:bg-[var(--color-brand-primary-dark)]"
-                >
-                  + Neue Station
-                </a>
-              ))}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <Link
+                to="/machines"
+                className="flex items-center justify-center gap-2 px-4 py-3 rounded-lg font-medium text-sm transition-colors duration-150 bg-brand-primary text-white hover:bg-[var(--color-brand-primary-dark)]"
+              >
+                {canManageMachines(user) ? "+ Neue Station" : "Stationen ansehen"}
+              </Link>
             </div>
           </div>
 

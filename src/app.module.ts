@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
@@ -8,10 +9,15 @@ import { TracesModule } from './traces/traces.module';
 import { DataCollectionModule } from './data-collection/data-collection.module';
 import { EdgeGatewayModule } from './opcua/edge-gateway.module';
 import { OpcUaModule } from './opcua/opcua.module';
+import { AuthModule } from './auth/auth.module';
+import { HealthModule } from './health/health.module';
+import { APP_GUARD } from '@nestjs/core';
+import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true, envFilePath: '.env' }),
+    ThrottlerModule.forRoot([{ ttl: 60_000, limit: 120 }]),
     TypeOrmModule.forRoot({
       type: 'postgres',
       host: process.env.DB_HOST || 'localhost',
@@ -30,6 +36,9 @@ import { OpcUaModule } from './opcua/opcua.module';
     DataCollectionModule,
     EdgeGatewayModule,
     OpcUaModule,
+    AuthModule,
+    HealthModule,
   ],
+  providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
 })
 export class AppModule {}

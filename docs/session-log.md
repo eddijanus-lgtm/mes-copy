@@ -1,0 +1,203 @@
+# Session Log — wara-mes Development
+
+_Dieses Protokoll dokumentiert jede Änderung, jeden Prompt und den Fortschritt des Projekts._
+
+---
+
+## 2026-07-22
+
+### [10:50] Repository Initialisierung & Push zu GitHub
+**Prompt:** "kannst du dir das wara-mes-projekt mal anschauen, welche technologien hat es?"
+- Technologien identifiziert: NestJS 11, React 19, TypeScript 5.7, PostgreSQL 16, node-opcua, MQTT
+- Prompt: "ich habe auf github ein leeres repository angelegt: hier wäre es: https://github.com/iot1-wara/wara-mes. achte auf den richtigen root ordner, nichts pushen oh nem go."
+- Remote von `mes-app` auf `wara-mes` umgestellt
+- SSH-Key generiert und auf GitHub hinterlegt
+- Git force-push nach `https://github.com/iot1-wara/wara-mes.git` erfolgreich
+
+### [10:56] Lokaler Start — PostgreSQL Container starten
+**Prompt:** "kannst du die app mal lokal starten?"
+- Docker-Daemon gestartet, User zur docker-Gruppe hinzugefügt (`sudo usermod -aG docker riegello`, `newgrp docker`)
+- Docker Compose: `mes_db` (PostgreSQL 16 Alpine) läuft auf Port 5432
+- Konflikt gelöst: Lokale PostgreSQL war im Weg → gestoppt mit `sudo systemctl stop postgresql`
+
+### [11:00] Backend-Abhängigkeiten & Node.js Version
+**Prompt:** "mach du!" / "ok starte den Server"
+- npm nicht installiert → nachgeholt mit `sudo apt-get install -y npm`
+- Initialer Start fehlgeschlagen: `node-opcua` + `hexy` Kompatibilitätsproblem mit Node v18 (`ERR_REQUIRE_ESM`)
+- Node.js auf v20 upgedated: `curl -fsSL https://deb.nodesource.com/setup_20.x | sudo bash - && sudo apt-get install -y nodejs` → v20.20.2
+
+### [11:03] Datenbank-Verbindung fixen
+**Prompt:** Backend startete, aber PostgreSQL-Auth schlug fehl ("client password must be a string")
+- Datei `.env` erstellt:
+  ```
+  DB_HOST=localhost
+  DB_PORT=5432
+  DB_USERNAME=mes_admin
+  DB_PASSWORD=change_me_in_production
+  DB_DATABASE=mes_production
+  ```
+
+### [11:05] Backend erfolgreich gestartet
+**Prompt:** "ok, starte den server"
+- NestJS dev-server (port 3000) läuft mit allen Routes gemappt:
+  - `/api/orders/active`, `/api/traces`, `/api/data-collection`, `/api/edge/opcua/*`, `/api/edge/mqtt/*`
+
+### [11:08] Frontend-Installation & Build
+**Prompt:** "ok, starte den server" (nach Backend)
+- `cd frontend && npm install && npm run build` → Build erfolgreich (`dist/index.html` erstellt)
+- Vite dev-server (port 5173) mit Proxy `/api` → localhost:3000
+- Build-Fehler gefixt: Frontend musste gebaut werden (`npm run build`), dann lief `dev` ohne 404 Fehler
+
+### [11:10] Session Log erstellt
+**Prompt:** "lies mir die roadmap aus" / "wie schnell kannst du das umsetzten?" / "lege im repo ein dokument an..."
+- Alle Dienste laufen: Backend (3000), Frontend (5173), PostgreSQL Docker (5432)
+- Session Log erstellt mit voller Zeitstrahl-Dokumentation
+
+---
+
+## Phase 1: JWT Auth + RBAC — Implementation
+
+### [11:15] Guide + Doc-Verzeichnis erstellen
+**Prompt:** "öffne die doku verzeichniss" / "mach du es"
+- Ordner `docs/guides/` erstellt mit README.md als Übersicht
+- Guide-Dokument `docs/guides/01-jwt-rbac.md` erstellt mit:
+  - Konzept-Erklärung zu JWT + RBAC
+  - 6 Schritte für die Umsetzung (planned)
+  - Checkliste nach der Implementation
+  - Review-Felder
+
+### [11:20] Schritt 1: Dependencies ✅
+**Prompt:** "ok weiter gehts"
+- `npm install @nestjs/passport passport passport-jwt bcryptjs`
+- `npm install -D @types/passport-jwt @types/bcryptjs`
+- Status in Guide aktualisiert
+
+### [11:25] Schritt 2: User Entity + DTO
+**Prompt:** "yes"
+Erstellt:
+- `src/users/user.entity.ts` — UserEntity mit RoleEnum (ADMIN/OPERATOR/VIEWER)
+- `src/auth/dto/login.dto.ts` — username + password mit class-validator
+
+### [11:30] Schritt 3: Auth-Module erstellt
+**Prompt:** (vorheriger: "yes")
+Erstellt:
+- `src/auth/auth.module.ts` — Modul mit Passport, JwtModule (async via ConfigService)
+- `src/auth/auth.service.ts` — login(), register(), validateUser(), seedDefaultAdmin()
+- `src/auth/auth.controller.ts` — POST /auth/login, /register, /seed
+- `src/auth/jwt.strategy.ts` — JWT Strategy mit Bearer-Token Extraktion
+- `src/auth/roles.guard.ts` — Custom Guard für RBAC (prüfe @Roles())
+- `src/auth/jwt.auth.guard.ts` — Wrapper für Passport AuthGuard
+- `src/app.module.ts` — AuthModule hinzugefügt
+
+### [11:35] Schritt 4: Global AuthGuard
+- `src/main.ts` angepasst: global JwtAuthGuard + ValidationPipe + CORS
+
+### [11:40] Fehlerbehebung
+**Prompts:** "was hast du gerade gemacht?" / "mach"
+Fehler gefunden + behoben:
+1. `ConflictBadRequestException` → fehlender Enum-Member → zu `BadRequestException` gefixt
+2. `@nestjs/jwt` nicht installiert → nachinstalliert mit `npm install @nestjs/jwt`
+3. auth.controller.ts falsche Typen (ReadableStream statt Body) → neu geschrieben mit @Body()
+4. NestJS Compiler-Cache alt (`dist/` und `.nest-cli-cache` gelöscht)
+5. `ConflictBadRequestException` in auth.service.ts:34 → zu `BadRequestException` gefixt
+
+### [11:50] Auth-Backend Build erfolgreich ✅
+**Prompt:** "ok lass uns weiter machen" / "tu das"
+- UnauthorizedException import in auth.controller.ts gefixt
+- `npx nest build` ohne Fehler abgeschlossen → Backend startet mit JWT-Auth
+
+---
+
+### Geplante Dateien noch:
+- Frontend: Login-Seite, AuthContext, API-Interceptor
+- Seed-Befehl zum Initialisieren des Admins nach dem ersten Start
+
+_Benutzt von: riegello_
+_Letzte Aktualisierung: 2026-07-22T11:42:00+02:00_
+
+### [12:38] Frontend-Systemstatus eingebunden und ausgeliefert
+**Prompts:** "Kannst du im frontend irgendwelche variablen unten rechts ... einspielen?" / "kannst du bitte dafür sorgen dass auf unserer http://localhost:3000/ seite das frontend sich updatet?" / "TUE ES1"
+- `frontend/src/components/SystemStatus.jsx` erstellt: zeigt Backend-, Datenbank- und JWT-Status unten rechts und aktualisiert alle 5 Sekunden.
+- `SystemStatus` in `frontend/src/App.jsx` global eingebunden.
+- Frontend mit `npm run build` neu gebaut; neuer Build: `frontend/dist/assets/index-D2yCh3kl.js`.
+- Vite dauerhaft auf `http://localhost:5173/` gestartet und mit HTTP 200 geprüft.
+- `http://localhost:3000/` liefert den aktualisierten Frontend-Build ebenfalls mit HTTP 200 aus.
+
+### [12:40] Backend-Fehler und JWT-Status diagnostiziert und korrigiert
+**Prompts:** "warum backend error und JWT Token missing?" / "ja"
+- Ursache des HTTP-500 identifiziert: alter Backend-Build lief seit 11:15; aktueller Health-Code war noch nicht aktiv.
+- Globalen JWT-Guard über `APP_GUARD` registriert und `@Public()` für Login, Seed und Health eingeführt.
+- Manuelle Base64-Zeichenfolge durch echten, signierten JWT via `JwtService.signAsync()` ersetzt.
+- Öffentlichen `GET /api/health` mit echtem TypeORM-Datenbankcheck umgesetzt.
+- Frontend-Statusbox auf `/api/health` umgestellt; Datenbankstatus wird nicht mehr geraten.
+- Status `JWT Token: Missing` in verständlicheres `Session: Not logged in` geändert.
+- Regression in `main.ts` korrigiert: `/api`-Präfix und Auslieferung von `frontend/dist` wiederhergestellt.
+- Routingfehler korrigiert: `/api/orders/active` stand hinter `/:id` und wurde als ungültige UUID interpretiert.
+- Backend- und Frontend-Build erfolgreich.
+- Verifiziert: Health HTTP 200, DB `up`, ohne JWT HTTP 401, Login liefert signierten JWT, mit JWT Orders HTTP 200.
+- `git diff --check` ohne Fehler; Jest meldet weiterhin "No tests found", da noch keine Unit-Tests vorhanden sind.
+
+### [12:50] Phase 1.1: Umgebungsvariablen abgesichert
+**Prompts:** "wie geht es jetzt weiter" / "ja"
+- Doppelte Regeln in `.gitignore` bereinigt.
+- `.env.example` mit Backend-, Datenbank-, JWT-, MQTT- und OPC-UA-Variablen erstellt.
+- Verifiziert, dass die lokale `.env` ignoriert und nicht durch Git verfolgt wird.
+- Lokales JWT-Secret gesetzt; unsicheren Standardwert aus Auth-Modul und JWT-Strategie entfernt.
+- `JWT_SECRET` ist nun eine verpflichtende Startvariable über `ConfigService.getOrThrow()`.
+- Backend erfolgreich gebaut und neu gestartet.
+- Verifiziert: `/api/health` meldet DB `up`, Login erzeugt weiterhin einen signierten JWT, Port 3000 liefert das Frontend.
+- Guide `docs/guides/00-environment-configuration.md` erstellt.
+
+### [13:00] Phase 1.2: Frontend-Login-Grundlage
+**Prompts:** "ja" / "ja"
+- Bestehende React-Routen und direkte API-Aufrufe analysiert.
+- `frontend/src/providers/AuthProvider.jsx` erstellt: JWT lesen, Ablauf prüfen, Login und Logout verwalten.
+- `frontend/src/pages/Login.jsx` als responsive Login-Seite im bestehenden WARA-Design erstellt.
+- `/login` öffentlich und alle Anwendungsrouten durch Redirect geschützt.
+- Benutzername, Rolle und Logout in der Sidebar ergänzt.
+- Systemstatus bleibt global sichtbar und erkennt die gespeicherte Sitzung.
+- Frontend-Build erfolgreich; `/`, `/login` und Backend-Login verifiziert.
+- Noch offen: Fachseiten verwenden direkte `fetch()`-Aufrufe und senden den JWT noch nicht automatisch mit.
+
+### [13:10] Phase 1.2: Authentifizierter API-Client abgeschlossen
+**Prompt:** "yes"
+- `frontend/src/api/client.js` ergänzt automatisch `Authorization: Bearer <JWT>`.
+- Bei HTTP 401 wird der ungültige Token entfernt und der AuthProvider beendet die Sitzung.
+- Dashboard, Maschinen, Alarme, Traces und Edge vom direkten `fetch()` auf den zentralen Client migriert.
+- Direkte Fetch-Aufrufe verbleiben nur für Login, zentralen Client und öffentlichen Health-Check.
+- Frontend-Build und `git diff --check` erfolgreich.
+- Authentifizierte Backend-Aufrufe für Maschinen, Alarme, Traces und Edge jeweils mit HTTP 200 verifiziert.
+- Roadmap-Punkt 1.2 als abgeschlossen markiert.
+
+### [13:20] Phase 1.3: RBAC für Maschinen und Benutzeranlage
+**Prompts:** "geht weiter" / "ja"
+- `@Roles()`-Decorator erstellt und `RolesGuard` global nach dem JWT-Guard registriert.
+- Rollenmetadaten werden auf Controller- und Methodenebene ausgewertet.
+- Maschinenrechte umgesetzt: alle Rollen lesen; Operator/Admin erstellen und ändern; nur Admin löscht.
+- Benutzerregistrierung um validierte Rollenauswahl ergänzt und auf Admin beschränkt.
+- Laufzeitfehler in Maschinenvalidierung gefunden und behoben: DTO-Import war fälschlich `type-only`.
+- Verifiziert: Viewer GET 200, Viewer POST 403, Viewer Benutzeranlage 403, Operator CREATE erfolgreich, Operator DELETE 403, Admin DELETE 200.
+- Temporäre Maschine sowie Viewer-/Operator-Testkonten nach dem Test entfernt.
+- Roadmap-Punkt 1.3 bleibt teilweise offen, bis Orders, Alarms, Traces und Edge eigene Rollenregeln besitzen.
+
+### [13:30] Phase 1 vollständig abgeschlossen
+**Prompts:** "wo kann ich benutzer anlegen?" / "gehört das zu phase 1 in der roadmap?" / "ok dann mach jetzt phase 1 fertig ohne weiter nachzufragen, nur wenn etwas unklar ist" / "OPCUA haben wir noch keine echte server anbindung, baue dazu einen testserver"
+- Admin-only Benutzerseite `/users` mit Rollenauswahl erstellt; Sidebar und direkte Route sind rollenabhängig geschützt.
+- Rollenabhängige Maschinenaktionen und Dashboard-Schnellzugriffe ergänzt.
+- RBAC auf Orders, Alarme, Traces, Datenerfassung und Edge ausgeweitet.
+- DTO-Laufzeitimports, Bulk-Validierung, UUID-, Integer-, Enum-, Datums- und Query-Validierung korrigiert.
+- Öffentliche Seed-Route und festes Default-Passwort entfernt.
+- Lokalen Admin-Bootstrap `npm run create-admin` ergänzt.
+- OPC-UA-Testserver `npm run start:opcua-test` mit vier simulierten Machine1-Nodes erstellt.
+- OPC-UA-Client verbindet sich real, erstellt eine Session, liest sekündlich Messwerte und verbindet sich nach Ausfall automatisch neu.
+- Globale `uncaughtException`-/`unhandledRejection`-Unterdrückung entfernt; MQTT-Fehler lokal behandelt.
+- Authentifizierten WebSocket `/api/edge/ws` mit JWT-Handshake und OPC-UA-/MQTT-Telemetrie implementiert.
+- Edge-Frontend von Zufallswerten auf echte Live-Telemetrie umgestellt.
+- Globales Rate Limit (120/min), Login-Limit (5/min), Helmet, CORS-Allowlist und transformierende ValidationPipe aktiviert.
+- OPC-UA-Node- und MQTT-Topic-Allowlist ergänzt.
+- Verifiziert: Builds erfolgreich, DB/OPC UA/MQTT gesund, Live-WebSocket-Daten, 4401 ohne JWT, 403 für Viewer-Mutationen, 400 bei fremden Feldern, 429 beim Login-Limit.
+- OPC-UA-Ausfalltest erfolgreich: `false` bei Stop, automatische Wiederverbindung auf `true`.
+- `npm audit --omit=dev` Backend und `npm audit` Frontend: 0 bekannte Sicherheitslücken.
+- Reparierbare `fast-uri`-Entwicklungslücke mit `npm audit fix` aktualisiert; vollständiger Backend-Audit danach ebenfalls 0 Sicherheitslücken.
+- Finale Backend-/Frontend-Builds erfolgreich; Jest läuft mit `--passWithNoTests` und bestätigt, dass aktuell noch keine Testdateien vorhanden sind.
+- Phase 1 in `docs/roadmap.md` vollständig abgeschlossen. Kein Commit und kein Push durchgeführt.

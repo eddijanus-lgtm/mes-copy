@@ -1,6 +1,9 @@
-import { Controller, Get, Post, Body, Param } from '@nestjs/common';
+import { Controller, Get, Post, Body } from '@nestjs/common';
 import { OpcUaService } from './opcua.service';
 import { MqttGatewayService } from './mqtt-gateway.service';
+import { MqttPublishDto, OpcUaReadDto } from './edge.dto';
+import { Roles } from '../auth/roles.decorator';
+import { UserRoleEnum } from '../users/user.entity';
 
 @Controller('edge')
 export class EdgeController {
@@ -10,24 +13,30 @@ export class EdgeController {
   ) {}
 
   @Get('opcua/status')
+  @Roles(UserRoleEnum.ADMIN, UserRoleEnum.OPERATOR, UserRoleEnum.VIEWER)
   getOpcUaStatus() { return this.opcUaService.getServerStatus(); }
 
   @Get('opcua/connected')
+  @Roles(UserRoleEnum.ADMIN, UserRoleEnum.OPERATOR, UserRoleEnum.VIEWER)
   opcuaConnected() { return { connected: this.opcUaService.isConnected() }; }
 
   @Post('opcua/read')
-  readOpcUaNode(@Body('nodeId') nodeId: string) { return this.opcUaService.readNode(nodeId); }
+  @Roles(UserRoleEnum.ADMIN, UserRoleEnum.OPERATOR)
+  readOpcUaNode(@Body() dto: OpcUaReadDto) { return this.opcUaService.readNode(dto.nodeId); }
 
   @Get('mqtt/connected')
+  @Roles(UserRoleEnum.ADMIN, UserRoleEnum.OPERATOR, UserRoleEnum.VIEWER)
   mqttConnected() { return { connected: this.mqttGatewayService.isConnected() }; }
 
   @Post('mqtt/publish')
-  publishToMqtt(@Body('topic') topic: string, @Body('payload') payload: any) {
-    this.mqttGatewayService.publish(topic, payload);
-    return { published: true, topic };
+  @Roles(UserRoleEnum.ADMIN)
+  async publishToMqtt(@Body() dto: MqttPublishDto) {
+    await this.mqttGatewayService.publish(dto.topic, dto.payload);
+    return { published: true, topic: dto.topic };
   }
 
   @Get('health')
+  @Roles(UserRoleEnum.ADMIN, UserRoleEnum.OPERATOR, UserRoleEnum.VIEWER)
   getHealth() {
     return {
       status: 'ok',

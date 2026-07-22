@@ -1,6 +1,5 @@
 import { useState, useEffect } from "react";
-
-const API = "/api";
+import { api } from "../api/client.js";
 
 export default function AlarmsPage() {
   const [alarms, setAlarms] = useState([]);
@@ -8,9 +7,9 @@ export default function AlarmsPage() {
   const [filter, setFilter] = useState("all");
 
   useEffect(() => {
-    fetch(API + "/alarms").then((r) => r.ok ? r.json() : null).then((d) => {
+    api.get("/alarms").then((d) => {
       setAlarms(Array.isArray(d) ? d : []);
-    }).finally(() => setLoading(false));
+    }).catch(() => setAlarms([])).finally(() => setLoading(false));
   }, []);
 
   const filtered = filter === "all" ? alarms : alarms.filter((a) => (a.severity||"").toLowerCase() === filter.toLowerCase());

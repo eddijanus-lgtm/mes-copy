@@ -1,25 +1,31 @@
 import { useState, useEffect } from "react";
 import StatCard from "../components/StatCard";
-
-const API = "/api";
+import { api } from "../api/client.js";
+import { useAuth } from "../providers/AuthProvider.jsx";
+import { canDeleteMachines, canManageMachines } from "../utils/roles.js";
 
 export default function MachinesPage() {
+  const { user } = useAuth();
   const [machines, setMachines] = useState([]);
   const [showModal, setShowModal] = useState(false);
   const [form, setForm] = useState({ id: null, name: "", type: "CNC", location: "" });
   const [search, setSearch] = useState("");
+  const [error, setError] = useState("");
+  const canManage = canManageMachines(user);
+  const canDelete = canDeleteMachines(user);
 
   useEffect(() => {
-    fetch(API + "/machines").then((r) => r.ok ? r.json() : null).then((d) => {
+    api.get("/machines").then((d) => {
       setMachines(Array.isArray(d) ? d : []);
-    });
+    }).catch(() => setMachines([]));
   }, []);
 
   function handleDelete(id) {
     if (!confirm("Station wirklich loeschen?")) return;
-    fetch(API + "/machines/" + id, { method: "DELETE" }).then(() => {
+    setError("");
+    api.del("/machines/" + id).then(() => {
       setMachines((prev) => prev.filter((m) => m.id !== id));
-    });
+    }).catch((requestError) => setError(requestError.message));
   }
 
   function handleEdit(m) {
@@ -29,23 +35,20 @@ export default function MachinesPage() {
 
   function handleSubmit(e) {
     e.preventDefault();
-    const url = form.id ? API + "/machines/" + form.id : API + "/machines";
-    const method = form.id ? "PATCH" : "POST";
-    fetch(url, {
-      method,
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: form.name, type: form.type || "CNC", location: form.location || "" })
-    }).then(() => {
+    setError("");
+    const endpoint = form.id ? "/machines/" + form.id : "/machines";
+    const save = form.id ? api.patch : api.post;
+    save(endpoint, { name: form.name, type: form.type || "CNC", location: form.location || "" }).then(() => {
       refreshList();
       setShowModal(false);
       setForm({ id: null, name: "", type: "CNC", location: "" });
-    });
+    }).catch((requestError) => setError(requestError.message));
   }
 
   function refreshList() {
-    fetch(API + "/machines").then((r) => r.ok ? r.json() : null).then((d) => {
+    api.get("/machines").then((d) => {
       setMachines(Array.isArray(d) ? d : []);
-    });
+    }).catch(() => setMachines([]));
   }
 
   const onlineCount = machines.filter((m) => ["online", "running"].includes(m.status)).length;
@@ -68,10 +71,14 @@ export default function MachinesPage() {
 
         {/* Toolbar */}
         <div className="flex justify-end">
+          {canManage && (
           <button onClick={() => setShowModal(true)} className="bg-brand-primary text-white font-medium px-5 py-2.5 rounded-lg text-sm hover:bg-[var(--color-brand-primary-dark)] transition-colors">
             + Neue Station
           </button>
+          )}
         </div>
+
+        {error && <p role="alert" className="rounded-lg bg-status-error-bg px-4 py-3 text-sm text-status-error">{error}</p>}
 
         {/* Suche */}
         <input
@@ -92,7 +99,7 @@ export default function MachinesPage() {
                   <th className="px-5 py-3 text-left text-xs font-semibold text-neutral-500 uppercase tracking-wider">Name</th>
                   <th className="px-5 py-3 text-left text-xs font-semibold text-neutral-500 uppercase tracking-wider">Typ</th>
                   <th className="px-5 py-3 text-left text-xs font-semibold text-neutral-500 uppercase tracking-wider">Status</th>
-                  <th className="px-5 py-3 text-right text-xs font-semibold text-neutral-500 uppercase tracking-wider">Aktionen</th>
+                  {canManage && <th className="px-5 py-3 text-right text-xs font-semibold text-neutral-500 uppercase tracking-wider">Aktionen</th>}
                 </tr>
               </thead>
               <tbody className="divide-y divide-neutral-100">
@@ -113,14 +120,16 @@ export default function MachinesPage() {
                           {m.status ? m.status.charAt(0).toUpperCase() + m.status.slice(1) : "-"}
                         </span>
                       </td>
-                      <td className="px-5 py-3.5 text-right">
+                      {canManage && <td className="px-5 py-3.5 text-right">
                         <button onClick={() => handleEdit(m)} className="mx-1 px-3 py-1.5 text-xs font-medium text-neutral-dark bg-neutral-stroke rounded-md hover:bg-neutral-border transition-colors">
                           Edit
                         </button>
+                        {canDelete && (
                         <button onClick={() => handleDelete(m.id)} className="ml-2 px-3 py-1.5 text-xs font-medium text-white bg-status-error rounded-md hover:bg-[var(--color-status-error-dark)] transition-colors">
                           ×
                         </button>
-                      </td>
+                        )}
+                      </td>}
                     </tr>
                   );
                 })}

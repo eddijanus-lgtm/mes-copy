@@ -1,4 +1,6 @@
 import { useLocation, Link } from "react-router-dom";
+import { useAuth } from "../providers/AuthProvider.jsx";
+import { hasRole, ROLES } from "../utils/roles.js";
 
 const navItems = [
   { path: "/", label: "Dashboard", icon: "📊" },
@@ -6,10 +8,12 @@ const navItems = [
   { path: "/alarms", label: "Alarme", icon: "🔔" },
   { path: "/traces", label: "Traces", icon: "📈" },
   { path: "/edge", label: "Edge Gateway", icon: "🌐" },
+  { path: "/users", label: "Benutzer", icon: "👤", roles: [ROLES.ADMIN] },
 ];
 
 export default function Sidebar() {
   const location = useLocation();
+  const { logout, user } = useAuth();
 
   return (
     <div className="sticky top-0 h-screen w-64 bg-white border-r border-neutral-200 flex flex-col">
@@ -22,7 +26,7 @@ export default function Sidebar() {
       </div>
 
       <nav className="flex-1 py-3 px-2 space-y-0.5">
-        {navItems.map((item) => {
+        {navItems.filter((item) => !item.roles || hasRole(user, ...item.roles)).map((item) => {
           const isActive = location.pathname === item.path || (item.path !== "/" && location.pathname.startsWith(item.path));
           return (
             <Link
@@ -42,10 +46,17 @@ export default function Sidebar() {
       </nav>
 
       <div className="p-3 border-t border-neutral-100">
+        <div className="mb-3 rounded-md bg-neutral-50 px-3 py-2">
+          <p className="truncate text-xs font-semibold text-neutral-700">{user?.username}</p>
+          <p className="text-[11px] uppercase tracking-wide text-neutral-400">{user?.role}</p>
+        </div>
         <div className="flex items-center gap-2 text-xs text-neutral-400">
           <span className="inline-block w-1.5 h-1.5 rounded-full bg-status-success animate-pulse" />
-          Edge aktiv
+          Sitzung aktiv
         </div>
+        <button onClick={logout} className="mt-3 w-full rounded-md border border-neutral-200 px-3 py-2 text-left text-xs font-medium text-neutral-600 transition hover:border-status-error/30 hover:bg-status-error-bg hover:text-status-error">
+          Abmelden
+        </button>
       </div>
     </div>
   );

@@ -25,14 +25,14 @@ A professional, scalable Manufacturing Execution System that connects machines v
 
 | # | Task | Priority | Effort | Status |
 |---|------|----------|--------|--------|
-| 1.1 | Remove `.env` from Git; create `.env.example` | Critical | 15 min | ⬜ pending |
-| 1.2 | Add JWT authentication (NestJS `@nestjs/passport`) + global AuthGuard | Critical | 1–2 days | ⬜ pending |
-| 1.3 | Add role-based access control (Admin / Operator / Viewer) | High | 1 day | ⬜ pending |
-| 1.4 | Remove OPC UA `uncaughtException` suppression; implement real error handling | Critical | 2–3 hrs | ⬜ pending |
-| 1.5 | Implement WebSocket gateway for live edge telemetry (frontend already references it) | High | 2–3 hrs | ⬜ pending |
-| 1.6 | Add rate limiting + request validation on all public endpoints | Medium | 2 hrs | ⬜ pending |
+| 1.1 | Remove `.env` from Git; create `.env.example` | Critical | 15 min | ✅ complete |
+| 1.2 | Add JWT authentication (NestJS `@nestjs/passport`) + global AuthGuard | Critical | 1–2 days | ✅ complete |
+| 1.3 | Add role-based access control (Admin / Operator / Viewer) | High | 1 day | ✅ complete |
+| 1.4 | Remove OPC UA `uncaughtException` suppression; implement real error handling | Critical | 2–3 hrs | ✅ complete |
+| 1.5 | Implement WebSocket gateway for live edge telemetry (frontend already references it) | High | 2–3 hrs | ✅ complete |
+| 1.6 | Add rate limiting + request validation on all public endpoints | Medium | 2 hrs | ✅ complete |
 
-**Exit Criteria:** All API routes protected, no critical vulnerabilities, live dashboard data flowing via WebSocket.
+**Exit Criteria:** ✅ All API routes protected, production dependencies free of known vulnerabilities, live OPC-UA/MQTT telemetry flowing via authenticated WebSocket.
 
 ---
 
@@ -110,7 +110,7 @@ A professional, scalable Manufacturing Execution System that connects machines v
 |---|------|----------|--------|--------|
 | 6.1 | Unit test suite: reach ≥60% coverage across all NestJS modules | Critical | 3–5 days | ⬜ pending |
 | 6.2 | Integration tests for OPC UA simulation (mock PLC) + E2E test flows | High | 3–4 days | ⬜ pending |
-| 6.3 | Health check endpoint (`GET /health`) combining DB, OPC UA MQTTF status | Medium | 1 day | ⬜ pending |
+| 6.3 | Health check endpoint (`GET /health`) combining DB, OPC UA MQTTF status | Medium | 1 day | 🟡 `/api/health` + DB verified; OPC UA/MQTT pending |
 | 6.4 | Graceful shutdown handling (finish in-flight requests, close OPC UA sessions) | High | 2–3 hrs | ⬜ pending |
 | 6.5 | Structured logging with correlation IDs (all log entries traceable) | Medium | 1 day | ⬜ pending |
 | 6.6 | Swagger/OpenAPI auto-generated docs (`@nestjs/swagger`) | Low | 2 hrs | ⬜ pending |

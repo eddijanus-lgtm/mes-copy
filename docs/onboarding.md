@@ -16,15 +16,18 @@ docker-compose up -d postgres
 
 # Warten bis DB bereit ist (ca. 10s)
 
-# 2. Backend bauen & starten
-cd frontend
-node node_modules/vite/bin/vite.js build --outDir dist
-cp public/* ../frontend/dist/
-cd ..
-node node_modules/@nestjs/cli/bin/nest.js build
-npx pm2 start dist/main.js --name mes-gateway
+# 2. Abhängigkeiten und Frontend installieren
+npm install
+cd frontend && npm install && npm run build && cd ..
 
-# 3. Öffnen
+# 3. OPC-UA-Testserver starten (separates Terminal)
+npm run start:opcua-test
+
+# 4. Backend bauen und starten
+npm run build
+npm run start:prod
+
+# 5. Öffnen
 http://localhost:3000
 ```
 
@@ -33,13 +36,13 @@ http://localhost:3000
 ### Backend im Watch-Modus
 ```bash
 # TypeScript-Kompilierung + Server neu starten bei Code-Changes
-node node_modules/@nestjs/cli/bin/nest.js start --watch
+npm run start:dev
 ```
 
 ### Frontend Dev-Server
 ```bash
 cd frontend
-node node_modules/vite/bin/vite dev
+npm run dev
 ```
 
 ## Build-Prozess
@@ -47,15 +50,30 @@ node node_modules/vite/bin/vite dev
 ```bash
 # 1. Frontend bauen
 cd frontend
-node node_modules/vite/bin/vite build --outDir dist
-cp public/* ../frontend/dist/
+npm run build
 
 # 2. Backend bauen
-nest build   # oder: node node_modules/@nestjs/cli/bin/nest.js build
+npm run build
 
 # 3. Starten
-npx pm2 start dist/main.js --name mes-gateway
+npm run start:prod
 ```
+
+## Ersten Admin anlegen
+
+Die Anwendung besitzt keinen öffentlichen Seed-Endpoint:
+
+```bash
+ADMIN_USERNAME=my-admin ADMIN_PASSWORD='a-long-random-password' npm run create-admin
+```
+
+## OPC-UA-Testserver
+
+```bash
+npm run start:opcua-test
+```
+
+Endpoint: `opc.tcp://localhost:4840/UA/WaraMesTest`. Der Testserver simuliert Temperatur, Druck, Laufstatus und Stückzähler und ist nur für Entwicklung vorgesehen.
 
 ## Troubleshooting
 
