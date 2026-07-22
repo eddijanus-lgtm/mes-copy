@@ -73,7 +73,15 @@ ADMIN_USERNAME=my-admin ADMIN_PASSWORD='a-long-random-password' npm run create-a
 npm run start:opcua-test
 ```
 
-Endpoint: `opc.tcp://localhost:4840/UA/WaraMesTest`. Der Testserver simuliert Temperatur, Druck, Laufstatus und Stückzähler und ist nur für Entwicklung vorgesehen.
+Endpoint: `opc.tcp://localhost:4840/UA/WaraMesTest`. Der Testserver bildet `dbProcessData [DB151]` mit Werkstückträger, Workplan-Schritt, Ressource, vier Parametern und Prozesszeitstempel nach und ist nur für Entwicklung vorgesehen.
+
+### Mehrstations-stMES-Demo vorbereiten
+
+```bash
+DEMO_ADMIN_USERNAME=<admin> DEMO_ADMIN_PASSWORD=<password> npm run seed:stmes-demo
+```
+
+Dieser Befehl erzeugt nur klar benannte Testdaten für zwei Demo-Stationen, Carrier 128/129 und `DEMO-ORDER-001`. Der stMES-Vertrag ist erfunden und darf nicht unverändert an einer realen SPS eingesetzt werden. Siehe `docs/guides/07-stmes-demo-contract.md`.
 
 ## Troubleshooting
 

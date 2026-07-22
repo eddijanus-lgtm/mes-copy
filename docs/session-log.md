@@ -201,3 +201,72 @@ _Letzte Aktualisierung: 2026-07-22T11:42:00+02:00_
 - Reparierbare `fast-uri`-Entwicklungslücke mit `npm audit fix` aktualisiert; vollständiger Backend-Audit danach ebenfalls 0 Sicherheitslücken.
 - Finale Backend-/Frontend-Builds erfolgreich; Jest läuft mit `--passWithNoTests` und bestätigt, dass aktuell noch keine Testdateien vorhanden sind.
 - Phase 1 in `docs/roadmap.md` vollständig abgeschlossen. Kein Commit und kein Push durchgeführt.
+
+### [13:40] OPC-UA-Testserver auf Siemens DB151 angepasst
+**Prompt:** "ändere den OPC UA test server entsprechend des bildes"
+- Testserver-Objekt auf `dbProcessData [DB151]` umgestellt.
+- Variablen aus dem Bild übernommen: `iCarrierID`, `iStepNo`, `iResourceID`, `iPar1`, `iPar2`, `iPar3`, `iPar4`, `ldtTimeStamp`.
+- Siemens-Startwerte übernommen: `128`, `2`, `2`, `1`, `3`, `5`, `7`, Epoch-Zeitstempel.
+- Integer als OPC-UA-`Int16`, Zeitstempel als `DateTime`; alle Variablen les- und schreibbar.
+- Backend-Polling, Node-Allowlist und Edge-Frontend auf die DB151-NodeIds umgestellt.
+- Edge-Seite zeigt Werkstückträger, Workplan-Schritt, Stationsnummer, Deckelfarbe sowie rote, grüne und blaue Kugeln.
+- Backend- und Frontend-Build erfolgreich.
+- Alle acht Nodes per REST gelesen und kompletter DB151-Datensatz über JWT-WebSocket verifiziert.
+- Kein Commit und kein Push durchgeführt.
+
+### [14:00] Mehrstations-Carrier-Routing mit erfundenem stMES-Demovertrag
+**Prompts:** Architekturhinweise zu stationsbezogenem `stMES` und reisendem `dbProcessData`; anschließend: "nein hab ich gerade nicht, erfinde daten zum zweck der demo, später werden diese geändert, bitte genau dokumentieren das es sich hier um test daten handelt!"
+- Lokale PDFs geprüft: vorhanden waren nur DB151 und eine grobe MES-/Stationsskizze, keine echte stMES-UDT-Tabelle.
+- Erfundenen Demo-Vertrag ausdrücklich als nicht produktiv gekennzeichnet und in `docs/guides/07-stmes-demo-contract.md` vollständig dokumentiert.
+- `CarrierEntity`, Carrier-API und Frontend-Seite `/carriers` implementiert.
+- Normalisierte `OrderRouteStepEntity` und Route-API für Workplans implementiert.
+- Maschinenmodell um Resource-ID und OPC-UA-Stationskonfiguration ergänzt.
+- `StMesHandshakeEntity` als dauerhaftes Request-/Response-/Acknowledgement-Journal ergänzt.
+- Zwei unabhängige Demo-Stationen mit eigenen `State`, `Query` und DB151-Bäumen im Testserver implementiert.
+- Subscription-basierten Demo-Handshake `xStart → xQryBusy → xDone/xError → xStart=false` implementiert.
+- Transaktionale Carrier-Auflösung und parallele Verarbeitung je Station implementiert.
+- Subscription auf DB151-Zeitstempel schließt Routenschritte ab, schaltet Carrier weiter und aktualisiert Auftragsfortschritt.
+- Demo-Resultcodes 0, 1, 2, 3, 4 und 9 definiert; Wiederholungen abgeschlossener Schritte sind idempotent.
+- Reproduzierbaren, klar als Testdaten markierten Seed `npm run seed:stmes-demo` ergänzt.
+- Multi-Station-WebSocket und Edge-Anzeige verifiziert; beide Resource-IDs 1 und 2 empfangen.
+- Erfolgreich getestet: beide Stationen Resultcode 0, Carrier 128 auf Schritt 2 und Carrier 129 abgeschlossen.
+- Modellprüfung korrigiert: Routenschritte sind wiederverwendbare Definitionen; Ausführungsstatus wird pro Carrier und Handshake gespeichert, damit mehrere Carrier denselben Workplan nutzen können.
+- Kein Commit und kein Push durchgeführt.
+
+### [14:18] Erneute End-to-End-Verifikation nach Modellkorrektur
+**Prompt:** "Continue if you have next steps, or stop and ask for clarification if you are unsure how to proceed."
+- Backend und Zwei-Stationen-OPC-UA-Testserver mit dem aktuellen Build neu gestartet und Demo-Daten erneut reproduzierbar geseedet.
+- Beide Erstabfragen liefern Resultcode 0; Wiederholungen an der falschen beziehungsweise bereits abgeschlossenen Station liefern stabil Resultcode 3 und 4.
+- Carrier 128 wurde korrekt auf Schritt 2 weitergeschaltet; Carrier 129 wurde abgeschlossen.
+- Auftragsfortschritt ist korrekt `1/2`: Carrier 128 hat noch Schritt 2 offen, nur Carrier 129 ist vollständig abgeschlossen. Die frühere Angabe `2/2` war nach der Modellkorrektur fachlich falsch und wurde berichtigt.
+- Persistiertes Handshake-Journal und das bereinigte Routenschritt-Schema verifiziert; Ausführungsstatus liegt nicht mehr auf den wiederverwendbaren Routenschritten.
+- Backend- und Frontend-Build, Backend-Testkommando, beide npm-Audits und `git diff --check` erfolgreich; das Repository enthält derzeit keine Jest-Tests.
+- Kein Commit und kein Push durchgeführt.
+
+### [14:22] Gantt-Diagramm fuer den heutigen Arbeitstag
+**Prompt:** "kannst du ein gantt diagramm erstellen von dem was heute alles gemacht wurde, teile es auf 3 personen auf, und zeitlich realistisch wir haben gearbeitet von 9:30 bis 15:00"
+- Retrospektives Mermaid-Gantt fuer den Zeitraum 09:30-15:00 Uhr in `docs/gantt-2026-07-22.md` erstellt.
+- Aufgaben realistisch auf Backend/Security, Frontend/Dokumentation und OPC-UA/Integration verteilt.
+- Fuer jede Person eine gestaffelte Pause von 30 Minuten eingeplant; dies ergibt 15 Personenstunden Arbeitszeit bei 16,5 Personenstunden Anwesenheit.
+- Die Zuordnung ist als nachtraegliche Kapazitaetsplanung gekennzeichnet, da keine personenbezogene Zeiterfassung vorliegt.
+- Kein Commit und kein Push durchgeführt.
+
+### [14:38] Dynamische, SPS-getriebene Edge-Prozessansicht
+**Prompts:** "erkläre das, es sieht zudem statisch aus" / "tu das" / "wichtig ist das es so funktioniert wie in echt, also das man am ende nur den test server entfernen muss und die echte verbindung macht"
+- Ursache der statischen Wirkung analysiert: Das Backend sendete sekündlich identische DB151-Snapshots, während Query-Phasen und Resultcodes im Frontend nicht sichtbar waren.
+- OPC-UA-Telemetrie um aktuelle stMES-Query-Signale und ereignisgetriebene Phasen für Anfrage, Busy, Antwort, Quittierung und Prozessabschluss erweitert.
+- Persistiertes Handshake-Journal über `GET /api/edge/stmes/handshakes` für Reload-feste Ereignishistorie bereitgestellt.
+- Edge-Seite um Live-Alter, Signalstatus, Resultcodes, Änderungsmarkierung, Stations-Timeline und Carrier-Route erweitert; Rohtelemetrie ist weiterhin aufklappbar verfügbar.
+- Bewusst keinen Demo-Replay-Endpunkt im Produktivbackend ergänzt: Nur der austauschbare Testserver initiiert SPS-Signale.
+- Testserver bildet einen realistischen Ablauf ab: Carrier 128 von Station 1 zu Station 2, Carrier 129 an Station 2, danach Fehlerfälle für falsche Station und unbekannten Carrier.
+- End-to-End verifiziert: beide Carrier `completed`, Auftrag `DEMO-ORDER-001` auf `2/2 completed`, Live-Phasen und Resultcodes 0, 3 und 1 über authentifizierten WebSocket empfangen.
+- Echte UDT-Dokumentation bleibt Voraussetzung dafür, dass später ausschließlich Endpoint und Testserver ausgetauscht werden können.
+- Kein Commit und kein Push durchgeführt.
+
+### [14:41] Scroll-Verhalten der Fachseiten korrigiert
+**Prompt:** "auf dem dashboard auf der seite edge gateway lässt sich nicht scrollen"
+- Ursache im globalen App-Layout gefunden: Der `h-screen`-Rahmen unterdrückte mit `overflow-hidden` den Dokument-Scroll, während der Inhaltsbereich keinen eigenen Scroll-Container besaß.
+- Den zentralen Inhaltsbereich mit `min-h-0`, `min-w-0` und `overflow-y-auto` als vertikalen Scroll-Container definiert.
+- Sidebar mit `shrink-0` gegen unbeabsichtigtes Zusammendrücken im Flex-Layout abgesichert.
+- Die Korrektur gilt zentral für Edge und alle anderen langen Fachseiten.
+- Kein Commit und kein Push durchgeführt.

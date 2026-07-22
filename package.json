@@ -14,6 +14,7 @@
     "start:prod": "node dist/main",
     "start:opcua-test": "node tools/opcua-test-server.js",
     "create-admin": "node tools/create-admin.js",
+    "seed:stmes-demo": "node tools/seed-stmes-demo.js",
     "lint": "eslint \"{src,apps,libs,test}/**/*.ts\" --fix",
     "test": "jest",
     "test:watch": "jest --watch",

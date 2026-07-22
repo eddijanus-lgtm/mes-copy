@@ -15,8 +15,12 @@ export class OpcUaService implements OnModuleInit, OnModuleDestroy {
   private reconnectTimer?: NodeJS.Timeout;
   private pollingTimer?: NodeJS.Timeout;
   private polling = false;
+  private subscription: any;
+  private monitoredItems: any[] = [];
   private address = '';
   private readonly telemetryCallbacks = new Set<(event: EdgeTelemetryEvent) => void>();
+  private readonly stMesCallbacks = new Set<(resourceId: number, active: boolean) => void>();
+  private readonly processCompletedCallbacks = new Set<(resourceId: number, timestamp: Date) => void>();
 
   constructor(private readonly configService: ConfigService) {}
 
@@ -40,6 +44,7 @@ export class OpcUaService implements OnModuleInit, OnModuleDestroy {
       this.session = await this.client.createSession();
       this.connected = true;
       this.logger.log('Connected to OPC UA server at ' + this.address);
+      await this.startStMesSubscriptions();
       this.startPolling();
     } catch (error) {
       this.connected = false;
@@ -59,7 +64,7 @@ export class OpcUaService implements OnModuleInit, OnModuleDestroy {
   }
 
   async readNode(nodeId: string): Promise<any> {
-    const allowedPrefixes = this.configService.get('OPC_UA_ALLOWED_NODE_PREFIXES', 'ns=1;s=Machine1.').split(',');
+    const allowedPrefixes = this.configService.get('OPC_UA_ALLOWED_NODE_PREFIXES', 'ns=1;s=Station').split(',');
     if (!allowedPrefixes.some((prefix) => nodeId.startsWith(prefix))) {
       throw new ForbiddenException('OPC UA node is not allowed');
     }
@@ -70,6 +75,22 @@ export class OpcUaService implements OnModuleInit, OnModuleDestroy {
     } catch (error) {
       throw new BadGatewayException('OPC UA read failed: ' + (error as Error).message);
     }
+  }
+
+  async writeNodes(nodes: Array<{ nodeId: string; dataType: string; value: unknown }>): Promise<void> {
+    if (!this.session || !this.connected) throw new ServiceUnavailableException('OPC UA server is not connected');
+    const allowedPrefixes = this.configService.get('OPC_UA_ALLOWED_NODE_PREFIXES', 'ns=1;s=Station').split(',');
+    if (nodes.some((node) => !allowedPrefixes.some((prefix) => node.nodeId.startsWith(prefix)))) {
+      throw new ForbiddenException('OPC UA node is not allowed');
+    }
+    const writes = nodes.map((node) => ({
+      nodeId: node.nodeId,
+      attributeId: nodeOpcua.AttributeIds.Value,
+      value: { value: new nodeOpcua.Variant({ dataType: nodeOpcua.DataType[node.dataType], value: node.value }) },
+    }));
+    const results = await this.session.write(writes);
+    const failed = results.find((statusCode) => !statusCode.isGood());
+    if (failed) throw new BadGatewayException('OPC UA write failed: ' + failed.toString());
   }
 
   isConnected(): boolean {
@@ -85,6 +106,20 @@ export class OpcUaService implements OnModuleInit, OnModuleDestroy {
     return () => this.telemetryCallbacks.delete(callback);
   }
 
+  onStMesRequest(callback: (resourceId: number, active: boolean) => void): () => void {
+    this.stMesCallbacks.add(callback);
+    return () => this.stMesCallbacks.delete(callback);
+  }
+
+  onProcessCompleted(callback: (resourceId: number, timestamp: Date) => void): () => void {
+    this.processCompletedCallbacks.add(callback);
+    return () => this.processCompletedCallbacks.delete(callback);
+  }
+
+  publishStMesEvent(payload: Record<string, unknown>) {
+    this.emitTelemetry({ kind: 'stmes.handshake', ...payload });
+  }
+
   private startPolling() {
     if (this.pollingTimer) clearInterval(this.pollingTimer);
     void this.pollTelemetry();
@@ -95,13 +130,28 @@ export class OpcUaService implements OnModuleInit, OnModuleDestroy {
     if (this.polling || !this.connected || !this.session) return;
     this.polling = true;
     try {
-      const [temperature, pressure, running, producedCount] = await Promise.all([
-        this.readNode('ns=1;s=Machine1.Temperature'),
-        this.readNode('ns=1;s=Machine1.Pressure'),
-        this.readNode('ns=1;s=Machine1.Running'),
-        this.readNode('ns=1;s=Machine1.ProducedCount'),
-      ]);
-      this.emitTelemetry({ machineId: 'Machine1', temperature, pressure, running, producedCount });
+      for (const resourceId of this.resourceIds()) {
+        const prefix = `ns=1;s=Station${resourceId}.dbProcessData.`;
+        const queryPrefix = `ns=1;s=Station${resourceId}.stMES.Query.`;
+        const [
+          iCarrierID, iStepNo, iResourceID, iPar1, iPar2, iPar3, iPar4, ldtTimeStamp,
+          xStart, xQryBusy, xDone, xError, uiCarrierId, uiResultCode, sOrderNo, uiOperationNo,
+        ] = await Promise.all([
+          this.readNode(prefix + 'iCarrierID'), this.readNode(prefix + 'iStepNo'),
+          this.readNode(prefix + 'iResourceID'), this.readNode(prefix + 'iPar1'),
+          this.readNode(prefix + 'iPar2'), this.readNode(prefix + 'iPar3'),
+          this.readNode(prefix + 'iPar4'), this.readNode(prefix + 'ldtTimeStamp'),
+          this.readNode(queryPrefix + 'xStart'), this.readNode(queryPrefix + 'xQryBusy'),
+          this.readNode(queryPrefix + 'xDone'), this.readNode(queryPrefix + 'xError'),
+          this.readNode(queryPrefix + 'uiCarrierId'), this.readNode(queryPrefix + 'uiResultCode'),
+          this.readNode(queryPrefix + 'sOrderNo'), this.readNode(queryPrefix + 'uiOperationNo'),
+        ]);
+        this.emitTelemetry({
+          kind: 'station.snapshot', resourceId, dbNumber: 151,
+          iCarrierID, iStepNo, iResourceID, iPar1, iPar2, iPar3, iPar4, ldtTimeStamp,
+          handshake: { xStart, xQryBusy, xDone, xError, uiCarrierId, uiResultCode, sOrderNo, uiOperationNo },
+        });
+      }
     } catch (error) {
       this.logger.warn('OPC UA telemetry read failed: ' + (error as Error).message);
       this.handleDisconnect('telemetry read failed');
@@ -144,7 +194,53 @@ export class OpcUaService implements OnModuleInit, OnModuleDestroy {
     const client = this.client;
     this.session = null;
     this.client = null;
+    this.monitoredItems = [];
+    try { if (this.subscription) await this.subscription.terminate(); } catch (error) { this.logger.warn('OPC UA subscription close failed: ' + (error as Error).message); }
+    this.subscription = null;
     try { if (session) await session.close(); } catch (error) { this.logger.warn('OPC UA session close failed: ' + (error as Error).message); }
     try { if (client) await client.disconnect(); } catch (error) { this.logger.warn('OPC UA disconnect failed: ' + (error as Error).message); }
+  }
+
+  private async startStMesSubscriptions() {
+    this.subscription = await this.session.createSubscription2({
+      requestedPublishingInterval: 250,
+      requestedLifetimeCount: 120,
+      requestedMaxKeepAliveCount: 10,
+      maxNotificationsPerPublish: 20,
+      publishingEnabled: true,
+      priority: 10,
+    });
+    for (const resourceId of this.resourceIds()) {
+      const item = nodeOpcua.ClientMonitoredItem.create(
+        this.subscription,
+        { nodeId: `ns=1;s=Station${resourceId}.stMES.Query.xStart`, attributeId: nodeOpcua.AttributeIds.Value },
+        { samplingInterval: 100, discardOldest: true, queueSize: 10 },
+        nodeOpcua.TimestampsToReturn.Both,
+      );
+      item.on('changed', (dataValue) => {
+        const active = Boolean(dataValue?.value?.value);
+        for (const callback of this.stMesCallbacks) callback(resourceId, active);
+      });
+      item.on('err', (error) => this.logger.error(`stMES monitor error for resource ${resourceId}: ${error.message}`));
+      this.monitoredItems.push(item);
+
+      const completionItem = nodeOpcua.ClientMonitoredItem.create(
+        this.subscription,
+        { nodeId: `ns=1;s=Station${resourceId}.dbProcessData.ldtTimeStamp`, attributeId: nodeOpcua.AttributeIds.Value },
+        { samplingInterval: 100, discardOldest: true, queueSize: 10 },
+        nodeOpcua.TimestampsToReturn.Both,
+      );
+      completionItem.on('changed', (dataValue) => {
+        const timestamp = new Date(dataValue?.value?.value);
+        if (timestamp.getUTCFullYear() <= 1970) return;
+        for (const callback of this.processCompletedCallbacks) callback(resourceId, timestamp);
+      });
+      completionItem.on('err', (error) => this.logger.error(`DB151 completion monitor error for resource ${resourceId}: ${error.message}`));
+      this.monitoredItems.push(completionItem);
+    }
+  }
+
+  private resourceIds(): number[] {
+    return this.configService.get('OPC_UA_DEMO_RESOURCE_IDS', '1,2').split(',').map(Number).filter(Number.isInteger);
   }
 }

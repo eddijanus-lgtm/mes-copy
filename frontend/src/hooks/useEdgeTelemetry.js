@@ -4,6 +4,10 @@ import { useAuth } from "../providers/AuthProvider.jsx";
 const INITIAL_STATE = {
   status: "disconnected",
   telemetry: null,
+  telemetryByResource: {},
+  handshakeByResource: {},
+  eventsByResource: {},
+  changedAtByResource: {},
   lastMessageAt: null,
   logs: [],
 };
@@ -38,11 +42,8 @@ export function useEdgeTelemetry() {
 
           const logLine = `[${new Date(message.timestamp).toLocaleTimeString("de-DE")}] ${message.source}: ${JSON.stringify(message.payload)}`;
           setState((current) => ({
-            ...current,
-            status: "connected",
-            telemetry: message,
-            lastMessageAt: message.timestamp,
-            logs: [...current.logs, logLine].slice(-30),
+            ...applyTelemetry(current, message),
+            logs: [...current.logs, logLine].slice(-40),
           }));
         } catch {
           setState((current) => ({ ...current, status: "error" }));
@@ -66,4 +67,40 @@ export function useEdgeTelemetry() {
   }, [token]);
 
   return state;
+}
+
+const TRACKED_FIELDS = ["iCarrierID", "iStepNo", "iResourceID", "iPar1", "iPar2", "iPar3", "iPar4", "ldtTimeStamp"];
+
+function applyTelemetry(current, message) {
+  const resourceId = message.source === "opcua" ? message.payload?.resourceId : null;
+  const base = {
+    ...current,
+    status: "connected",
+    telemetry: message,
+    lastMessageAt: message.timestamp,
+  };
+  if (!resourceId) return base;
+
+  if (message.payload.kind === "stmes.handshake") {
+    const event = { ...message.payload, timestamp: message.timestamp };
+    return {
+      ...base,
+      handshakeByResource: { ...current.handshakeByResource, [resourceId]: event },
+      eventsByResource: {
+        ...current.eventsByResource,
+        [resourceId]: [...(current.eventsByResource[resourceId] || []), event].slice(-20),
+      },
+    };
+  }
+
+  const previous = current.telemetryByResource[resourceId]?.payload;
+  const changedAt = { ...(current.changedAtByResource[resourceId] || {}) };
+  for (const field of TRACKED_FIELDS) {
+    if (previous && String(previous[field]) !== String(message.payload[field])) changedAt[field] = Date.now();
+  }
+  return {
+    ...base,
+    telemetryByResource: { ...current.telemetryByResource, [resourceId]: message },
+    changedAtByResource: { ...current.changedAtByResource, [resourceId]: changedAt },
+  };
 }

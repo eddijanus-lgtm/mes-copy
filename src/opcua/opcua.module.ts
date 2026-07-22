@@ -2,10 +2,14 @@ import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { OpcUaService } from './opcua.service';
 import { MqttGatewayService } from './mqtt-gateway.service';
+import { TypeOrmModule } from '@nestjs/typeorm';
+import { OrdersModule } from '../orders/orders.module';
+import { StMesHandshakeEntity } from './stmes-handshake.entity';
+import { StMesHandshakeService } from './stmes-handshake.service';
 
 @Module({
-  imports: [ConfigModule],
-  providers: [OpcUaService, MqttGatewayService],
-  exports: [OpcUaService, MqttGatewayService],
+  imports: [ConfigModule, OrdersModule, TypeOrmModule.forFeature([StMesHandshakeEntity])],
+  providers: [OpcUaService, MqttGatewayService, StMesHandshakeService],
+  exports: [OpcUaService, MqttGatewayService, StMesHandshakeService],
 })
 export class OpcUaModule {}

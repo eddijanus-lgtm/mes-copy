@@ -77,7 +77,7 @@ A professional, scalable Manufacturing Execution System that connects machines v
 | # | Task | Priority | Effort | Status |
 |---|------|----------|--------|--------|
 | 4.1 | Order workflow states: `draft` → `released` → `in_progress` → `completed` / `cancelled` | Critical | 2–3 days | ⬜ pending |
-| 4.2 | Production step tracking (operation sequencing per order) | High | 2 days | ⬜ pending |
+| 4.2 | Production step tracking (operation sequencing per order) | High | 2 days | 🟡 Demo foundation: carriers, route steps and two-station stMES simulation; real PLC contract pending |
 | 4.3 | Material consumption tracking (link materials to orders) | Medium | 1–2 days | ⬜ pending |
 | 4.4 | Start/Stop commands via OPC UA write-back to machines | High | 2–3 days | ⬜ pending |
 | 4.5 | Error handling & downtime logging per machine | High | 1–2 days | ⬜ pending |

@@ -31,6 +31,18 @@ export class MachineEntity {
   @Column({ nullable: true })
   serial_number?: string;
 
+  @Column({ type: 'int', nullable: true, unique: true })
+  resource_id?: number;
+
+  @Column({ nullable: true })
+  opcua_endpoint_url?: string;
+
+  @Column({ nullable: true })
+  opcua_node_prefix?: string;
+
+  @Column({ default: false })
+  opcua_enabled: boolean;
+
   @Column({ type: 'jsonb', nullable: true })
   telemetry: Record<string, any>;
 

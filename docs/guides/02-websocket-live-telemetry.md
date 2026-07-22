@@ -15,11 +15,15 @@ _Status: verified - 2026-07-22_
   "timestamp": "2026-07-22T12:00:00.000Z",
   "source": "opcua",
   "payload": {
-    "machineId": "Machine1",
-    "temperature": 42.5,
-    "pressure": 5.1,
-    "running": true,
-    "producedCount": 120
+    "dbNumber": 151,
+    "iCarrierID": 128,
+    "iStepNo": 2,
+    "iResourceID": 2,
+    "iPar1": 1,
+    "iPar2": 3,
+    "iPar3": 5,
+    "iPar4": 7,
+    "ldtTimeStamp": "2026-07-22T12:00:00.000Z"
   }
 }
 ```
@@ -32,9 +36,15 @@ Ungültige Clients werden mit WebSocket-Code 4401 getrennt. Das Frontend verbind
 npm run start:opcua-test
 ```
 
+Der Server bildet `dbProcessData [DB151]` aus der Siemens-Dokumentation nach. Alle Variablen sind les- und schreibbar.
+
 NodeIds:
 
-- `ns=1;s=Machine1.Temperature`
-- `ns=1;s=Machine1.Pressure`
-- `ns=1;s=Machine1.Running`
-- `ns=1;s=Machine1.ProducedCount`
+- `ns=1;s=DB151.dbProcessData.iCarrierID` (`Int16`, Startwert 128)
+- `ns=1;s=DB151.dbProcessData.iStepNo` (`Int16`, Startwert 2)
+- `ns=1;s=DB151.dbProcessData.iResourceID` (`Int16`, Startwert 2)
+- `ns=1;s=DB151.dbProcessData.iPar1` (`Int16`, Startwert 1, Deckelfarbe)
+- `ns=1;s=DB151.dbProcessData.iPar2` (`Int16`, Startwert 3, rote Kugeln)
+- `ns=1;s=DB151.dbProcessData.iPar3` (`Int16`, Startwert 5, grüne Kugeln)
+- `ns=1;s=DB151.dbProcessData.iPar4` (`Int16`, Startwert 7, blaue Kugeln)
+- `ns=1;s=DB151.dbProcessData.ldtTimeStamp` (`DateTime`, Prozessabschluss)

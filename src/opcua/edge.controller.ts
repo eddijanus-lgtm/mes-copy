@@ -4,12 +4,14 @@ import { MqttGatewayService } from './mqtt-gateway.service';
 import { MqttPublishDto, OpcUaReadDto } from './edge.dto';
 import { Roles } from '../auth/roles.decorator';
 import { UserRoleEnum } from '../users/user.entity';
+import { StMesHandshakeService } from './stmes-handshake.service';
 
 @Controller('edge')
 export class EdgeController {
   constructor(
     private readonly opcUaService: OpcUaService,
     private readonly mqttGatewayService: MqttGatewayService,
+    private readonly stMesHandshakeService: StMesHandshakeService,
   ) {}
 
   @Get('opcua/status')
@@ -44,5 +46,11 @@ export class EdgeController {
       opcua: this.opcUaService.isConnected(),
       mqtt: this.mqttGatewayService.isConnected(),
     };
+  }
+
+  @Get('stmes/handshakes')
+  @Roles(UserRoleEnum.ADMIN, UserRoleEnum.OPERATOR, UserRoleEnum.VIEWER)
+  getRecentHandshakes() {
+    return this.stMesHandshakeService.findRecent();
   }
 }

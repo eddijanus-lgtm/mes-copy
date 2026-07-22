@@ -60,3 +60,18 @@
 - Health-Check Endpoints
 - OPC UA/MQTT Status-Anzeige
 - Direkte Lese-/Schreibzugriffe auf OPC UA Nodes
+# Demo Carrier- und Stationsrouting
+
+> Der derzeitige stMES-Nodevertrag ist eine lokale Demo-Annahme und nicht aus einer echten UDT-Dokumentation abgeleitet.
+
+Das Demo-Modell trennt:
+
+- `MachineEntity` als Station/Resource mit OPC-UA-Konfiguration
+- `CarrierEntity` als physischer, wiederverwendbarer Werkstückträger
+- `OrderEntity` als Produktionsauftrag
+- `OrderRouteStepEntity` als normalisierter Workplan
+- `StMesHandshakeEntity` als dauerhaftes Request-/Response-Journal
+
+OPC-UA-Subscriptions erkennen `xStart` und Prozessabschluss pro Station. `RoutingService` sperrt Carrier transaktional, prüft den erwarteten Routenschritt und liefert die Demo-Antwort. Stationen werden parallel verarbeitet; pro Station verhindert eine serielle Sperre doppelte gleichzeitige Bearbeitung.
+
+Der vollständige erfundene Vertrag und alle vor Produktion zu ersetzenden Annahmen stehen in `docs/guides/07-stmes-demo-contract.md`.

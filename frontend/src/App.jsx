@@ -9,6 +9,7 @@ import EdgePage from "./pages/Edge.jsx";
 import SystemStatus from "./components/SystemStatus.jsx";
 import LoginPage from "./pages/Login.jsx";
 import UsersPage from "./pages/Users.jsx";
+import CarriersPage from "./pages/Carriers.jsx";
 import { useAuth } from "./providers/AuthProvider.jsx";
 import { hasRole, ROLES } from "./utils/roles.js";
 
@@ -26,7 +27,7 @@ function ProtectedApp() {
   return (
     <div className="h-screen w-screen flex overflow-hidden bg-neutral-50">
       <Sidebar />
-      <main className="flex-1 flex flex-col gap-6 p-6 relative">
+      <main className="relative min-h-0 min-w-0 flex-1 overflow-y-auto">
         <Routes>
           <Route path="/" element={<Dashboard />} />
           <Route path="machines/*" element={<MachinesPage />} />
@@ -34,6 +35,7 @@ function ProtectedApp() {
           <Route path="traces/*" element={<TracesPage />} />
           <Route path="edge/*" element={<EdgePage />} />
           <Route path="users" element={<AdminRoute><UsersPage /></AdminRoute>} />
+          <Route path="carriers" element={<CarriersPage />} />
         </Routes>
       </main>
     </div>

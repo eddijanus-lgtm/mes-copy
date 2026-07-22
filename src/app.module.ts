@@ -13,6 +13,7 @@ import { AuthModule } from './auth/auth.module';
 import { HealthModule } from './health/health.module';
 import { APP_GUARD } from '@nestjs/core';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
+import { CarriersModule } from './carriers/carriers.module';
 
 @Module({
   imports: [
@@ -38,6 +39,7 @@ import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
     OpcUaModule,
     AuthModule,
     HealthModule,
+    CarriersModule,
   ],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
 })

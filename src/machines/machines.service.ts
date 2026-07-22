@@ -19,6 +19,10 @@ export class MachinesService {
       location: dto.location,
       model: dto.model,
       serial_number: dto.serial_number,
+      resource_id: dto.resource_id,
+      opcua_endpoint_url: dto.opcua_endpoint_url,
+      opcua_node_prefix: dto.opcua_node_prefix,
+      opcua_enabled: dto.opcua_enabled || false,
       telemetry: {},
     });
     return this.machinesRepo.save(machine);
@@ -57,5 +61,9 @@ export class MachinesService {
 
   async findByLocation(location: string): Promise<MachineEntity[]> {
     return this.machinesRepo.find({ where: { location }, order: { name: 'ASC' } });
+  }
+
+  findOpcUaStations(): Promise<MachineEntity[]> {
+    return this.machinesRepo.find({ where: { opcua_enabled: true }, order: { resource_id: 'ASC' } });
   }
 }

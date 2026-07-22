@@ -1,5 +1,5 @@
 import { Transform } from 'class-transformer';
-import { IsNotEmpty, IsString, IsEnum, IsOptional } from 'class-validator';
+import { IsBoolean, IsInt, IsNotEmpty, IsString, IsEnum, IsOptional, Min } from 'class-validator';
 
 export type MachineStatus = 'online' | 'offline' | 'maintenance' | 'error' | 'idle';
 
@@ -27,6 +27,23 @@ export class CreateMachineDto {
   @IsOptional()
   @IsString()
   serial_number?: string;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  resource_id?: number;
+
+  @IsOptional()
+  @IsString()
+  opcua_endpoint_url?: string;
+
+  @IsOptional()
+  @IsString()
+  opcua_node_prefix?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  opcua_enabled?: boolean;
 }
 
 export class UpdateMachineDto {
@@ -54,4 +71,21 @@ export class UpdateMachineDto {
   @IsOptional()
   @IsString()
   serial_number?: string;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  resource_id?: number;
+
+  @IsOptional()
+  @IsString()
+  opcua_endpoint_url?: string;
+
+  @IsOptional()
+  @IsString()
+  opcua_node_prefix?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  opcua_enabled?: boolean;
 }
