@@ -2,7 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { TraceEntity } from './trace.entity';
-import type { CreateTraceDto } from './trace.dto';
+import type { CreateTraceDto, TraceQueryDto } from './trace.dto';
 
 @Injectable()
 export class TracesService {
@@ -25,6 +25,24 @@ export class TracesService {
 
   async findAll(): Promise<TraceEntity[]> {
     return this.tracesRepo.find({ order: { collected_at: 'DESC' }, take: 500 });
+  }
+
+  async findAllWithFilters(query: TraceQueryDto): Promise<TraceEntity[]> {
+    const where: Record<string, any> = {};
+    if (query.machine_id) where.machine_id = query.machine_id;
+    if (query.category) where.category = query.category;
+    if (query.key_data_point) where.key_data_point = query.key_data_point;
+
+    let qb = this.tracesRepo.createQueryBuilder('trace').where(where);
+
+    if (query.min_value !== undefined) {
+      qb = qb.andWhere('trace.value->>\'numeric_value\' >= :minVal', { minVal: query.min_value });
+    }
+    if (query.max_value !== undefined) {
+      qb = qb.andWhere('trace.value->>\'numeric_value\' <= :maxVal', { maxVal: query.max_value });
+    }
+
+    return qb.orderBy('trace.collected_at', 'DESC').limit(500).getMany();
   }
 
   async findOne(id: string): Promise<TraceEntity> {

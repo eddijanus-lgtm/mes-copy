@@ -13,7 +13,7 @@ Phase 1 ist lokal implementiert und verifiziert. Es wurde nichts committed oder 
 | PostgreSQL | `localhost:5432` |
 | OPC-UA-Testserver | `opc.tcp://localhost:4840/UA/WaraMesTest` |
 | MQTT | `mqtt://localhost:1883` |
-| Telemetrie-WebSocket | `ws://localhost:3000/api/edge/ws` |
+| Telemetrie-WebSocket | `ws://localhost:3000/api/shopfloor/ws` |
 
 ## Entwicklungsbefehle
 

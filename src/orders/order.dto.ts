@@ -34,6 +34,30 @@ export class CreateOrderDto {
 
 export class UpdateOrderDto {
   @IsOptional()
+  @IsNotEmpty()
+  @IsString()
+  name?: string;
+
+  @IsOptional()
+  @Min(1)
+  @IsInt()
+  priority?: number;
+
+  @IsOptional()
+  @IsUUID()
+  machine_id?: string;
+
+  @IsOptional()
+  @IsNotEmpty()
+  @IsString()
+  operation?: string;
+
+  @IsOptional()
+  @Min(1)
+  @IsInt()
+  quantity?: number;
+
+  @IsOptional()
   @IsEnum(['pending', 'in_progress', 'completed', 'cancelled', 'on_hold'])
   status?: 'pending' | 'in_progress' | 'completed' | 'cancelled' | 'on_hold';
 
@@ -45,4 +69,14 @@ export class UpdateOrderDto {
   @IsOptional()
   @IsString()
   error_message?: string;
+
+  @IsOptional()
+  @Type(() => Date)
+  @IsDate()
+  start_time?: Date;
+
+  @IsOptional()
+  @Type(() => Date)
+  @IsDate()
+  target_complete_time?: Date;
 }

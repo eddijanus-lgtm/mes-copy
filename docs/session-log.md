@@ -280,3 +280,38 @@ _Letzte Aktualisierung: 2026-07-22T11:42:00+02:00_
 - Testpayload mit `temperature: 43.2`, `pressure: 6.4`, `state: running` live über WebSocket und anschließend über den Verlauf-Endpunkt gelesen.
 - Backend- und Frontend-Build sowie `git diff --check` erfolgreich; Edge-Route liefert HTTP 200.
 - Kein Commit und kein Push durchgeführt.
+
+### [15:02] Phase 2 gestartet und Orders-CRUD abgeschlossen
+**Prompt:** "ok. starte phase 2. was ist da zu tun?"
+- Phase-2-Umfang erläutert: vollständige Frontend-Funktionen für Orders, Alarme, Traces, globales Fehlerhandling und Maschinen-Bulkimport.
+- Festgestellt, dass keine Orders-Seite existierte und das PATCH-DTO nur Status, Fortschritt und Fehlertext unterstützte.
+- Neue Seite `/orders` mit Navigation, Dashboard-Schnellzugriff, Kennzahlen, Suche, Statusfilter, Fortschritt, Erstellen-, Bearbeiten- und Löschdialog umgesetzt.
+- Rollen umgesetzt: Viewer liest, Operator/Admin erstellen und bearbeiten, nur Admin löscht.
+- Backend-PATCH um Name, Priorität, Station, Operation, Menge sowie Start- und Zieltermin erweitert.
+- Integritätsregeln ergänzt: Fertigmenge kann Gesamtmenge nicht überschreiten; Aufträge mit zugeordneten Carriern können nicht gelöscht werden.
+- CRUD-End-to-End gegen PostgreSQL verifiziert und temporären Testauftrag wieder gelöscht; Schutz des Demo-Auftrags mit HTTP 400 verifiziert.
+- Backend-/Frontend-Build, beide npm-Audits und `git diff --check` erfolgreich; weiterhin keine Jest-Testdateien vorhanden.
+- Roadmap-Punkt 2.1 als abgeschlossen markiert. Kein Commit und kein Push durchgeführt.
+
+### [15:05] Gesamtfortschritt dokumentiert
+**Prompt:** "dokumentiere alles. wo sind wir jetzt wieviel prozent fertig?"
+- Implementierung, Berechtigungen, Integritätsregeln, Tests und Bedienung von Phase 2.1 sind in `docs/guides/08-orders-crud.md`, `docs/api.md` und diesem Session-Log dokumentiert.
+- Roadmap um einen datierten Fortschrittsblock mit transparenter Berechnung ergänzt.
+- Vollständig abgeschlossen sind 7 von 38 Aufgaben: Phase 1.1 bis 1.6 sowie Phase 2.1; dies entspricht 18,4 % ohne Teilanrechnung.
+- Phase 4.2 und Phase 6.3 sind teilweise umgesetzt. Bei hälftiger Anrechnung liegt der Planungsfortschritt bei 21,1 %.
+- Phase 1 steht bei 100 %, Phase 2 aktuell bei 20 %; nächster Arbeitspunkt ist Phase 2.2.
+- Kein Commit und kein Push durchgeführt.
+
+### [15:50] Phase 2/3 abgeschlossen und stMES-Demo stabilisiert
+**Prompts:** "mache phase 2 alarme weiter" / "weiter" / "dann phase 3" / "DEMO-ORDER-001 wurde angelegt, sieht aber nicht so aus als würde sie bearbeitet werden" / "aktualisiere die roadmap"
+- Phase 2 vollständig abgeschlossen: Alarme mit Inline-Acknowledge, Bulk-Operationen und CSV-Export; Traces mit `key_data_point`- und Min/Max-Value-Filter; Machines mit CSV-Template und CSV-Bulkimport.
+- Beispielalarm-Seed `tools/seed-demo-alarms.js` ergänzt und 12 Testalarme erzeugt; Admin-Passwort lokal wieder auf `admin123!` gesetzt.
+- Phase 3 technisch umgesetzt: Docker Compose auf `timescale/timescaledb:latest-pg16`, TimescaleDB-Container `mes_db` auf Port 5433, `data_points` als Hypertable, tägliches Chunking, Compression ab 7 Tagen, Retention 90 Tage und Continuous Aggregate `data_points_1min`.
+- Reproduzierbare Skripte ergänzt: `npm run phase3:apply` und `npm run benchmark:timescale`.
+- Lokaler Benchmark: 10.000 Messpunkte in ca. 0,28 s, rund 36.364 writes/sec. Funktional erfolgreich, Roadmap-Ziel >50K/sec noch offen für spätere Optimierung.
+- Backend-Start nach Timescale-Fix repariert: TypeORM-Schema-Synchronisierung ist nun nur noch mit `TYPEORM_SYNCHRONIZE=true` aktiv, damit Hypertables nicht durch automatische Primary-Key-Neuanlage blockiert werden.
+- stMES-Reconnect-Lücke behoben: Bereits aktive `xStart=true` SPS-Anfragen werden beim OPC-UA-Polling nacherkannt, nicht nur über Subscription-Change-Events.
+- Retained MQTT-Webshop-Payload geleert, um ungewollte Wiederanlage alter `WEBSHOP-*` Aufträge beim Backend-Neustart zu vermeiden.
+- Demo-Zyklus zurückgesetzt und erfolgreich verifiziert: `DEMO-ORDER-001` lief mit Carrier 128/129 über Resource 1, 2 und 3 bis `completed_quantity = 2/2`, beide Carrier `completed`.
+- Roadmap auf Phase 2 = 100 %, Phase 3 = 100 % technisch umgesetzt, Gesamtfortschritt 21/48 = 43,8 % vollständig aktualisiert.
+- Kein Commit und kein Push durchgeführt.

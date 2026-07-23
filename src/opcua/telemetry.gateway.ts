@@ -3,11 +3,11 @@ import { JwtService } from '@nestjs/jwt';
 import { OnGatewayConnection, OnGatewayDisconnect, OnGatewayInit, WebSocketGateway, WebSocketServer } from '@nestjs/websockets';
 import { RawData, WebSocket, WebSocketServer as WsServer } from 'ws';
 import { UserRoleEnum } from '../users/user.entity';
-import { EdgeTelemetryEvent } from './edge-telemetry';
+import { ShopfloorTelemetryEvent } from './shopfloor-telemetry';
 import { MqttGatewayService } from './mqtt-gateway.service';
 import { OpcUaService } from './opcua.service';
 
-@WebSocketGateway({ path: '/api/edge/ws' })
+@WebSocketGateway({ path: '/api/shopfloor/ws' })
 export class TelemetryGateway implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect, OnModuleDestroy {
   @WebSocketServer()
   server: WsServer;
@@ -62,7 +62,7 @@ export class TelemetryGateway implements OnGatewayInit, OnGatewayConnection, OnG
     }
   }
 
-  private broadcast(event: EdgeTelemetryEvent) {
+  private broadcast(event: ShopfloorTelemetryEvent) {
     const message = JSON.stringify(event);
     for (const client of this.authenticatedClients.keys()) {
       if (client.readyState === WebSocket.OPEN) client.send(message);

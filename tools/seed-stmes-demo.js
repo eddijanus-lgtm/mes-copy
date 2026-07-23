@@ -27,21 +27,53 @@ async function seed() {
 
   const machines = await request('/machines', {}, token);
   const stationIds = {};
-  for (const resourceId of [1, 2]) {
+  const stationDefinitions = [
+    {
+      resource_id: 1,
+      name: 'S01 Deckelzufuehrung',
+      status: 'online',
+      type: 'lid_feeder',
+      location: 'Webshop Demo Linie',
+      model: 'WARA-DEMO-S01',
+      opcua_endpoint_url: 'opc.tcp://localhost:4840/UA/WaraMesTest',
+      opcua_node_prefix: 'ns=1;s=Station1',
+      opcua_enabled: true,
+    },
+    {
+      resource_id: 2,
+      name: 'S02 Kugeldosierung',
+      status: 'online',
+      type: 'ball_dispenser',
+      location: 'Webshop Demo Linie',
+      model: 'WARA-DEMO-S02',
+      opcua_endpoint_url: 'opc.tcp://localhost:4840/UA/WaraMesTest',
+      opcua_node_prefix: 'ns=1;s=Station2',
+      opcua_enabled: true,
+    },
+    {
+      resource_id: 3,
+      name: 'Q01 Endkontrolle',
+      status: 'online',
+      type: 'quality_gate',
+      location: 'Webshop Demo Linie',
+      model: 'WARA-DEMO-Q01',
+      opcua_endpoint_url: 'opc.tcp://localhost:4840/UA/WaraMesTest',
+      opcua_node_prefix: 'ns=1;s=Station3',
+      opcua_enabled: true,
+    },
+  ];
+  for (const definition of stationDefinitions) {
+    const resourceId = definition.resource_id;
     let station = machines.find((machine) => machine.resource_id === resourceId);
     if (!station) {
       station = await request('/machines', {
         method: 'POST',
-        body: {
-          name: `Demo Station ${resourceId}`,
-          status: 'online',
-          type: 'assembly',
-          location: 'Demo',
-          resource_id: resourceId,
-          opcua_endpoint_url: 'opc.tcp://localhost:4840/UA/WaraMesTest',
-          opcua_node_prefix: `ns=1;s=Station${resourceId}`,
-          opcua_enabled: true,
-        },
+        body: definition,
+      }, token);
+    } else {
+      station = await request(`/machines/${station.id}`, {
+        method: 'PATCH',
+        body: definition,
       }, token);
     }
     stationIds[resourceId] = station.id;
@@ -52,9 +84,13 @@ async function seed() {
   if (!order) {
     order = await request('/orders', {
       method: 'POST',
-      body: { name: 'DEMO-ORDER-001', priority: 1, machine_id: stationIds[1], operation: 'Demo assembly', quantity: 2 },
+      body: { name: 'DEMO-ORDER-001', priority: 1, machine_id: stationIds[1], operation: 'Webshop-Produkt konfigurieren', quantity: 2 },
     }, token);
   }
+  await request(`/orders/${order.id}`, {
+    method: 'PATCH',
+    body: { name: 'DEMO-ORDER-001', priority: 1, machine_id: stationIds[1], operation: 'Webshop-Produkt konfigurieren', quantity: 2 },
+  }, token);
   await request(`/orders/${order.id}`, {
     method: 'PATCH',
     body: { status: 'in_progress', completed_quantity: 0 },
@@ -63,14 +99,15 @@ async function seed() {
     method: 'PATCH',
     body: {
       steps: [
-        { step_no: 1, resource_id: 1, operation_no: 10, operation: 'Deckel montieren', parameters: { iPar1: 1, iPar2: 3, iPar3: 5, iPar4: 7 } },
-        { step_no: 2, resource_id: 2, operation_no: 20, operation: 'Kugeln prüfen', parameters: { iPar1: 1, iPar2: 3, iPar3: 5, iPar4: 7 } },
+        { step_no: 1, resource_id: 1, operation_no: 10, operation: 'Deckelfarbe bereitstellen', parameters: { iPar1: 1, iPar2: 3, iPar3: 5, iPar4: 7 } },
+        { step_no: 2, resource_id: 2, operation_no: 20, operation: 'Kugeln dosieren', parameters: { iPar1: 1, iPar2: 3, iPar3: 5, iPar4: 7 } },
+        { step_no: 3, resource_id: 3, operation_no: 30, operation: 'Deckel und Kugeln pruefen', parameters: { iPar1: 1, iPar2: 3, iPar3: 5, iPar4: 7 } },
       ],
     },
   }, token);
 
   const carriers = await request('/carriers', {}, token);
-  for (const [carrierNumber, currentStep] of [[128, 1], [129, 2]]) {
+  for (const [carrierNumber, currentStep] of [[128, 1], [129, 1]]) {
     let carrier = carriers.find((entry) => entry.carrier_number === carrierNumber);
     if (!carrier) carrier = await request('/carriers', { method: 'POST', body: { carrier_number: carrierNumber } }, token);
     await request(`/carriers/${carrier.id}/assignment`, {
@@ -79,7 +116,7 @@ async function seed() {
     }, token);
   }
 
-  console.log('DEMO data ready: resources 1/2, carriers 128/129, order DEMO-ORDER-001.');
+  console.log('DEMO data ready: webshop product on resources 1/2/3, carriers 128/129 start at step 1.');
 }
 
 seed().catch((error) => {

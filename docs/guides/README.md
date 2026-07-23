@@ -15,6 +15,7 @@ _Dieser Ordner enthält Erklärungen, Konzepte und technische Hintergründe für
 | [04-opcua-error-handling.md](04-opcua-error-handling.md) | Robustes OPC UA/MQTT Error Handling | verified |
 | [05-timescaledb-migration.md](05-timescaledb-migration.md) | PostgreSQL → TimescaleDB Migration für Time-Series | planned |
 | [07-stmes-demo-contract.md](07-stmes-demo-contract.md) | Erfundenes Mehrstations-stMES-Protokoll für lokale Demos | demo only |
+| [08-orders-crud.md](08-orders-crud.md) | Vollständige Auftragsverwaltung im Frontend | verified |
 
 ---
 

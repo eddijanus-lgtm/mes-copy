@@ -5,10 +5,11 @@ import { hasRole, ROLES } from "../utils/roles.js";
 const navItems = [
   { path: "/", label: "Dashboard", icon: "📊" },
   { path: "/machines", label: "Stationen", icon: "⚙️" },
+  { path: "/orders", label: "Aufträge", icon: "▤" },
   { path: "/alarms", label: "Alarme", icon: "🔔" },
   { path: "/traces", label: "Traces", icon: "📈" },
   { path: "/carriers", label: "Werkstückträger", icon: "▣" },
-  { path: "/edge", label: "Edge Gateway", icon: "🌐" },
+  { path: "/shopfloor", label: "Shopfloor Gateway", icon: "▥" },
   { path: "/users", label: "Benutzer", icon: "👤", roles: [ROLES.ADMIN] },
 ];
 
@@ -20,8 +21,8 @@ export default function Sidebar() {
     <div className="sticky top-0 h-screen w-64 shrink-0 bg-white border-r border-neutral-200 flex flex-col">
       <div className="p-5 border-b border-neutral-100 flex items-center gap-3">
         <div>
-          <h1 className="text-lg font-bold tracking-wide text-neutral-black"><span className="text-brand-primary">MES </span>Edge</h1>
-          <p className="text-xs text-neutral-400 mt-1">Process Gateway</p>
+          <h1 className="text-lg font-bold tracking-wide text-neutral-black"><span className="text-brand-primary">MES </span>Shopfloor</h1>
+          <p className="text-xs text-neutral-400 mt-1">OT/IT Gateway</p>
         </div>
         <img src="/logo.jpg" alt="MES Logo" className="flex-shrink-0 w-28 object-contain" />
       </div>

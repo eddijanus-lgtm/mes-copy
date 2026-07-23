@@ -17,3 +17,11 @@ export function canManageMachines(user) {
 export function canDeleteMachines(user) {
   return hasRole(user, ROLES.ADMIN);
 }
+
+export function canManageOrders(user) {
+  return hasRole(user, ROLES.ADMIN, ROLES.OPERATOR);
+}
+
+export function canDeleteOrders(user) {
+  return hasRole(user, ROLES.ADMIN);
+}

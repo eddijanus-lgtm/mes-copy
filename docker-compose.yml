@@ -1,7 +1,7 @@
 version: '3.8'
 services:
   postgres:
-    image: postgres:16-alpine
+    image: timescale/timescaledb:latest-pg16
     container_name: mes_db
     restart: always
     environment:

@@ -1,8 +1,9 @@
-import { Controller, Get, Post, Patch, Delete, Body, Param, HttpCode, HttpStatus, ParseUUIDPipe } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Delete, Body, Param, HttpCode, HttpStatus, Query, Req, Res, ParseUUIDPipe } from '@nestjs/common';
 import { AlarmsService } from './alarms.service';
 import { CreateAlarmDto, UpdateAlarmDto } from './alarm.dto';
 import { Roles } from '../auth/roles.decorator';
 import { UserRoleEnum } from '../users/user.entity';
+import type { Request, Response } from 'express';
 
 @Controller('alarms')
 export class AlarmsController {
@@ -14,7 +15,17 @@ export class AlarmsController {
 
   @Get()
   @Roles(UserRoleEnum.ADMIN, UserRoleEnum.OPERATOR, UserRoleEnum.VIEWER)
-  findAll() { return this.alarmsService.findAll(); }
+  findAll(
+    @Query('acknowledged') acknowledged?: string,
+    @Query('severity') severity?: string,
+    @Query('machine_id') machineId?: string,
+  ) {
+    return this.alarmsService.findAll({
+      acknowledged: acknowledged ? acknowledged === 'true' : undefined,
+      severity: severity || undefined,
+      machine_id: machineId || undefined,
+    });
+  }
 
   @Get('stats/active-count')
   @Roles(UserRoleEnum.ADMIN, UserRoleEnum.OPERATOR, UserRoleEnum.VIEWER)
@@ -36,4 +47,23 @@ export class AlarmsController {
   @Delete(':id')
   @Roles(UserRoleEnum.ADMIN)
   remove(@Param('id', ParseUUIDPipe) id: string) { return this.alarmsService.remove(id); }
+
+  @Post('bulk/acknowledge')
+  @Roles(UserRoleEnum.ADMIN, UserRoleEnum.OPERATOR)
+  @HttpCode(HttpStatus.OK)
+  bulkAcknowledge(@Body() ids: string[]) { return this.alarmsService.bulkAcknowledge(ids); }
+
+  @Delete('bulk')
+  @Roles(UserRoleEnum.ADMIN)
+  bulkRemove(@Body() ids: string[]) { return this.alarmsService.bulkRemove(ids); }
+
+  @Get('export/csv')
+  @Roles(UserRoleEnum.ADMIN, UserRoleEnum.OPERATOR, UserRoleEnum.VIEWER)
+  exportCsv(@Query('acknowledged') acknowledged?: string, @Query('severity') severity?: string, @Query('machine_id') machineId?: string) {
+    return this.alarmsService.exportCsv({
+      acknowledged: acknowledged ? acknowledged === 'true' : undefined,
+      severity: severity || undefined,
+      machine_id: machineId || undefined,
+    });
+  }
 }

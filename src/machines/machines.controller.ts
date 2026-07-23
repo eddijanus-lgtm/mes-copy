@@ -1,12 +1,19 @@
-import { Controller, Get, Post, Patch, Delete, Body, Param } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Delete, Body, Param, Req, Res, UseInterceptors, HttpCode, HttpStatus } from '@nestjs/common';
 import { MachinesService } from './machines.service';
 import { CreateMachineDto, UpdateMachineDto } from './machine.dto';
 import { Roles } from '../auth/roles.decorator';
 import { UserRoleEnum } from '../users/user.entity';
+import type { Request, Response } from 'express';
+
+import { DowntimeService } from './downtime.service';
+import { CreateDowntimeDto, StopMachineDto, ResumeMachineDto } from './downtime.dto';
 
 @Controller('machines')
 export class MachinesController {
-  constructor(private readonly machinesService: MachinesService) {}
+  constructor(
+    private readonly machinesService: MachinesService,
+    private readonly downtimeService: DowntimeService,
+  ) {}
 
   @Post()
   @Roles(UserRoleEnum.ADMIN, UserRoleEnum.OPERATOR)
@@ -39,4 +46,54 @@ export class MachinesController {
   @Get('location/:location')
   @Roles(UserRoleEnum.ADMIN, UserRoleEnum.OPERATOR, UserRoleEnum.VIEWER)
   findByLocation(@Param('location') location: string) { return this.machinesService.findByLocation(location); }
+
+  @Get('template/csv')
+  @Roles(UserRoleEnum.ADMIN, UserRoleEnum.OPERATOR, UserRoleEnum.VIEWER)
+  downloadTemplateCsv(@Res() res: Response) {
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', 'attachment; filename="machines-template.csv"');
+    res.send(this.machinesService.generateCsvTemplate());
+  }
+
+  @Post('import/csv')
+  @Roles(UserRoleEnum.ADMIN, UserRoleEnum.OPERATOR)
+  @HttpCode(HttpStatus.OK)
+  async importCsv(@Body('content') content: string) {
+    if (!content || typeof content !== 'string') throw new Error('Invalid CSV content');
+    return this.machinesService.importFromCsv(content);
+  }
+
+  @Post('downtime/stop')
+  @Roles(UserRoleEnum.ADMIN, UserRoleEnum.OPERATOR)
+  stopDowntime(@Body() dto: StopMachineDto) { return this.downtimeService.stopMachine(dto); }
+
+  @Post('downtime/resume/:machine_id')
+  @Roles(UserRoleEnum.ADMIN, UserRoleEnum.OPERATOR)
+  resumeDowntime(
+    @Param('machine_id') machineId: string,
+    @Body() dto: ResumeMachineDto,
+  ) { return this.downtimeService.resumeMachine({ ...dto, machine_id: machineId }); }
+
+  @Get('downtime')
+  @Roles(UserRoleEnum.ADMIN, UserRoleEnum.OPERATOR, UserRoleEnum.VIEWER)
+  findAllDowntime(
+    @Param('machine_id') machineId?: string,
+  ) { return this.downtimeService.findAll(machineId); }
+
+  @Get('downtime/stats/:machine_id')
+  @Roles(UserRoleEnum.ADMIN, UserRoleEnum.OPERATOR, UserRoleEnum.VIEWER)
+  getDowntimeStats(@Param('machine_id') machineId: string) {
+    return this.downtimeService.getMachineDowntimeStats(machineId);
+  }
+
+  @Get('downtime/stats/period')
+  @Roles(UserRoleEnum.ADMIN, UserRoleEnum.OPERATOR, UserRoleEnum.VIEWER)
+  getPeriodDowntime(
+    @Param('start_date') startDate: string,
+    @Param('end_date') endDate: string,
+  ) { return this.downtimeService.getPeriodStats(new Date(startDate), new Date(endDate)); }
+
+  @Delete('downtime/:id')
+  @Roles(UserRoleEnum.ADMIN)
+  removeDowntimeLog(@Param('id') id: string) { return this.downtimeService.remove(id); }
 }

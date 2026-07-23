@@ -7,13 +7,15 @@ import { MachinesModule } from './machines/machines.module';
 import { OrdersModule } from './orders/orders.module';
 import { TracesModule } from './traces/traces.module';
 import { DataCollectionModule } from './data-collection/data-collection.module';
-import { EdgeGatewayModule } from './opcua/edge-gateway.module';
+import { ShopfloorGatewayModule } from './opcua/shopfloor-gateway.module';
 import { OpcUaModule } from './opcua/opcua.module';
 import { AuthModule } from './auth/auth.module';
 import { HealthModule } from './health/health.module';
 import { APP_GUARD } from '@nestjs/core';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { CarriersModule } from './carriers/carriers.module';
+import { MaterialsModule } from './materials/materials.module';
+import { DashboardModule } from './dashboard/dashboard.module';
 
 @Module({
   imports: [
@@ -27,7 +29,7 @@ import { CarriersModule } from './carriers/carriers.module';
       password: process.env.DB_PASSWORD,
       database: process.env.DB_DATABASE || 'mes_production',
       entities: [__dirname + '/**/*.entity{.ts,.js}'],
-      synchronize: process.env.NODE_ENV !== 'production',
+      synchronize: process.env.TYPEORM_SYNCHRONIZE === 'true',
       autoLoadEntities: true,
     }),
     AlarmsModule,
@@ -35,11 +37,13 @@ import { CarriersModule } from './carriers/carriers.module';
     OrdersModule,
     TracesModule,
     DataCollectionModule,
-    EdgeGatewayModule,
+    ShopfloorGatewayModule,
     OpcUaModule,
     AuthModule,
     HealthModule,
     CarriersModule,
+    MaterialsModule,
+    DashboardModule,
   ],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
 })

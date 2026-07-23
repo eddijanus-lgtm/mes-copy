@@ -36,6 +36,20 @@ export class TraceQueryDto {
   @IsOptional()
   @IsEnum(['process_data', 'quality', 'material', 'energy', 'op_input'])
   category?: TraceCategoryType;
+
+  @IsOptional()
+  @IsString()
+  key_data_point?: string;
+
+  @IsOptional()
+  @Transform(({ value }) => Number(value))
+  @IsInt()
+  min_value?: number;
+
+  @IsOptional()
+  @Transform(({ value }) => Number(value))
+  @IsInt()
+  max_value?: number;
 }
 
 export class TraceTakeQueryDto {

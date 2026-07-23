@@ -111,13 +111,14 @@ DELETE /api/machines/:id
 
 ---
 
-## Edge und OPC UA
+## Shopfloor Gateway und OPC UA
 
 ```http
-GET /api/edge/health
-GET /api/edge/stmes/handshakes
-GET /api/edge/mqtt/messages
-POST /api/edge/opcua/read
+GET /api/shopfloor/health
+GET /api/shopfloor/stmes/handshakes
+GET /api/shopfloor/mqtt/messages
+GET /api/shopfloor/webshop/orders
+POST /api/shopfloor/opcua/read
 
 {
   "nodeId": "ns=1;s=DB151.dbProcessData.iCarrierID"
@@ -128,7 +129,7 @@ OPC-UA-Reads sind Operator/Admin vorbehalten. MQTT-Publish ist Admin-only und au
 
 ## Live-Telemetrie WebSocket
 
-Verbindung: `ws://localhost:3000/api/edge/ws`
+Verbindung: `ws://localhost:3000/api/shopfloor/ws`
 
 Erste Nachricht innerhalb von fünf Sekunden:
 
@@ -136,17 +137,29 @@ Erste Nachricht innerhalb von fünf Sekunden:
 { "type": "auth", "token": "<access_token>" }
 ```
 
-Danach folgen Nachrichten vom Typ `auth.ok` und `edge.telemetry`. Ungültige Verbindungen werden mit Code 4401 geschlossen.
+Danach folgen Nachrichten vom Typ `auth.ok` und `shopfloor.telemetry`. Ungültige Verbindungen werden mit Code 4401 geschlossen.
 
-OPC-UA-Nachrichten enthalten entweder einen sekündlichen `station.snapshot` mit DB151- und aktuellen Query-Signalen oder ein ereignisgetriebenes `stmes.handshake` für Anfrage, Verarbeitung, Antwort, Quittierung und Prozessabschluss. `GET /api/edge/stmes/handshakes` liefert das persistierte Journal für die Anzeige nach einem Seiten-Reload.
+OPC-UA-Nachrichten enthalten entweder einen sekündlichen `station.snapshot` mit DB151- und aktuellen Query-Signalen oder ein ereignisgetriebenes `stmes.handshake` fuer Anfrage, Verarbeitung, Antwort, Quittierung und Prozessabschluss. `GET /api/shopfloor/stmes/handshakes` liefert das persistierte Journal fuer die Anzeige nach einem Seiten-Reload.
 
-MQTT-Nachrichten auf den konfigurierten Subscribe-Topics werden ebenfalls als `edge.telemetry` mit `source: "mqtt"` übertragen. `GET /api/edge/mqtt/messages` liefert die letzten 50 seit dem Backend-Start empfangenen Nachrichten für die initiale Browseranzeige.
+MQTT-Nachrichten auf den konfigurierten Subscribe-Topics werden ebenfalls als `shopfloor.telemetry` mit `source: "mqtt"` uebertragen. `GET /api/shopfloor/mqtt/messages` liefert die letzten 50 seit dem Backend-Start empfangenen Nachrichten fuer die initiale Browseranzeige.
 
 ## Health
 
 `GET /api/health` ist öffentlich und liefert den Datenbankstatus. Alle öffentlichen Endpunkte unterliegen Rate Limits.
 
 ---
+
+## Aufträge
+
+```http
+GET    /api/orders
+POST   /api/orders
+GET    /api/orders/:id
+PATCH  /api/orders/:id
+DELETE /api/orders/:id
+```
+
+Viewer dürfen Aufträge lesen, Operatoren und Admins dürfen sie anlegen und bearbeiten, nur Admins dürfen löschen. `PATCH` unterstützt Stammdaten, Planung, Status und Fertigmenge. Aufträge mit zugeordneten Carriern können nicht gelöscht werden.
 
 ## Carrier und Routing (Demo-Grundmodell)
 

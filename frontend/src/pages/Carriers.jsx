@@ -3,15 +3,40 @@ import { api } from "../api/client.js";
 import { useAuth } from "../providers/AuthProvider.jsx";
 import { hasRole, ROLES } from "../utils/roles.js";
 
+const ROUTE_LABELS = {
+  1: "S01 Deckelzufuehrung",
+  2: "S02 Kugeldosierung",
+  3: "Q01 Endkontrolle",
+};
+const STEP_LABELS = {
+  1: "Deckelfarbe bereitstellen",
+  2: "Kugeln dosieren",
+  3: "Deckel und Kugeln pruefen",
+};
+
 export default function CarriersPage() {
   const { user } = useAuth();
   const canManage = hasRole(user, ROLES.ADMIN, ROLES.OPERATOR);
   const [carriers, setCarriers] = useState([]);
+  const [orders, setOrders] = useState([]);
   const [carrierNumber, setCarrierNumber] = useState("");
   const [error, setError] = useState("");
 
-  const load = () => api.get("/carriers").then(setCarriers).catch((requestError) => setError(requestError.message));
-  useEffect(() => { load(); }, []);
+  async function load() {
+    try {
+      const [carrierData, orderData] = await Promise.all([api.get("/carriers"), api.get("/orders")]);
+      setCarriers(Array.isArray(carrierData) ? carrierData : []);
+      setOrders(Array.isArray(orderData) ? orderData : []);
+    } catch (requestError) {
+      setError(requestError.message);
+    }
+  }
+
+  useEffect(() => {
+    void load();
+    const timer = setInterval(() => void load(), 2000);
+    return () => clearInterval(timer);
+  }, []);
 
   async function createCarrier(event) {
     event.preventDefault();
@@ -25,12 +50,22 @@ export default function CarriersPage() {
     }
   }
 
+  const orderById = Object.fromEntries(orders.map((order) => [order.id, order]));
+
   return (
     <div className="min-h-screen bg-neutral-50 p-6 space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-neutral-900">Werkstückträger</h1>
-        <p className="mt-1 text-sm text-neutral-500">Carrier-Zuordnung und aktueller Routenschritt</p>
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-brand-primary">Materialfluss</p>
+          <h1 className="text-2xl font-bold text-neutral-900">Werkstückträger</h1>
+          <p className="mt-1 text-sm text-neutral-500">Carrier-Position, Auftragszuordnung und aktueller Arbeitsschritt der Demo-Anlage.</p>
+        </div>
+        <button onClick={load} className="w-fit rounded-lg border border-neutral-200 bg-white px-4 py-2 text-sm font-medium text-neutral-700 hover:border-brand-primary hover:text-brand-primary">Aktualisieren</button>
       </div>
+
+      <section className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-950">
+        <strong>Realistischer Ablauf:</strong> Carrier 128 und 129 werden vom OPC-UA-Testserver zyklisch am Wareneingang freigegeben. Das MES entscheidet je Carrier anhand Webshop-Auftrag und Route, ob Deckelzufuehrung, Kugeldosierung oder Endkontrolle arbeiten darf.
+      </section>
 
       {canManage && (
         <form onSubmit={createCarrier} className="flex max-w-lg gap-3 rounded-lg border border-neutral-200 bg-white p-4 shadow-card">
@@ -40,24 +75,49 @@ export default function CarriersPage() {
       )}
 
       {error && <p className="rounded-lg bg-status-error-bg p-3 text-sm text-status-error">{error}</p>}
-      <div className="overflow-hidden rounded-lg border border-neutral-200 bg-white shadow-card">
-        <table className="w-full text-sm">
-          <thead className="bg-neutral-50 text-left text-xs uppercase tracking-wide text-neutral-500">
-            <tr><th className="px-4 py-3">Carrier</th><th className="px-4 py-3">Status</th><th className="px-4 py-3">Schritt</th><th className="px-4 py-3">Resource</th><th className="px-4 py-3">Auftrag</th></tr>
-          </thead>
-          <tbody className="divide-y divide-neutral-100">
-            {carriers.map((carrier) => (
-              <tr key={carrier.id}>
-                <td className="px-4 py-3 font-mono font-semibold">{carrier.carrier_number}</td>
-                <td className="px-4 py-3">{carrier.status}</td>
-                <td className="px-4 py-3">{carrier.current_step_no}</td>
-                <td className="px-4 py-3">{carrier.current_resource_id ?? "–"}</td>
-                <td className="px-4 py-3 font-mono text-xs">{carrier.order_id || "–"}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+
+      <div className="grid gap-4 xl:grid-cols-2">
+        {carriers.map((carrier) => <CarrierCard key={carrier.id} carrier={carrier} order={orderById[carrier.order_id]} />)}
+        {carriers.length === 0 && <p className="rounded-xl border border-neutral-200 bg-white p-8 text-sm text-neutral-400">Noch keine Werkstückträger vorhanden.</p>}
       </div>
     </div>
   );
 }
+
+function CarrierCard({ carrier, order }) {
+  const activeStep = carrier.status === "completed" ? 4 : carrier.current_step_no;
+  return (
+    <article className="rounded-xl border border-neutral-200 bg-white p-5 shadow-sm">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-wider text-neutral-500">Werkstückträger</p>
+          <h2 className="mt-1 font-mono text-2xl font-bold text-neutral-900">Carrier {carrier.carrier_number}</h2>
+        </div>
+        <StatusPill status={carrier.status} />
+      </div>
+
+      <div className="mt-4 grid gap-3 sm:grid-cols-3">
+        <MiniMetric label="Auftrag" value={order?.name || "nicht zugeordnet"} />
+        <MiniMetric label="Aktueller Schritt" value={carrier.status === "completed" ? "Fertig" : STEP_LABELS[carrier.current_step_no] || `Schritt ${carrier.current_step_no}`} />
+        <MiniMetric label="Resource" value={carrier.current_resource_id ? ROUTE_LABELS[carrier.current_resource_id] || `R${carrier.current_resource_id}` : "Transport / Wartet"} />
+      </div>
+
+      <div className="mt-5">
+        <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-neutral-500">Routenposition</p>
+        <div className="relative grid grid-cols-3 text-center text-xs">
+          <div className="absolute left-[16.66%] right-[16.66%] top-2 h-0.5 bg-neutral-200" />
+          {[1, 2, 3, 4].map((step) => (
+            <div key={step} className="relative z-10 flex flex-col items-center gap-2">
+              <span className={`h-4 w-4 rounded-full border-2 ${step < activeStep ? "border-emerald-500 bg-emerald-500" : step === activeStep ? "border-amber-400 bg-amber-400 ring-4 ring-amber-200" : "border-neutral-300 bg-white"}`} />
+              <span className={step === activeStep ? "font-semibold text-neutral-900" : "text-neutral-500"}>{step === 1 ? "Deckel" : step === 2 ? "Dosieren" : step === 3 ? "Pruefen" : "Fertig"}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </article>
+  );
+}
+
+function MiniMetric({ label, value }) { return <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-3"><p className="text-[10px] uppercase tracking-wider text-neutral-500">{label}</p><p className="mt-1 break-words text-sm font-semibold text-neutral-900">{value}</p></div>; }
+function StatusPill({ status }) { const color = status === "completed" ? "bg-emerald-50 text-emerald-700" : status === "in_process" ? "bg-amber-50 text-amber-700" : status === "assigned" ? "bg-sky-50 text-sky-700" : status === "error" ? "bg-red-50 text-red-700" : "bg-neutral-100 text-neutral-600"; return <span className={`rounded-full px-3 py-1 text-xs font-semibold ${color}`}>{carrierStatus(status)}</span>; }
+function carrierStatus(status) { return ({ available: "Verfuegbar", assigned: "Zugeordnet", in_process: "In Arbeit", completed: "Fertig", error: "Fehler" })[status] || status; }

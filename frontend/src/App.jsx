@@ -5,11 +5,12 @@ import Dashboard from "./pages/Dashboard.jsx";
 import MachinesPage from "./pages/Machines.jsx";
 import AlarmsPage from "./pages/Alarms.jsx";
 import TracesPage from "./pages/Traces.jsx";
-import EdgePage from "./pages/Edge.jsx";
+import ShopfloorPage from "./pages/Shopfloor.jsx";
 import SystemStatus from "./components/SystemStatus.jsx";
 import LoginPage from "./pages/Login.jsx";
 import UsersPage from "./pages/Users.jsx";
 import CarriersPage from "./pages/Carriers.jsx";
+import OrdersPage from "./pages/Orders.jsx";
 import { useAuth } from "./providers/AuthProvider.jsx";
 import { hasRole, ROLES } from "./utils/roles.js";
 
@@ -31,9 +32,10 @@ function ProtectedApp() {
         <Routes>
           <Route path="/" element={<Dashboard />} />
           <Route path="machines/*" element={<MachinesPage />} />
+          <Route path="orders/*" element={<OrdersPage />} />
           <Route path="alarms/*" element={<AlarmsPage />} />
           <Route path="traces/*" element={<TracesPage />} />
-          <Route path="edge/*" element={<EdgePage />} />
+          <Route path="shopfloor/*" element={<ShopfloorPage />} />
           <Route path="users" element={<AdminRoute><UsersPage /></AdminRoute>} />
           <Route path="carriers" element={<CarriersPage />} />
         </Routes>

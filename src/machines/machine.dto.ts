@@ -1,7 +1,10 @@
 import { Transform } from 'class-transformer';
 import { IsBoolean, IsInt, IsNotEmpty, IsString, IsEnum, IsOptional, Min } from 'class-validator';
+import { MachineStatusEnum } from './machine.entity';
 
 export type MachineStatus = 'online' | 'offline' | 'maintenance' | 'error' | 'idle';
+
+export const MACHINE_CSV_HEADERS = ['name', 'type', 'status', 'location', 'model', 'serial_number', 'resource_id', 'opcua_endpoint_url', 'opcua_node_prefix', 'opcua_enabled'];
 
 export class CreateMachineDto {
   @IsNotEmpty()
@@ -9,7 +12,7 @@ export class CreateMachineDto {
   name: string;
 
   @Transform(({ value }) => (value || 'offline').toLowerCase())
-  @IsEnum(['online', 'offline', 'maintenance', 'error', 'idle'])
+  @IsEnum(MachineStatusEnum)
   status: MachineStatus;
 
   @IsOptional()
@@ -53,7 +56,7 @@ export class UpdateMachineDto {
 
   @Transform(({ value }) => (value || 'idle').toLowerCase())
   @IsOptional()
-  @IsEnum(['online', 'offline', 'maintenance', 'error', 'idle'])
+  @IsEnum(MachineStatusEnum)
   status?: MachineStatus;
 
   @IsOptional()

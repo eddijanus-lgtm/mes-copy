@@ -6,10 +6,11 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { OrdersModule } from '../orders/orders.module';
 import { StMesHandshakeEntity } from './stmes-handshake.entity';
 import { StMesHandshakeService } from './stmes-handshake.service';
+import { WebshopOrdersService } from './webshop-orders.service';
 
 @Module({
   imports: [ConfigModule, OrdersModule, TypeOrmModule.forFeature([StMesHandshakeEntity])],
-  providers: [OpcUaService, MqttGatewayService, StMesHandshakeService],
-  exports: [OpcUaService, MqttGatewayService, StMesHandshakeService],
+  providers: [OpcUaService, MqttGatewayService, StMesHandshakeService, WebshopOrdersService],
+  exports: [OpcUaService, MqttGatewayService, StMesHandshakeService, WebshopOrdersService],
 })
 export class OpcUaModule {}

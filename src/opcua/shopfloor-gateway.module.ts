@@ -1,12 +1,12 @@
 import { Module } from '@nestjs/common';
 import { OpcUaModule } from './opcua.module';
-import { EdgeController } from './edge.controller';
+import { ShopfloorGatewayController } from './shopfloor-gateway.controller';
 import { AuthModule } from '../auth/auth.module';
 import { TelemetryGateway } from './telemetry.gateway';
 
 @Module({
   imports: [OpcUaModule, AuthModule],
-  controllers: [EdgeController],
+  controllers: [ShopfloorGatewayController],
   providers: [TelemetryGateway],
 })
-export class EdgeGatewayModule {}
+export class ShopfloorGatewayModule {}

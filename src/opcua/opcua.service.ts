@@ -1,6 +1,6 @@
 import { BadGatewayException, ForbiddenException, Injectable, Logger, OnModuleDestroy, OnModuleInit, ServiceUnavailableException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { EdgeTelemetryEvent } from './edge-telemetry';
+import { ShopfloorTelemetryEvent } from './shopfloor-telemetry';
 
 const nodeOpcua = require('node-opcua');
 
@@ -18,9 +18,10 @@ export class OpcUaService implements OnModuleInit, OnModuleDestroy {
   private subscription: any;
   private monitoredItems: any[] = [];
   private address = '';
-  private readonly telemetryCallbacks = new Set<(event: EdgeTelemetryEvent) => void>();
+  private readonly telemetryCallbacks = new Set<(event: ShopfloorTelemetryEvent) => void>();
   private readonly stMesCallbacks = new Set<(resourceId: number, active: boolean) => void>();
   private readonly processCompletedCallbacks = new Set<(resourceId: number, timestamp: Date) => void>();
+  private readonly lastStMesStartState = new Map<number, boolean>();
 
   constructor(private readonly configService: ConfigService) {}
 
@@ -101,7 +102,7 @@ export class OpcUaService implements OnModuleInit, OnModuleDestroy {
     return { connected: this.connected, endpoint: this.address };
   }
 
-  onTelemetry(callback: (event: EdgeTelemetryEvent) => void): () => void {
+  onTelemetry(callback: (event: ShopfloorTelemetryEvent) => void): () => void {
     this.telemetryCallbacks.add(callback);
     return () => this.telemetryCallbacks.delete(callback);
   }
@@ -133,9 +134,11 @@ export class OpcUaService implements OnModuleInit, OnModuleDestroy {
       for (const resourceId of this.resourceIds()) {
         const prefix = `ns=1;s=Station${resourceId}.dbProcessData.`;
         const queryPrefix = `ns=1;s=Station${resourceId}.stMES.Query.`;
+        const statePrefix = `ns=1;s=Station${resourceId}.stMES.State.`;
         const [
           iCarrierID, iStepNo, iResourceID, iPar1, iPar2, iPar3, iPar4, ldtTimeStamp,
           xStart, xQryBusy, xDone, xError, uiCarrierId, uiResultCode, sOrderNo, uiOperationNo,
+          xAuto, xManual, xBusy, xReset, xErrL0, xErrL1, xErrL2,
         ] = await Promise.all([
           this.readNode(prefix + 'iCarrierID'), this.readNode(prefix + 'iStepNo'),
           this.readNode(prefix + 'iResourceID'), this.readNode(prefix + 'iPar1'),
@@ -145,12 +148,24 @@ export class OpcUaService implements OnModuleInit, OnModuleDestroy {
           this.readNode(queryPrefix + 'xDone'), this.readNode(queryPrefix + 'xError'),
           this.readNode(queryPrefix + 'uiCarrierId'), this.readNode(queryPrefix + 'uiResultCode'),
           this.readNode(queryPrefix + 'sOrderNo'), this.readNode(queryPrefix + 'uiOperationNo'),
+          this.readNode(statePrefix + 'xAuto'), this.readNode(statePrefix + 'xManual'),
+          this.readNode(statePrefix + 'xBusy'), this.readNode(statePrefix + 'xReset'),
+          this.readNode(statePrefix + 'xErrL0'), this.readNode(statePrefix + 'xErrL1'),
+          this.readNode(statePrefix + 'xErrL2'),
         ]);
         this.emitTelemetry({
           kind: 'station.snapshot', resourceId, dbNumber: 151,
           iCarrierID, iStepNo, iResourceID, iPar1, iPar2, iPar3, iPar4, ldtTimeStamp,
+          state: { xAuto, xManual, xBusy, xReset, xErrL0, xErrL1, xErrL2 },
           handshake: { xStart, xQryBusy, xDone, xError, uiCarrierId, uiResultCode, sOrderNo, uiOperationNo },
         });
+
+        const active = Boolean(xStart);
+        const wasActive = this.lastStMesStartState.get(resourceId);
+        if (active && !wasActive) {
+          for (const callback of this.stMesCallbacks) callback(resourceId, true);
+        }
+        this.lastStMesStartState.set(resourceId, active);
       }
     } catch (error) {
       this.logger.warn('OPC UA telemetry read failed: ' + (error as Error).message);
@@ -161,8 +176,8 @@ export class OpcUaService implements OnModuleInit, OnModuleDestroy {
   }
 
   private emitTelemetry(payload: Record<string, unknown>) {
-    const event: EdgeTelemetryEvent = {
-      type: 'edge.telemetry',
+    const event: ShopfloorTelemetryEvent = {
+      type: 'shopfloor.telemetry',
       timestamp: new Date().toISOString(),
       source: 'opcua',
       payload,
@@ -219,6 +234,7 @@ export class OpcUaService implements OnModuleInit, OnModuleDestroy {
       );
       item.on('changed', (dataValue) => {
         const active = Boolean(dataValue?.value?.value);
+        this.lastStMesStartState.set(resourceId, active);
         for (const callback of this.stMesCallbacks) callback(resourceId, active);
       });
       item.on('err', (error) => this.logger.error(`stMES monitor error for resource ${resourceId}: ${error.message}`));

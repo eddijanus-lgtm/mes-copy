@@ -5,7 +5,7 @@
 ```
 ┌──────────────┐     OPC UA      ┌──────────────┐       MQTT       ┌──────────────┐
 │  Maschinen   │ ◄────────────► │              │ ◄─────────────► │  Broker /    │
-│  (PLCs, SPS) │                │ Edge Gateway │                 │  Sensoren    │
+│  (PLCs, SPS) │                │ Shopfloor GW │                 │  Sensoren    │
 └──────────────┘                │ ┌──────────┐ │                 └──────────────┘
                                 │ │ OPC UA   │ │
                                 │ │ Client   │ │
@@ -18,8 +18,8 @@
                                 └──────────────┘
                                         │
                             ┌───────────▼──────────┐
-                            │  PostgreSQL          │
-                            │  (Produktionsdaten)   │
+                            │  TimescaleDB         │
+                            │  (PostgreSQL + TS)    │
                             └──────────────────────┘
 ```
 
@@ -32,14 +32,27 @@
 | **Orders** | `src/orders/` | Produktionsaufträge: CRUD, Fortschritt-tracking |
 | **Traces** | `src/traces/` | Trace-Daten: Prozess-Dokumentation pro Auftrag/Maschine |
 | **DataCollection** | `src/data-collection/` | Rohdaten-Sammlung: Zeitreihendaten von Maschinen |
-| **Edge Gateway** | `src/opcua/` | OPC UA Client, MQTT Publisher, Health-Endpoints |
+| **Shopfloor Gateway** | `src/opcua/` | OPC-UA Client, MQTT Adapter, stMES-Vermittlung, Health-Endpoints |
 
 ## Datenfluss
 
-1. **ERFASSUNG**: OPC UA Client liottet Werte von Maschinen (Temperatur, Druck etc.)
-2. **TRANSPORT**: MQTT publiziert die Daten an Broker für andere Systeme
-3. **PERSISTENZ**: TypeORM speichert strukturierte Daten in PostgreSQL
-4. **VISUALISIERUNG**: React-Frontend zeigt Echtzeit-Dashboard
+1. **SHOPFLOOR-EINGANG**: OPC-UA und MQTT liefern SPS-, Stations- und Webshop-Ereignisse.
+2. **GATEWAY-VERMITTLUNG**: Das Shopfloor Gateway normalisiert Protokolldaten und gibt stMES-Anfragen an das MES weiter.
+3. **MES-ENTSCHEIDUNG**: RoutingService prueft Auftrag, Carrier und erwarteten Routenschritt.
+4. **SHOPFLOOR-ANTWORT**: Das Gateway schreibt Auftrags-, Operations- und Parameterdaten zurueck an die SPS-Nodes.
+5. **PERSISTENZ UND VISUALISIERUNG**: TimescaleDB speichert relationale Produktionsdaten und Zeitreihendaten; React zeigt Live-Daten und Verlauf.
+
+## Zeitreihen-Architektur
+
+Phase 3 migriert `data_points` von einer normalen PostgreSQL-Tabelle zu einer TimescaleDB-Hypertable:
+
+- Hypertable: `data_points`, partitioniert nach `timestamp`
+- Chunking: tägliche Chunks (`INTERVAL '1 day'`)
+- Compression: aktiviert, Segmentierung nach `machine_id,node_id`, Kompression ab 7 Tagen
+- Retention: Rohdaten werden nach 90 Tagen automatisch entfernt
+- Continuous Aggregate: `data_points_1min` berechnet 1-Minuten-Werte pro Maschine und Node
+
+Das relationale Datenmodell bleibt PostgreSQL-kompatibel. NestJS/TypeORM schreibt weiter über `DataPointEntity`; TimescaleDB übernimmt Partitionierung, Compression und Retention in der Datenbank.
 
 ## Schlüsselkomponenten
 
@@ -55,11 +68,13 @@
 ### DataCollection Service (`src/data-collection/data-collection.service.ts`)
 - Speichert Zeitreihendaten (DataPoints) pro Maschine
 - Bietet bulk-write API für effiziente Inserts
+- Nutzt `data_points` als TimescaleDB-Hypertable und kann historische Trends über `data_points_1min` abfragen
 
-### Edge Controller (`src/opcua/edge.controller.ts`)
-- Health-Check Endpoints
-- OPC UA/MQTT Status-Anzeige
-- Direkte Lese-/Schreibzugriffe auf OPC UA Nodes
+### Shopfloor Gateway Controller (`src/opcua/shopfloor-gateway.controller.ts`)
+- Health-Check Endpoints unter `/api/shopfloor/*`
+- OPC-UA-/MQTT-Status-Anzeige
+- Direkte erlaubte Lesezugriffe auf OPC-UA-Nodes
+- Historie fuer stMES-Handshakes, MQTT-Nachrichten und Webshop-Auftraege
 # Demo Carrier- und Stationsrouting
 
 > Der derzeitige stMES-Nodevertrag ist eine lokale Demo-Annahme und nicht aus einer echten UDT-Dokumentation abgeleitet.

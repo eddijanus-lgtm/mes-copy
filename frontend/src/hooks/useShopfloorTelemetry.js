@@ -14,7 +14,7 @@ const INITIAL_STATE = {
   logs: [],
 };
 
-export function useEdgeTelemetry() {
+export function useShopfloorTelemetry() {
   const { token } = useAuth();
   const [state, setState] = useState(INITIAL_STATE);
 
@@ -29,7 +29,7 @@ export function useEdgeTelemetry() {
     function connect() {
       const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
       setState((current) => ({ ...current, status: "connecting" }));
-      socket = new WebSocket(`${protocol}//${window.location.host}/api/edge/ws`);
+      socket = new WebSocket(`${protocol}//${window.location.host}/api/shopfloor/ws`);
 
       socket.onopen = () => socket.send(JSON.stringify({ type: "auth", token }));
       socket.onmessage = (event) => {
@@ -40,7 +40,7 @@ export function useEdgeTelemetry() {
             setState((current) => ({ ...current, status: "connected" }));
             return;
           }
-          if (message.type !== "edge.telemetry") return;
+          if (message.type !== "shopfloor.telemetry") return;
 
           const logLine = `[${new Date(message.timestamp).toLocaleTimeString("de-DE")}] ${message.source}: ${JSON.stringify(message.payload)}`;
           setState((current) => ({

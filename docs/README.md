@@ -1,8 +1,8 @@
-# MES Edge Gateway — Dokumentation
+# MES Shopfloor Gateway - Dokumentation
 
 ## Übersicht
 
-Das MES Edge Gateway ist eine industrielle Datensammlung-Steuerungsplattform für die Produktion. Es sammelt Echtzeitdaten von Maschinen über OPC UA und MQTT, verwaltung Produktionsaufträge, erfasst Trace-Daten und überwacht Alarme — direkt am Produktionsstandort (Edge).
+Das MES Shopfloor Gateway ist die OT/IT-Vermittlungsschicht der Demo. Es verbindet Maschinen bzw. SPS-nahe OPC-UA-Nodes und MQTT mit dem MES, leitet Live-Daten weiter und gibt MES-Antworten an die Stationen zurueck. Produktionsauftraege, Routenentscheidungen, Trace-Daten und Alarme bleiben fachlich im MES.
 
 ### Tech-Stack
 

@@ -11,7 +11,7 @@
 ## Schnellstart (5 Minuten)
 
 ```bash
-# 1. Datenbank hochfahren
+# 1. Datenbank hochfahren (TimescaleDB)
 docker-compose up -d postgres
 
 # Warten bis DB bereit ist (ca. 10s)
@@ -26,6 +26,9 @@ npm run start:opcua-test
 # 4. Backend bauen und starten
 npm run build
 npm run start:prod
+
+# Optional: TimescaleDB-Hypertable/Retention/Compression prüfen oder erneut anwenden
+npm run phase3:apply
 
 # 5. Öffnen
 http://localhost:3000
@@ -82,6 +85,22 @@ DEMO_ADMIN_USERNAME=<admin> DEMO_ADMIN_PASSWORD=<password> npm run seed:stmes-de
 ```
 
 Dieser Befehl erzeugt nur klar benannte Testdaten für zwei Demo-Stationen, Carrier 128/129 und `DEMO-ORDER-001`. Der stMES-Vertrag ist erfunden und darf nicht unverändert an einer realen SPS eingesetzt werden. Siehe `docs/guides/07-stmes-demo-contract.md`.
+
+## TimescaleDB / Phase 3
+
+Die Tabelle `data_points` ist eine TimescaleDB-Hypertable. Für lokale Verifikation:
+
+```bash
+npm run phase3:apply
+npm run benchmark:timescale
+```
+
+Erwartete Datenbankstruktur:
+
+- `data_points`: Hypertable, tägliche Chunks
+- `data_points_1min`: Continuous Aggregate für 1-Minuten-Durchschnitte
+- Compression Policy: Chunks älter als 7 Tage
+- Retention Policy: Rohdaten älter als 90 Tage
 
 ## Troubleshooting
 

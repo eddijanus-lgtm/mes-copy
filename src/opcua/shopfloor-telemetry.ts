@@ -1,5 +1,5 @@
-export interface EdgeTelemetryEvent {
-  type: 'edge.telemetry';
+export interface ShopfloorTelemetryEvent {
+  type: 'shopfloor.telemetry';
   timestamp: string;
   source: 'opcua' | 'mqtt';
   topic?: string;

@@ -44,7 +44,7 @@ npx pm2 start ecosystem.config.js --env production
 # docker-compose.yml
 services:
   postgres:
-    image: postgres:16-alpine
+    image: timescale/timescaledb:latest-pg16
     container_name: mes_db
     environment:
       POSTGRES_USER: mes_admin
@@ -96,8 +96,33 @@ server {
 | `MQTT_BROKER_URL` | MQTT Broker | `mqtt://internal.corp:1883` |
 | `OPCUA_ENDPOINT_URL` | OPC UA Server | `opc.tcp://plc.internal:4840` |
 
+## TimescaleDB Setup
+
+Phase 3 nutzt TimescaleDB als PostgreSQL-kompatible Zeitreihen-Datenbank. Nach dem Start des Containers muss die Migration einmal ausgeführt werden:
+
+```bash
+npm run phase3:apply
+```
+
+Das Skript macht folgende Schritte idempotent:
+
+- `CREATE EXTENSION IF NOT EXISTS timescaledb`
+- `data_points` zu einer Hypertable auf `timestamp` machen
+- tägliches Chunking konfigurieren
+- Compression ab 7 Tagen aktivieren
+- Retention Policy: Rohdaten 90 Tage behalten
+- Continuous Aggregate `data_points_1min` erstellen und aktualisieren
+
+Benchmark:
+
+```bash
+npm run benchmark:timescale
+```
+
+Aktueller lokaler Messwert: `10000` Testpunkte in `0.27s`, ungefähr `36496 writes/sec`. Das ist funktional, liegt aber noch unter dem Roadmap-Ziel `>50K writes/sec`; weitere Optimierung ist für Produktionslast empfohlen.
+
 ## Health-Check Endpoint
 
 ```bash
-curl http://localhost:3000/api/edge/health
+curl http://localhost:3000/api/shopfloor/health
 ```

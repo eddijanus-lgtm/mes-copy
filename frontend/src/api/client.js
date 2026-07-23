@@ -1,5 +1,11 @@
 const API_BASE = '/api';
 
+function dispatchToast(type, message) {
+  window.dispatchEvent(new CustomEvent('mes-toast', {
+    detail: { type, message },
+  }));
+}
+
 async function request(endpoint, options = {}) {
   const url = `${API_BASE}${endpoint}`;
   const token = localStorage.getItem('jwt_token');
@@ -15,26 +21,47 @@ async function request(endpoint, options = {}) {
   if (config.body && typeof config.body === 'object' && !(config.body instanceof FormData)) {
     config.body = JSON.stringify(config.body);
   }
-  const res = await fetch(url, config);
-  if (res.status === 401) {
-    localStorage.removeItem('jwt_token');
-    window.dispatchEvent(new Event('auth:unauthorized'));
-  }
-  if (!res.ok) {
-    const responseText = await res.text();
-    let detail = responseText;
-    try {
-      const payload = JSON.parse(responseText);
-      detail = Array.isArray(payload.message) ? payload.message.join(" ") : payload.message || payload.error || responseText;
-    } catch {
-      // Keep plain-text error responses as-is.
-    }
-    const prefix = res.status === 403 ? "Zugriff verweigert (403)" : `Anfrage fehlgeschlagen (${res.status})`;
-    throw new Error(detail ? `${prefix}: ${detail}` : prefix);
-  }
 
-  const text = await res.text();
-  return text ? JSON.parse(text) : null;
+  let status;
+  try {
+    const res = await fetch(url, config);
+    status = res.status;
+
+    if (res.status === 401) {
+      localStorage.removeItem('jwt_token');
+      window.dispatchEvent(new Event('auth:unauthorized'));
+    }
+
+    if (!res.ok) {
+      const responseText = await res.text();
+      let detail = responseText;
+      try {
+        const payload = JSON.parse(responseText);
+        detail = Array.isArray(payload.message) ? payload.message.join(" ") : payload.message || payload.error || responseText;
+      } catch {
+        const contentType = res.headers.get('content-type') || '';
+        const looksLikeHtml = contentType.includes('text/html') || /<!doctype html|<html[\s>]/i.test(responseText);
+        detail = looksLikeHtml ? 'Der Server hat eine HTML-Fehlerseite geliefert. Bitte Backend/Proxy pruefen.' : responseText;
+      }
+      const prefix = res.status === 403 ? "Zugriff verweigert (403)" : `Anfrage fehlgeschlagen (${res.status})`;
+      const errorMessage = detail ? `${prefix}: ${detail}` : prefix;
+      dispatchToast('error', errorMessage);
+      throw new Error(errorMessage);
+    }
+
+    const text = await res.text();
+    if (!text) return null;
+    try {
+      return JSON.parse(text);
+    } catch {
+      throw new Error('Der Server hat keine gueltige API-Antwort geliefert. Bitte Backend/Proxy pruefen.');
+    }
+  } catch (error) {
+    if (!error.message) {
+      dispatchToast('error', 'Netzwerkfehler — bitte Verbindung pruefen.');
+    }
+    throw error;
+  }
 }
 
 export const api = {

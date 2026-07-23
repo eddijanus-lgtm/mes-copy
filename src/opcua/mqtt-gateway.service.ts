@@ -1,6 +1,6 @@
 import { ForbiddenException, Injectable, Logger, OnModuleDestroy, OnModuleInit, ServiceUnavailableException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { EdgeTelemetryEvent } from './edge-telemetry';
+import { ShopfloorTelemetryEvent } from './shopfloor-telemetry';
 const mqtt = require('mqtt');
 
 const SUBSCRIPTION_TOPICS = [
@@ -8,6 +8,7 @@ const SUBSCRIPTION_TOPICS = [
   'mes/machines/+/telemetry',
   'mes/alarms/+/+',
   'mes/orders/+/+',
+  'i4.0/production/orders',
 ];
 
 @Injectable()
@@ -17,7 +18,7 @@ export class MqttGatewayService implements OnModuleInit, OnModuleDestroy {
   private reconnectAttempts = 0;
   private readonly logger = new Logger(MqttGatewayService.name);
   private startupTimer?: NodeJS.Timeout;
-  private readonly telemetryCallbacks = new Set<(event: EdgeTelemetryEvent) => void>();
+  private readonly telemetryCallbacks = new Set<(event: ShopfloorTelemetryEvent) => void>();
   private readonly recentTelemetry: Array<{ topic: string; payload: Record<string, unknown>; timestamp: string }> = [];
 
   constructor(private readonly configService: ConfigService) {}
@@ -26,7 +27,7 @@ export class MqttGatewayService implements OnModuleInit, OnModuleDestroy {
     const brokerUrl = this.configService.get('MQTT_BROKER_URL', 'mqtt://localhost:1883');
     try {
       this.client = mqtt.connect(brokerUrl, {
-        clientId: 'mes-edge-' + Date.now(),
+        clientId: 'mes-shopfloor-' + Date.now(),
         clean: true,
         reconnectPeriod: 30000,
       });
@@ -57,8 +58,8 @@ export class MqttGatewayService implements OnModuleInit, OnModuleDestroy {
       this.client.on('message', (topic: string, payload: Buffer) => {
         try {
           const data = JSON.parse(payload.toString());
-          const callbacks = this.subscriptionCallbacks.get(topic);
-          if (callbacks) {
+          const callbacks = this.subscriptionCallbacks.get(topic) || [];
+          if (callbacks.length) {
             for (const callback of callbacks) {
               try { callback(data); } catch (error) { this.logger.error('MQTT subscriber failed', error); }
             }
@@ -111,7 +112,7 @@ export class MqttGatewayService implements OnModuleInit, OnModuleDestroy {
     return !!this.client && this.client.connected;
   }
 
-  onTelemetry(callback: (event: EdgeTelemetryEvent) => void): () => void {
+  onTelemetry(callback: (event: ShopfloorTelemetryEvent) => void): () => void {
     this.telemetryCallbacks.add(callback);
     return () => this.telemetryCallbacks.delete(callback);
   }
@@ -121,8 +122,8 @@ export class MqttGatewayService implements OnModuleInit, OnModuleDestroy {
   }
 
   private emitTelemetry(topic: string, payload: Record<string, unknown>, timestamp = new Date().toISOString()) {
-    const event: EdgeTelemetryEvent = {
-      type: 'edge.telemetry',
+    const event: ShopfloorTelemetryEvent = {
+      type: 'shopfloor.telemetry',
       timestamp,
       source: 'mqtt',
       topic,

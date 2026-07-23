@@ -17,7 +17,7 @@ export class TracesController {
   findAll(@Query() query: TraceQueryDto) {
     if (query.machine_id) return this.tracesService.getTracesByMachine(query.machine_id);
     if (query.category) return this.tracesService.getTracesByCategory(query.category);
-    return this.tracesService.findAll();
+    return this.tracesService.findAllWithFilters(query);
   }
 
   @Get('machine/:machineId')

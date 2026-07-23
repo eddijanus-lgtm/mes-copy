@@ -37,7 +37,7 @@ export default function LoginPage() {
           <h1 className="mt-6 max-w-xl text-5xl font-bold leading-tight">Produktion sehen. Prozesse sicher steuern.</h1>
         </div>
         <div className="relative font-mono text-sm text-neutral-300 space-y-2">
-          <p><span className="text-status-success">●</span> Edge Gateway verfügbar</p>
+          <p><span className="text-status-success">●</span> Shopfloor Gateway verfügbar</p>
           <p>OPC UA · MQTT · PostgreSQL</p>
         </div>
       </section>
