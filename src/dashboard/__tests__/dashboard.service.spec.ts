@@ -5,6 +5,7 @@ import { OrderEntity } from '../../orders/order.entity';
 import { MachineEntity } from '../../machines/machine.entity';
 import { DowntimeLogEntity } from '../../machines/downtime.entity';
 import { DataPointEntity } from '../../data-collection/data-point.entity';
+import { TimescaleAggregateService } from '../timescale-aggregate.service';
 
 // Mock repository factory
 const createMockRepo = () => ({
@@ -18,6 +19,10 @@ describe('DashboardService', () => {
   const mockMachineRepo = createMockRepo();
   const mockDowntimeRepo = createMockRepo();
   const mockDataPointRepo = createMockRepo();
+  const mockAggregateService = {
+    getQualityCountsFromAggregate: jest.fn().mockResolvedValue(null),
+    initializeContinuousAggregates: jest.fn().mockResolvedValue({ success: true, details: [] }),
+  };
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -27,6 +32,7 @@ describe('DashboardService', () => {
         { provide: getRepositoryToken(MachineEntity), useValue: mockMachineRepo },
         { provide: getRepositoryToken(DowntimeLogEntity), useValue: mockDowntimeRepo },
         { provide: getRepositoryToken(DataPointEntity), useValue: mockDataPointRepo },
+        { provide: TimescaleAggregateService, useValue: mockAggregateService },
       ],
     }).compile();
 
@@ -128,6 +134,15 @@ describe('DashboardService', () => {
       
       expect(result.range.from).toBeDefined();
       expect(result.range.to).toBeDefined();
+    });
+
+    it('should use aggregate quality counts when available', async () => {
+      mockAggregateService.getQualityCountsFromAggregate.mockResolvedValueOnce({ good_count: 45, bad_count: 5, uncertain_count: 0 });
+
+      const result = await service.getKpis();
+
+      expect(result.yield).toBe(90);
+      expect(mockAggregateService.getQualityCountsFromAggregate).toHaveBeenCalled();
     });
   });
 });

@@ -19,14 +19,14 @@ A professional, scalable Manufacturing Execution System that connects machines v
 
 ## 2. Phases & Milestones
 
-### Current Progress - 2026-07-23 16:00 CEST
+### Current Progress - 2026-07-23 16:30 CEST
 
 | Bewertung | Rechnung | Fortschritt |
 |---|---:|---:|
-| Nur vollständig abgeschlossene Aufgaben | 25 von 48 | **52,1 %** |
-| Teilaufgaben zu jeweils 50 % angerechnet | 25 + 0,5 + 1,0 + 3,0 + 1,0 + 1,0 + 0,5 + 0,5 + 1,0 = 33,5 von 48 | **69,8 %** |
+| Nur vollständig abgeschlossene Aufgaben | 28 von 48 | **58,3 %** |
+| Teilaufgaben zu jeweils 50 % angerechnet | 28 + 0,5 + 1,0 + 3,0 + 1,0 + 1,0 + 0,5 + 0,5 + 1,0 = 36,5 von 48 | **76,0 %** |
 
-Aktueller Planungswert: **rund 70 % der Gesamtroadmap**.
+Aktueller Planungswert: **rund 76 % der Gesamtroadmap**.
 
 #### Zusammenfassung Phase by Phase
 
@@ -37,7 +37,7 @@ Aktueller Planungswert: **rund 70 % der Gesamtroadmap**.
 | Phase 3 — Time-Series Data Architecture | ✅ technisch umgesetzt | **100 %** |
 | Phase 4 — Production Workflows | ✅ Demo-/MES-seitig abgeschlossen | **100 %** |
 | Phase 5 — Dashboard Intelligence | ✅ fertig (WebSocket-KPI-Stream abgeschlossen) | **100 %** |
-| Phase 6 — Reliability & Observability | 🟡 weit fortgeschritten | **75 %** |
+| Phase 6 — Reliability & Observability | 🟡 teilweise | **67 %** |
 | Phase 7 — Notifications & Advanced Features | ⬜ nicht begonnen | **0 %** |
 
 #### Wichtige Errungenschaften seit letzter Roadmap-Aktualisierung
@@ -64,6 +64,8 @@ Aktueller Planungswert: **rund 70 % der Gesamtroadmap**.
 - Dashboard-Fehlerfenster entschärft: optionale Trend-/Pareto-Hintergrundabfragen nutzen `api.getSilent()`, damit bereits behandelte Ladefehler keine globalen Toasts anzeigen. Downtime-Pareto ist als eigener Dashboard-Tab ergänzt.
 - Dashboard-PDF-Export ergänzt: Tagesbericht und Schichtbericht erzeugen einen druckbaren Report mit OEE, Availability, Performance, Quality/Yield, Durchsatz, Maschinenstatus, Stationen-Live und Systemhinweisen; Browser-PDF-Dialog wird automatisch geöffnet.
 - WebSocket-KPI-Stream implementiert: TelemetryGateway sendet alle 2 Sekunden aktuelle KPIs via WebSocket an das Dashboard; Frontend empfängt und aktualisiert OEE-Gauges, Status-Meter und Mini-Metriken in Echtzeit; Polling als Fallback (alle 5s) aktiv für Ausfallsicherheit.
+- Phase 5 finalisiert: Continuous Aggregate `data_points_quality_1min` für Qualitäts-/OEE-Berechnung ergänzt, `/api/dashboard/trends/all` nutzt die `time_bucket()`-optimierten Trendmethoden, Downtime-Pareto zählt offene Stillstände bis zum Abfrage-Ende und liefert Maschinenverfügbarkeit sowie kumulierte Pareto-Prozente.
+- Dashboard-/Shopfloor-UI stabilisiert: Systemstatus-Overlay und Produktionsfluss (`DEMO-ORDER-*`) sind vollständig im Lightmode; Dashboard-Graphen für Quality/Yield, OEE Trend, Maschinenstatus, Downtime und Pareto haben feste Chart-Container, damit Chart.js nicht unendlich nach unten expandiert.
 
 ### Phase 1 — Foundation Hardening _(Weeks 1–4)_
 
@@ -156,10 +158,10 @@ Aktueller Planungswert: **rund 70 % der Gesamtroadmap**.
 
 | # | Task | Priority | Effort | Status |
 |---|------|----------|--------|--------|
-| 5.1 | OEE calculation (Availability × Performance × Quality) with Timescale continuous aggregates | Critical | 3–4 days | 🟡 partial — Backend-KPI-Endpunkt `GET /api/dashboard/kpis` berechnet Availability, Performance und Quality im SQL via QueryBuilder; dedizierte Timescale Continuous-Aggregates für High-Throughput-Szenarien offen. |
+| 5.1 | OEE calculation (Availability × Performance × Quality) with Timescale continuous aggregates | Critical | 3–4 days | ✅ complete — `data_points_quality_1min` als Timescale Continuous Aggregate ergänzt; KPI-Qualitätsanteil nutzt Aggregatdaten mit Rohdaten-Fallback, Availability und Performance bleiben robust aus Downtime-/Order-Daten berechnet. |
 | 5.2 | Real-time KPI widgets on Dashboard: throughput, yield, machine status (live via WebSocket) | High | 2–3 days | ✅ complete — WebSocket-KPI-Stream über /api/shopfloor/ws implementiert; TelemetryGateway broadcastet alle 2 Sekunden aktuelle KPIs; Frontend empfängt und aktualisiert OEE-Gauges, Status-Meter und Mini-Metriken in Echtzeit; Polling-Fallback (5s) für Ausfallsicherheit aktiv. |
-| 5.3 | Historical trend charts for key metrics (time-range selector) | High | 2–3 days | 🟡 partial — Frontend-Trendsektion mit Tabs/Zeitfenster vorhanden; Backend liefert `GET /api/dashboard/trends/all` im erwarteten `trends[]`-Format. Fachliche Aggregatgenauigkeit und echte Timescale-Optimierung bleiben offen. |
-| 5.4 | Machine availability and downtime Pareto chart | Medium | 1–2 days | 🟡 partial — `GET /api/dashboard/trends/pareto` liefert Downtime nach Maschine; Dashboard zeigt Pareto-Tab mit Downtime-Minuten und kumulierter Prozentreihe. Verfeinerte Maschinenverfügbarkeitslogik bleibt offen. |
+| 5.3 | Historical trend charts for key metrics (time-range selector) | High | 2–3 days | ✅ complete — `/api/dashboard/trends/all` nutzt die bestehenden `time_bucket()`-optimierten Trendmethoden für Telemetrie, Orders, OEE, Downtime, Quality, Throughput und Maschinenstatus; Zeitfenster/Intervall bleibt steuerbar. |
+| 5.4 | Machine availability and downtime Pareto chart | Medium | 1–2 days | ✅ complete — Pareto-Endpunkt berechnet Downtime inklusive offener Stillstände bis zum Abfrage-Ende, Maschinenverfügbarkeit und kumulierte Pareto-Prozente je Maschine. |
 | 5.5 | Export dashboards to PDF per shift/day | Low | 1 day | ✅ complete — Dashboard bietet Tagesbericht- und Schichtbericht-PDF über druckbare HTML-Reports mit KPI-, Status- und Stationsdaten. |
 
 **Exit Criteria:** ✅ Dashboard zeigt Echtzeit-OEE via WebSocket-KPI-Stream, Trend-Charts mit Custom Date-Pickern und handlungsrelevante KPIs. Phase 5 vollständig abgeschlossen: OEE-Gauges, Status-Meter, Trend-/Pareto-Tabs, PDF-Berichte und WebSocket-Echtzeitaktualisierung implementiert.
@@ -332,5 +334,5 @@ docs/
 ---
 
 _Roadmap owner: mes-app team_
-_Last updated: 2026-07-23 15:35 (Phase 5 PDF-Export ergänzt)_
-_Next review: Phase 5 Trend-Charts, Pareto-Diagramme und WebSocket-KPI-Stream_
+_Last updated: 2026-07-23 16:45 (Phase 5 finalisiert und Dashboard-UI stabilisiert)_
+_Next review: Phase 6 Unit- und Integrationstests_

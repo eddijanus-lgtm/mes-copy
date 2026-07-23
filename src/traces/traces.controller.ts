@@ -1,4 +1,5 @@
 import { Controller, Get, Post, Body, Param, ParseArrayPipe, ParseUUIDPipe, Query, ValidationPipe } from '@nestjs/common';
+import { ApiTags, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
 import { TracesService } from './traces.service';
 import { CreateTraceDto, TraceQueryDto, TraceTakeQueryDto } from './trace.dto';
 import { Roles } from '../auth/roles.decorator';

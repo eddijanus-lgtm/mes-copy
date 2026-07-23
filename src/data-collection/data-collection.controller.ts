@@ -1,3 +1,4 @@
+import { ApiTags, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
 import { Controller, Get, Post, Body, Param, ParseArrayPipe, ParseUUIDPipe, Query } from '@nestjs/common';
 import { DataCollectionService } from './data-collection.service';
 import { CreateDataPointDto, DataPointQueryDto } from './data-point.dto';

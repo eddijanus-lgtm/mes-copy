@@ -261,13 +261,13 @@ function MqttLivePanel({ messages, connected }) {
 
 function CarrierFlow({ order, carriers }) {
   return (
-    <section className="overflow-hidden rounded-xl border border-neutral-200 bg-neutral-900 text-white shadow-sm">
-      <div className="flex flex-col gap-1 border-b border-white/10 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+    <section className="overflow-hidden rounded-xl border border-neutral-200 bg-white text-neutral-900 shadow-sm">
+      <div className="flex flex-col gap-1 border-b border-neutral-100 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-emerald-300">Produktionsfluss</p>
-          <h2 className="font-semibold">{order?.name || "Aktive Carrier"}</h2>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-emerald-700">Produktionsfluss</p>
+          <h2 className="font-semibold text-neutral-900">{order?.name || "Aktive Carrier"}</h2>
         </div>
-        {order && <span className="text-sm text-neutral-300">Fortschritt {order.completed_quantity}/{order.quantity}</span>}
+        {order && <span className="text-sm text-neutral-500">Fortschritt {order.completed_quantity}/{order.quantity}</span>}
       </div>
       <div className="grid gap-3 p-4 md:grid-cols-2">
         {carriers.length === 0 && <p className="text-sm text-neutral-400">Keine zugeordneten Carrier gefunden.</p>}
@@ -281,17 +281,17 @@ function CarrierRoute({ carrier }) {
   const position = carrier.status === "completed" ? 3 : Math.max(0, Math.min(2, carrier.current_step_no - 1));
   const stages = ["S01 Deckel", "S02 Kugeln", "Q01 Kontrolle", "Fertig"];
   return (
-    <div className="rounded-lg border border-white/10 bg-white/5 p-4">
+    <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-4">
       <div className="mb-4 flex items-center justify-between">
-        <strong>Carrier {carrier.carrier_number}</strong>
-        <span className="rounded-full bg-white/10 px-2.5 py-1 text-[11px] uppercase tracking-wide text-neutral-300">{carrierStatus(carrier.status)}</span>
+        <strong className="text-neutral-900">Carrier {carrier.carrier_number}</strong>
+        <span className="rounded-full bg-white px-2.5 py-1 text-[11px] uppercase tracking-wide text-neutral-500 ring-1 ring-neutral-200">{carrierStatus(carrier.status)}</span>
       </div>
       <div className="relative grid grid-cols-3">
-        <div className="absolute left-[16.66%] right-[16.66%] top-2 h-0.5 bg-white/15" />
+        <div className="absolute left-[16.66%] right-[16.66%] top-2 h-0.5 bg-neutral-200" />
         {stages.map((stage, index) => (
-          <div key={stage} className="relative z-10 flex flex-col items-center gap-2 text-center text-[11px] text-neutral-400">
-            <span className={`h-4 w-4 rounded-full border-2 ${index < position ? "border-emerald-400 bg-emerald-400" : index === position ? "border-amber-300 bg-amber-300 ring-4 ring-amber-300/20" : "border-neutral-600 bg-neutral-900"}`} />
-            <span className={index === position ? "font-semibold text-white" : ""}>{stage}</span>
+          <div key={stage} className="relative z-10 flex flex-col items-center gap-2 text-center text-[11px] text-neutral-500">
+            <span className={`h-4 w-4 rounded-full border-2 ${index < position ? "border-emerald-500 bg-emerald-500" : index === position ? "border-amber-400 bg-amber-400 ring-4 ring-amber-200" : "border-neutral-300 bg-white"}`} />
+            <span className={index === position ? "font-semibold text-neutral-900" : ""}>{stage}</span>
           </div>
         ))}
       </div>

@@ -36,17 +36,18 @@ export default function SystemStatus() {
       position: 'fixed',
       bottom: 16,
       right: 16,
-      backgroundColor: '#1a1a2e',
-      color: '#eee',
+      backgroundColor: '#ffffff',
+      color: '#171717',
       padding: '10px 14px',
       borderRadius: 8,
       fontSize: 12,
       fontFamily: 'monospace',
-      boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
+      boxShadow: '0 10px 30px rgba(15, 23, 42, 0.12)',
+      border: '1px solid #e5e5e5',
       zIndex: 9999,
       minWidth: 200,
     }}>
-      <div style={{ fontWeight: 'bold', marginBottom: 4, borderBottom: '1px solid #444', paddingBottom: 4 }}>
+      <div style={{ fontWeight: 'bold', marginBottom: 4, borderBottom: '1px solid #e5e5e5', paddingBottom: 4 }}>
         System Status
       </div>
       <div>Backend: {status}</div>

@@ -1,3 +1,4 @@
+import { ApiTags, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
 import { Controller, Get, Post, Patch, Delete, Body, Param, HttpCode, HttpStatus, Query, Req, Res, ParseUUIDPipe } from '@nestjs/common';
 import { AlarmsService } from './alarms.service';
 import { CreateAlarmDto, UpdateAlarmDto } from './alarm.dto';

@@ -531,43 +531,46 @@ function TrendChart({ data, xLabel, yLabel, primaryColor, showArea = true, stack
       }];
 
   return (
-    <Line
-      data={{ labels, datasets }}
-      options={{
-        responsive: true,
-        maintainAspectRatio: false,
-        animation: { duration: 600 },
-        interaction: { mode: "index", intersect: false },
-        plugins: {
-          legend: { display: stackedPoints, position: "top", labels: { boxWidth: 12, padding: 16, font: { size: 11 } } },
-          tooltip: {
-            backgroundColor: "#1e293b",
-            titleFont: { size: 12 },
-            bodyFont: { size: 11 },
-            padding: 10,
-            cornerRadius: 8,
-            displayColors: true,
-            boxWidth: 8,
-            boxHeight: 8,
-            callbacks: {
-              title: (items) => items[0]?.label || "",
-              label: (ctx) => ` ${ctx.dataset.label}: ${ctx.parsed.y?.toFixed(2) ?? ctx.parsed.y}`,
+    <div className="relative h-[320px] max-h-[320px] w-full overflow-hidden">
+      <Line
+        data={{ labels, datasets }}
+        options={{
+          responsive: true,
+          maintainAspectRatio: false,
+          resizeDelay: 100,
+          animation: { duration: 600 },
+          interaction: { mode: "index", intersect: false },
+          plugins: {
+            legend: { display: stackedPoints, position: "top", labels: { boxWidth: 12, padding: 16, font: { size: 11 } } },
+            tooltip: {
+              backgroundColor: "#1e293b",
+              titleFont: { size: 12 },
+              bodyFont: { size: 11 },
+              padding: 10,
+              cornerRadius: 8,
+              displayColors: true,
+              boxWidth: 8,
+              boxHeight: 8,
+              callbacks: {
+                title: (items) => items[0]?.label || "",
+                label: (ctx) => ` ${ctx.dataset.label}: ${ctx.parsed.y?.toFixed(2) ?? ctx.parsed.y}`,
+              },
             },
           },
-        },
-        scales: {
-          x: {
-            grid: { display: false },
-            ticks: { font: { size: 10 }, color: "#94a3b8", maxTicksLimit: 12, maxRotation: 0 },
+          scales: {
+            x: {
+              grid: { display: false },
+              ticks: { font: { size: 10 }, color: "#94a3b8", maxTicksLimit: 12, maxRotation: 0 },
+            },
+            y: {
+              grid: { color: "#f1f5f9" },
+              ticks: { font: { size: 10 }, color: "#94a3b8" },
+              beginAtZero: true,
+            },
           },
-          y: {
-            grid: { color: "#f1f5f9" },
-            ticks: { font: { size: 10 }, color: "#94a3b8" },
-            beginAtZero: true,
-          },
-        },
-      }}
-    />
+        }}
+      />
+    </div>
   );
 }
 
@@ -599,23 +602,26 @@ function TrendBarChart({ data, xLabel, yLabel, primaryColor, showArea = true, st
   }
 
   return (
-    <Bar
-      data={{ labels, datasets }}
-      options={{
-        responsive: true,
-        maintainAspectRatio: false,
-        animation: { duration: 600 },
-        plugins: {
-          legend: { display: true, position: "top", labels: { boxWidth: 12, padding: 16, font: { size: 11 } } },
-          tooltip: {
-            backgroundColor: "#1e293b", titleFont: { size: 12 }, bodyFont: { size: 11 }, padding: 10, cornerRadius: 8, displayColors: true },
-        },
-        scales: {
-          x: { grid: { display: false }, ticks: { font: { size: 10 }, color: "#94a3b8", maxTicksLimit: 12, maxRotation: 0 } },
-          y: { grid: { color: "#f1f5f9" }, ticks: { font: { size: 10 }, color: "#94a3b8" }, beginAtZero: true },
-        },
-      }}
-    />
+    <div className="relative h-[320px] max-h-[320px] w-full overflow-hidden">
+      <Bar
+        data={{ labels, datasets }}
+        options={{
+          responsive: true,
+          maintainAspectRatio: false,
+          resizeDelay: 100,
+          animation: { duration: 600 },
+          plugins: {
+            legend: { display: true, position: "top", labels: { boxWidth: 12, padding: 16, font: { size: 11 } } },
+            tooltip: {
+              backgroundColor: "#1e293b", titleFont: { size: 12 }, bodyFont: { size: 11 }, padding: 10, cornerRadius: 8, displayColors: true },
+          },
+          scales: {
+            x: { grid: { display: false }, ticks: { font: { size: 10 }, color: "#94a3b8", maxTicksLimit: 12, maxRotation: 0 } },
+            y: { grid: { color: "#f1f5f9" }, ticks: { font: { size: 10 }, color: "#94a3b8" }, beginAtZero: true },
+          },
+        }}
+      />
+    </div>
   );
 }
 
@@ -631,45 +637,48 @@ function ParetoBarChart({ data }) {
   });
 
   return (
-    <Bar
-      data={{
-        labels: rows.map((row) => row.machine_name || "Unbekannt"),
-        datasets: [
-          {
-            label: "Downtime (min)",
-            data: rows.map((row) => row.downtime_minutes || 0),
-            backgroundColor: "#ef444466",
-            borderColor: "#ef4444",
-            borderWidth: 1,
-            borderRadius: 3,
-            yAxisID: "y",
+    <div className="relative h-[320px] max-h-[320px] w-full overflow-hidden">
+      <Bar
+        data={{
+          labels: rows.map((row) => row.machine_name || "Unbekannt"),
+          datasets: [
+            {
+              label: "Downtime (min)",
+              data: rows.map((row) => row.downtime_minutes || 0),
+              backgroundColor: "#ef444466",
+              borderColor: "#ef4444",
+              borderWidth: 1,
+              borderRadius: 3,
+              yAxisID: "y",
+            },
+            {
+              label: "Kumuliert %",
+              data: cumulativePct,
+              backgroundColor: "#6366f166",
+              borderColor: "#6366f1",
+              borderWidth: 1,
+              borderRadius: 3,
+              yAxisID: "y1",
+            },
+          ],
+        }}
+        options={{
+          responsive: true,
+          maintainAspectRatio: false,
+          resizeDelay: 100,
+          animation: { duration: 600 },
+          plugins: {
+            legend: { display: true, position: "top", labels: { boxWidth: 12, padding: 16, font: { size: 11 } } },
+            tooltip: { backgroundColor: "#1e293b", titleFont: { size: 12 }, bodyFont: { size: 11 }, padding: 10, cornerRadius: 8 },
           },
-          {
-            label: "Kumuliert %",
-            data: cumulativePct,
-            backgroundColor: "#6366f166",
-            borderColor: "#6366f1",
-            borderWidth: 1,
-            borderRadius: 3,
-            yAxisID: "y1",
+          scales: {
+            x: { grid: { display: false }, ticks: { font: { size: 10 }, color: "#94a3b8", maxRotation: 0 } },
+            y: { grid: { color: "#f1f5f9" }, ticks: { font: { size: 10 }, color: "#94a3b8" }, beginAtZero: true, position: "left" },
+            y1: { grid: { drawOnChartArea: false }, ticks: { font: { size: 10 }, color: "#6366f1", callback: (value) => `${value}%` }, beginAtZero: true, max: 100, position: "right" },
           },
-        ],
-      }}
-      options={{
-        responsive: true,
-        maintainAspectRatio: false,
-        animation: { duration: 600 },
-        plugins: {
-          legend: { display: true, position: "top", labels: { boxWidth: 12, padding: 16, font: { size: 11 } } },
-          tooltip: { backgroundColor: "#1e293b", titleFont: { size: 12 }, bodyFont: { size: 11 }, padding: 10, cornerRadius: 8 },
-        },
-        scales: {
-          x: { grid: { display: false }, ticks: { font: { size: 10 }, color: "#94a3b8", maxRotation: 0 } },
-          y: { grid: { color: "#f1f5f9" }, ticks: { font: { size: 10 }, color: "#94a3b8" }, beginAtZero: true, position: "left" },
-          y1: { grid: { drawOnChartArea: false }, ticks: { font: { size: 10 }, color: "#6366f1", callback: (value) => `${value}%` }, beginAtZero: true, max: 100, position: "right" },
-        },
-      }}
-    />
+        }}
+      />
+    </div>
   );
 }
 

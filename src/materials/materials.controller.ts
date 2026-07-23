@@ -1,3 +1,4 @@
+import { ApiTags, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
 import { Controller, Get, Post, Patch, Delete, Body, Param, Query } from '@nestjs/common';
 import { MaterialsService } from './materials.service';
 import { Roles } from '../auth/roles.decorator';

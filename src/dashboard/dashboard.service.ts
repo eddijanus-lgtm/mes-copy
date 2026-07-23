@@ -5,6 +5,7 @@ import { OrderEntity } from '../orders/order.entity';
 import { MachineEntity, MachineStatusEnum } from '../machines/machine.entity';
 import { DowntimeLogEntity } from '../machines/downtime.entity';
 import { DataPointEntity } from '../data-collection/data-point.entity';
+import { TimescaleAggregateService } from './timescale-aggregate.service';
 
 type MachineStatusCounts = Record<MachineStatusEnum, number>;
 
@@ -19,6 +20,7 @@ export class DashboardService {
     private readonly downtimeRepo: Repository<DowntimeLogEntity>,
     @InjectRepository(DataPointEntity)
     private readonly dataPointRepo: Repository<DataPointEntity>,
+    private readonly aggregateService: TimescaleAggregateService,
   ) {}
 
   async getKpis(from?: string, to?: string) {
@@ -27,7 +29,7 @@ export class DashboardService {
       this.safeQuery(this.getMachineStatusCounts(), this.emptyMachineStatusCounts()),
       this.safeQuery(this.getOrderStats(range.start, range.end), { target_quantity: 0, completed_quantity: 0, completed_orders: 0, active_orders: 0 }),
       this.safeQuery(this.getDowntimeStats(range.start, range.end), { total_minutes: 0, event_count: 0 }),
-      this.safeQuery(this.getQualityCounts(range.start, range.end), { good_count: 0, bad_count: 0 }),
+      this.safeQuery(this.getQualityStats(range.start, range.end), { good_count: 0, bad_count: 0, uncertain_count: 0 }),
     ]);
 
     const machineCount = Object.values(machineRows).reduce((sum, count) => sum + count, 0);
@@ -68,6 +70,10 @@ export class DashboardService {
         activeOrders: Number(orderStats.active_orders) || 0,
       },
     };
+  }
+
+  initializeContinuousAggregates() {
+    return this.aggregateService.initializeContinuousAggregates();
   }
 
   private resolveRange(from?: string, to?: string) {
@@ -120,8 +126,14 @@ export class DashboardService {
     return this.dataPointRepo.createQueryBuilder('point')
       .select("COUNT(CASE WHEN point.quality = 'good' THEN 1 END)", 'good_count')
       .addSelect("COUNT(CASE WHEN point.quality = 'bad' THEN 1 END)", 'bad_count')
+      .addSelect("COUNT(CASE WHEN point.quality = 'uncertain' THEN 1 END)", 'uncertain_count')
       .where('point.timestamp BETWEEN :start AND :end', { start, end })
       .getRawOne();
+  }
+
+  private async getQualityStats(start: Date, end: Date) {
+    const aggregateRows = await this.aggregateService.getQualityCountsFromAggregate(start, end);
+    return aggregateRows ?? this.getQualityCounts(start, end);
   }
 
   private percent(value: number) {
@@ -142,104 +154,39 @@ export class DashboardService {
     }
   }
 
-  async getDashboardTrends(from?: string, to?: string) {
+  async getDashboardTrends(from?: string, to?: string, interval?: string) {
     const range = this.resolveRange(from, to);
-    const interval = this.calculateTrendInterval(range.start, range.end);
-
-    const [qualityRows, throughputRows, orderRows, downtimeRows, machineRows] = await Promise.all([
-      this.safeQuery(this.dataPointRepo.createQueryBuilder('dp')
-      .select(`date_trunc('${interval}', dp.timestamp)::text`, 'ts')
-      .addSelect("COUNT(CASE WHEN dp.quality = 'good' THEN 1 END)", 'good_count')
-      .addSelect("COUNT(CASE WHEN dp.quality = 'bad' THEN 1 END)", 'bad_count')
-      .where('dp.timestamp BETWEEN :start AND :end', { start: range.start, end: range.end })
-      .groupBy(`date_trunc('${interval}', dp.timestamp)::text`)
-      .orderBy("ts", 'ASC')
-      .getRawMany(), []),
-      this.safeQuery(this.dataPointRepo.createQueryBuilder('dp')
-      .select(`date_trunc('${interval}', dp.timestamp)::text`, 'ts')
-      .addSelect('SUM(dp.value)', 'throughput_value')
-      .where('dp.timestamp BETWEEN :start AND :end', { start: range.start, end: range.end })
-      .groupBy(`date_trunc('${interval}', dp.timestamp)::text`)
-      .orderBy("ts", 'ASC')
-      .getRawMany(), []),
-      this.safeQuery(this.ordersRepo.createQueryBuilder('orders')
-      .select(`date_trunc('${interval}', orders.created_at)::text`, 'ts')
-      .addSelect("SUM(CASE WHEN orders.status = 'completed' THEN orders.completed_quantity ELSE 0 END)", 'completed_quantity')
-      .where('orders.created_at BETWEEN :start AND :end', { start: range.start, end: range.end })
-      .groupBy(`date_trunc('${interval}', orders.created_at)::text`)
-      .orderBy("ts", 'ASC')
-      .getRawMany(), []),
-      this.safeQuery(this.downtimeRepo.createQueryBuilder('dt')
-      .select(`date_trunc('${interval}', dt.start_time)::text`, 'ts')
-      .addSelect("COALESCE(SUM(CASE WHEN dt.end_time IS NOT NULL THEN EXTRACT(EPOCH FROM (dt.end_time - dt.start_time)) / 60 ELSE 0 END), 0)", 'minutes')
-      .addSelect('COUNT(*)', 'event_count')
-      .where('dt.start_time BETWEEN :start AND :end', { start: range.start, end: range.end })
-      .groupBy(`date_trunc('${interval}', dt.start_time)::text`)
-      .orderBy('ts', 'ASC')
-      .getRawMany(), []),
-      this.safeQuery(this.machinesRepo.createQueryBuilder('machine')
-      .select('machine.status', 'status')
-      .addSelect('COUNT(*)', 'count')
-      .groupBy('machine.status')
-      .getRawMany(), []),
-    ]);
-
-    const allTimestamps = new Set<string>();
-    qualityRows.forEach(r => allTimestamps.add(r.ts));
-    throughputRows.forEach(r => allTimestamps.add(r.ts));
-    orderRows.forEach(r => allTimestamps.add(r.ts));
-
-    const points = Array.from(allTimestamps).sort().map((ts) => {
-        const q = qualityRows.find(r => r.ts === ts);
-        const t = throughputRows.find(r => r.ts === ts);
-        const o = orderRows.find(r => r.ts === ts);
-        const good = Number(q?.good_count) || 0;
-        const bad = Number(q?.bad_count) || 0;
-        return {
-          timestamp: ts,
-          completed_quantity: Number(o?.completed_quantity) || 0,
-          throughput_value: t ? Math.round(Number(t.throughput_value)) : 0,
-          quality_good_ratio: (good + bad) > 0 ? Math.round(good / (good + bad) * 1000) / 1000 : 1,
-          good,
-          bad,
-        };
-      });
-
-    const machineStatusPoint = {
-      timestamp: range.end.toISOString(),
-      online: Number(machineRows.find((row) => row.status === MachineStatusEnum.ONLINE)?.count) || 0,
-      idle: Number(machineRows.find((row) => row.status === MachineStatusEnum.IDLE)?.count) || 0,
-      error: Number(machineRows.find((row) => row.status === MachineStatusEnum.ERROR)?.count) || 0,
-      offline: Number(machineRows.find((row) => row.status === MachineStatusEnum.OFFLINE)?.count) || 0,
-      maintenance: Number(machineRows.find((row) => row.status === MachineStatusEnum.MAINTENANCE)?.count) || 0,
-    };
+    const result = await this.getAllTrends(range.start.toISOString(), range.end.toISOString(), interval || this.intervalToTimescale(this.calculateTrendInterval(range.start, range.end)));
 
     return {
       from: range.start.toISOString(),
       to: range.end.toISOString(),
-      trends: [
-        { series: 'telemetry', points: points.map((point) => ({ timestamp: point.timestamp, avg: point.throughput_value, min: point.throughput_value, max: point.throughput_value })) },
-        { series: 'order_progress', points: points.map((point) => ({ timestamp: point.timestamp, completedQty: point.completed_quantity })) },
-        { series: 'throughput', points: points.map((point) => ({ timestamp: point.timestamp, completedQty: point.completed_quantity })) },
-        { series: 'quality', points: points.map((point) => ({ timestamp: point.timestamp, good: point.good, bad: point.bad, yieldPct: this.percent(point.quality_good_ratio) })) },
-        { series: 'oee', points: points.map((point) => ({ timestamp: point.timestamp, availability: 100, performance: point.completed_quantity > 0 ? 100 : 0, quality: this.percent(point.quality_good_ratio) })) },
-        { series: 'downtime', points: downtimeRows.map((row) => ({ timestamp: row.ts, minutes: Math.round(Number(row.minutes) || 0), eventCount: Number(row.event_count) || 0 })) },
-        { series: 'machine_status', points: [machineStatusPoint] },
-      ],
+      trends: result.trends,
     };
   }
 
   async getDowntimePareto(from?: string, to?: string) {
     const range = this.resolveRange(from, to);
     const rows = await this.safeQuery(this.downtimeParetoByMachine(range.start, range.end), []);
+    const totalDowntime = rows.reduce((sum, row) => sum + (Number(row.downtime_minutes) || 0), 0);
+    let cumulativeDowntime = 0;
+
     return {
       from: range.start.toISOString(),
       to: range.end.toISOString(),
-      data: rows.map((r) => ({
-        machine_name: r.machine_name,
-        downtime_minutes: Math.round(Number(r.downtime_minutes) || 0),
-        event_count: Number(r.event_count) || 0,
-      })),
+      data: rows.map((r) => {
+        const downtimeMinutes = Math.round(Number(r.downtime_minutes) || 0);
+        cumulativeDowntime += downtimeMinutes;
+
+        return {
+          machine_id: r.machine_id,
+          machine_name: r.machine_name,
+          downtime_minutes: downtimeMinutes,
+          event_count: Number(r.event_count) || 0,
+          availability_pct: this.round(Number(r.availability_pct) || 100, 1),
+          cumulative_pct: totalDowntime > 0 ? this.round(cumulativeDowntime / totalDowntime * 100, 1) : 0,
+        };
+      }),
     };
   }
 
@@ -250,14 +197,23 @@ export class DashboardService {
     return 'day';
   }
 
-  private downtimeParetoByMachine(start: Date, end: Date): Promise<Array<{ machine_name: string; downtime_minutes: string; event_count: string }>> {
+  private intervalToTimescale(interval: string): string {
+    if (interval === 'minute') return '1 min';
+    if (interval === 'hour') return '1 hour';
+    return '1 day';
+  }
+
+  private downtimeParetoByMachine(start: Date, end: Date): Promise<Array<{ machine_id: string; machine_name: string; downtime_minutes: string; event_count: string; availability_pct: string }>> {
     return this.downtimeRepo.createQueryBuilder('dt')
-      .select("COALESCE(m.name, 'Unbekannt')", 'machine_name')
-      .addSelect("COALESCE(SUM(CASE WHEN dt.end_time IS NOT NULL THEN EXTRACT(EPOCH FROM (LEAST(dt.end_time, :end) - GREATEST(dt.start_time, :start))) / 60 ELSE 0 END), 0)", 'downtime_minutes')
+      .select('dt.machine_id', 'machine_id')
+      .addSelect("COALESCE(m.name, 'Unbekannt')", 'machine_name')
+      .addSelect("COALESCE(SUM(GREATEST(EXTRACT(EPOCH FROM (LEAST(COALESCE(dt.end_time, :end), :end) - GREATEST(dt.start_time, :start))) / 60, 0)), 0)", 'downtime_minutes')
       .addSelect('COUNT(*)', 'event_count')
+      .addSelect("GREATEST(0, 100 - (COALESCE(SUM(GREATEST(EXTRACT(EPOCH FROM (LEAST(COALESCE(dt.end_time, :end), :end) - GREATEST(dt.start_time, :start))) / 60, 0)), 0) / NULLIF(EXTRACT(EPOCH FROM (CAST(:end AS timestamp) - CAST(:start AS timestamp))) / 60, 0) * 100))", 'availability_pct')
       .where('dt.start_time < :end AND (dt.end_time IS NULL OR dt.end_time > :start)', { start, end })
       .leftJoin('machines', 'm', 'm.id = "dt"."machine_id"')
-      .groupBy("COALESCE(m.name, 'Unbekannt')")
+      .groupBy('dt.machine_id')
+      .addGroupBy("COALESCE(m.name, 'Unbekannt')")
       .orderBy('downtime_minutes', 'DESC')
       .getRawMany();
   }

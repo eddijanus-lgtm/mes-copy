@@ -1,3 +1,4 @@
+import { ApiTags, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
 import { Controller, Get, Post, Patch, Delete, Body, Param, Req, Res, UseInterceptors, HttpCode, HttpStatus } from '@nestjs/common';
 import { MachinesService } from './machines.service';
 import { CreateMachineDto, UpdateMachineDto } from './machine.dto';
