@@ -1,3 +1,4 @@
+import { ApiTags, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
 import { Controller, Get, Post, Body } from '@nestjs/common';
 import { OpcUaService } from './opcua.service';
 import { MqttGatewayService } from './mqtt-gateway.service';

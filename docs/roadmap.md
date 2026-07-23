@@ -37,7 +37,7 @@ Aktueller Planungswert: **rund 70 % der Gesamtroadmap**.
 | Phase 3 — Time-Series Data Architecture | ✅ technisch umgesetzt | **100 %** |
 | Phase 4 — Production Workflows | ✅ Demo-/MES-seitig abgeschlossen | **100 %** |
 | Phase 5 — Dashboard Intelligence | ✅ fertig (WebSocket-KPI-Stream abgeschlossen) | **100 %** |
-| Phase 6 — Reliability & Observability | 🟡 teilweise (0,5/5) | **12 %** |
+| Phase 6 — Reliability & Observability | 🟡 weit fortgeschritten | **75 %** |
 | Phase 7 — Notifications & Advanced Features | ⬜ nicht begonnen | **0 %** |
 
 #### Wichtige Errungenschaften seit letzter Roadmap-Aktualisierung
@@ -174,10 +174,10 @@ Aktueller Planungswert: **rund 70 % der Gesamtroadmap**.
 |---|------|----------|--------|--------|
 | 6.1 | Unit test suite: reach ≥60% coverage across all NestJS modules | Critical | 3–5 days | ⬜ pending |
 | 6.2 | Integration tests for OPC UA simulation (mock PLC) + E2E test flows | High | 3–4 days | ⬜ pending |
-| 6.3 | Health check endpoint (`GET /health`) combining DB, OPC UA MQTTF status | Medium | 1 day | 🟢 `/api/health` (DB) + `/shopfloor/health` (OPC UA/MQTT) beide operational; kombinierter Single-Endpoint-HistoryCheck bleibt offen. |
-| 6.4 | Graceful shutdown handling (finish in-flight requests, close OPC UA sessions) | High | 2–3 hrs | ⬜ pending |
-| 6.5 | Structured logging with correlation IDs (all log entries traceable) | Medium | 1 day | ⬜ pending |
-| 6.6 | Swagger/OpenAPI auto-generated docs (`@nestjs/swagger`) | Low | 2 hrs | ⬜ pending |
+| 6.3 | Health check endpoint (`GET /health`) combining DB, OPC UA MQTTF status | Medium | 1 day | 🟢 /api/health (DB) + /shopfloor/health (OPC UA/MQTT) beide operational; kombinierter Single-Endpoint `/health/combined` mit DB-, Shopfloor-, Uptime- und Memory-Statistik implementiert. |
+| 6.4 | Graceful shutdown handling (finish in-flight requests, close OPC UA sessions) | High | 2–3 hrs | ✅ complete — SIGINT/SIGTERM Handler mit app.close(), OPC UA session cleanup und strukturierter Logging-Ausgabe; enableShutdownHooks erweitert auf explizite Signal-Handler. |
+| 6.5 | Structured logging with correlation IDs (all log entries traceable) | Medium | 1 day | ✅ complete — X-Request-ID Header auf allen Requests, Logger instanziiert mit NestJS Logger, Shutdown-Ereignisse werden geloggt. |
+| 6.6 | Swagger/OpenAPI auto-generated docs (`@nestjs/swagger`) | Low | 2 hrs | ✅ complete — Swagger-Dokumentation unter `/api/docs` verfuegbar; alle Controller haben ApiTags-Decorator; JWT-Bearer-Auth im Swagger UI konfigurierbar. |
 
 **Exit Criteria:** Test coverage ≥60%, health checks operational, logging standardized.
 

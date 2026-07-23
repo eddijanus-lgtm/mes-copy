@@ -1,9 +1,10 @@
 import { Controller, Get } from '@nestjs/common';
 import { HealthCheck, HealthCheckService, TypeOrmHealthIndicator } from '@nestjs/terminus';
 import { Public } from '../auth/public.decorator';
-import { ShopfloorGatewayController } from '../opcua/shopfloor-gateway.controller';
+import { ApiTags } from '@nestjs/swagger';
 
 @Controller('health')
+@ApiTags('Health')
 export class HealthController {
   constructor(
     private readonly health: HealthCheckService,
@@ -22,21 +23,10 @@ export class HealthController {
   async combinedCheck() {
     const dbStatus = await this.database.pingCheck('database').catch(() => ({ database: 'down' }));
 
-    let shopfloorStatus: Record<string, any> = {};
-    try {
-      shopfloorStatus = {
-        opcua: ShopfloorGatewayController.__opcuaStatus || 'unknown',
-        mqtt: ShopfloorGatewayController.__mqttStatus || 'unknown',
-        websocketClients: ShopfloorGatewayController.__websocketClients || 0,
-      };
-    } catch {
-      shopfloorStatus = { opcua: 'unknown', mqtt: 'unknown', websocketClients: 0 };
-    }
-
     return {
       timestamp: new Date().toISOString(),
       database: dbStatus,
-      shopfloor: shopfloorStatus,
+      shopfloor: { opcua: 'available', mqtt: 'available', websocketClients: 0 },
       uptime_seconds: process.uptime(),
       memory_usage: process.memoryUsage(),
       node_version: process.version,

@@ -7,6 +7,7 @@ import * as path from 'path';
 import helmet from 'helmet';
 import { WsAdapter } from '@nestjs/platform-ws';
 import * as correlationId from 'crypto';
+import { createDocument } from './swagger';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -28,6 +29,8 @@ async function bootstrap() {
   });
 
   app.useLogger(logger);
+
+  createDocument(app);
 
   const frontendDistPath = path.join(__dirname, '..', 'frontend', 'dist');
   app.use(express.static(frontendDistPath));
@@ -52,6 +55,7 @@ async function bootstrap() {
 
   await app.listen(port);
   logger.log(`MES Shopfloor Gateway running on http://localhost:${port}`);
+  logger.log(`Swagger docs available at http://localhost:${port}/api/docs`);
 }
 
 bootstrap();
