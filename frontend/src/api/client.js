@@ -45,7 +45,7 @@ async function request(endpoint, options = {}) {
       }
       const prefix = res.status === 403 ? "Zugriff verweigert (403)" : `Anfrage fehlgeschlagen (${res.status})`;
       const errorMessage = detail ? `${prefix}: ${detail}` : prefix;
-      dispatchToast('error', errorMessage);
+      if (!options.silent) dispatchToast('error', errorMessage);
       throw new Error(errorMessage);
     }
 
@@ -58,7 +58,7 @@ async function request(endpoint, options = {}) {
     }
   } catch (error) {
     if (!error.message) {
-      dispatchToast('error', 'Netzwerkfehler — bitte Verbindung pruefen.');
+      if (!options.silent) dispatchToast('error', 'Netzwerkfehler — bitte Verbindung pruefen.');
     }
     throw error;
   }
@@ -66,6 +66,7 @@ async function request(endpoint, options = {}) {
 
 export const api = {
   get: (endpoint) => request(endpoint, { method: 'GET' }),
+  getSilent: (endpoint) => request(endpoint, { method: 'GET', silent: true }),
   post: (endpoint, body) => request(endpoint, { method: 'POST', body }),
   patch: (endpoint, body) => request(endpoint, { method: 'PATCH', body }),
   del: (endpoint) => request(endpoint, { method: 'DELETE' }),

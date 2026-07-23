@@ -6,6 +6,7 @@ import { UserRoleEnum } from '../users/user.entity';
 import { ShopfloorTelemetryEvent } from './shopfloor-telemetry';
 import { MqttGatewayService } from './mqtt-gateway.service';
 import { OpcUaService } from './opcua.service';
+import { DashboardService } from '../dashboard/dashboard.service';
 
 @WebSocketGateway({ path: '/api/shopfloor/ws' })
 export class TelemetryGateway implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect, OnModuleDestroy {
@@ -16,16 +17,33 @@ export class TelemetryGateway implements OnGatewayInit, OnGatewayConnection, OnG
   private readonly authenticatedClients = new Map<WebSocket, { username: string; role: UserRoleEnum }>();
   private unsubscribeOpcUa?: () => void;
   private unsubscribeMqtt?: () => void;
+  private kpiBroadcastInterval?: NodeJS.Timeout;
 
   constructor(
     private readonly jwtService: JwtService,
     private readonly opcUaService: OpcUaService,
     private readonly mqttGatewayService: MqttGatewayService,
+    private readonly dashboardService: DashboardService,
   ) {}
 
   afterInit() {
     this.unsubscribeOpcUa = this.opcUaService.onTelemetry((event) => this.broadcast(event));
     this.unsubscribeMqtt = this.mqttGatewayService.onTelemetry((event) => this.broadcast(event));
+    this.startKpiBroadcast();
+  }
+
+  private async startKpiBroadcast() {
+    this.kpiBroadcastInterval = setInterval(async () => {
+      try {
+        const kpis = await this.dashboardService.getKpis();
+        const message = JSON.stringify({ type: 'kpis', timestamp: new Date().toISOString(), payload: kpis });
+        for (const client of this.authenticatedClients.keys()) {
+          if (client.readyState === WebSocket.OPEN) client.send(message);
+        }
+      } catch (error) {
+        this.logger.error('KPI broadcast failed: ' + (error as Error).message);
+      }
+    }, 2000);
   }
 
   handleConnection(client: WebSocket) {
@@ -40,6 +58,7 @@ export class TelemetryGateway implements OnGatewayInit, OnGatewayConnection, OnG
   onModuleDestroy() {
     this.unsubscribeOpcUa?.();
     this.unsubscribeMqtt?.();
+    clearInterval(this.kpiBroadcastInterval);
   }
 
   private async authenticate(client: WebSocket, data: RawData, timeout: NodeJS.Timeout) {

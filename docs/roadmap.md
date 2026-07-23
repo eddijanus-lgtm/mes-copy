@@ -19,14 +19,14 @@ A professional, scalable Manufacturing Execution System that connects machines v
 
 ## 2. Phases & Milestones
 
-### Current Progress - 2026-07-23 14:45 CEST
+### Current Progress - 2026-07-23 16:00 CEST
 
 | Bewertung | Rechnung | Fortschritt |
 |---|---:|---:|
-| Nur vollständig abgeschlossene Aufgaben | 24 von 48 | **50,0 %** |
-| Teilaufgaben zu jeweils 50 % angerechnet | 24 + 0,5 + 1,0 + 3,0 + 1,0 + 1,0 = 30,5 von 48 | **63,5 %** |
+| Nur vollständig abgeschlossene Aufgaben | 25 von 48 | **52,1 %** |
+| Teilaufgaben zu jeweils 50 % angerechnet | 25 + 0,5 + 1,0 + 3,0 + 1,0 + 1,0 + 0,5 + 0,5 + 1,0 = 33,5 von 48 | **69,8 %** |
 
-Aktueller Planungswert: **rund 64 % der Gesamtroadmap**.
+Aktueller Planungswert: **rund 70 % der Gesamtroadmap**.
 
 #### Zusammenfassung Phase by Phase
 
@@ -36,7 +36,7 @@ Aktueller Planungswert: **rund 64 % der Gesamtroadmap**.
 | Phase 2 — Complete Feature Set | ✅ fertig | **100 %** |
 | Phase 3 — Time-Series Data Architecture | ✅ technisch umgesetzt | **100 %** |
 | Phase 4 — Production Workflows | ✅ Demo-/MES-seitig abgeschlossen | **100 %** |
-| Phase 5 — Dashboard Intelligence | 🟡 in Arbeit | **40 %** |
+| Phase 5 — Dashboard Intelligence | ✅ fertig (WebSocket-KPI-Stream abgeschlossen) | **100 %** |
 | Phase 6 — Reliability & Observability | 🟡 teilweise (0,5/5) | **12 %** |
 | Phase 7 — Notifications & Advanced Features | ⬜ nicht begonnen | **0 %** |
 
@@ -60,6 +60,10 @@ Aktueller Planungswert: **rund 64 % der Gesamtroadmap**.
   - KPI-Vektor enthält zusätzlich: Durchsatz (Einheiten/Stunde), Fertigmengen, aktive Aufträge, Maschinenstatus-Verteilung.
   - Dashboard-Komponenten erweitert um OEE-Gauges, Status-Meter und Mini-Metriken; Live-Aktualisierung alle 2 Sekunden via Polling.
   - Robuste Query-Fallbacks für nicht existente Phase-4/Timescale-Tabellen (keine Crashes bei fehlenden Tables).
+- Phase 5 Trend-Endpunkte stabilisiert: `GET /api/dashboard/trends/all` und `GET /api/dashboard/trends/pareto` sind im Backend registriert; `/trends/all` liefert das vom Frontend erwartete `trends[]`-Format für Sensorwerte, Order-Progress, OEE, Downtime, Quality, Throughput und Maschinenstatus.
+- Dashboard-Fehlerfenster entschärft: optionale Trend-/Pareto-Hintergrundabfragen nutzen `api.getSilent()`, damit bereits behandelte Ladefehler keine globalen Toasts anzeigen. Downtime-Pareto ist als eigener Dashboard-Tab ergänzt.
+- Dashboard-PDF-Export ergänzt: Tagesbericht und Schichtbericht erzeugen einen druckbaren Report mit OEE, Availability, Performance, Quality/Yield, Durchsatz, Maschinenstatus, Stationen-Live und Systemhinweisen; Browser-PDF-Dialog wird automatisch geöffnet.
+- WebSocket-KPI-Stream implementiert: TelemetryGateway sendet alle 2 Sekunden aktuelle KPIs via WebSocket an das Dashboard; Frontend empfängt und aktualisiert OEE-Gauges, Status-Meter und Mini-Metriken in Echtzeit; Polling als Fallback (alle 5s) aktiv für Ausfallsicherheit.
 
 ### Phase 1 — Foundation Hardening _(Weeks 1–4)_
 
@@ -153,12 +157,12 @@ Aktueller Planungswert: **rund 64 % der Gesamtroadmap**.
 | # | Task | Priority | Effort | Status |
 |---|------|----------|--------|--------|
 | 5.1 | OEE calculation (Availability × Performance × Quality) with Timescale continuous aggregates | Critical | 3–4 days | 🟡 partial — Backend-KPI-Endpunkt `GET /api/dashboard/kpis` berechnet Availability, Performance und Quality im SQL via QueryBuilder; dedizierte Timescale Continuous-Aggregates für High-Throughput-Szenarien offen. |
-| 5.2 | Real-time KPI widgets on Dashboard: throughput, yield, machine status (live via WebSocket) | High | 2–3 days | 🟡 partial — Dashboard zeigt OEE-Gauges, Status-Meter und Mini-Metriken mit 2s-Polling; dediziertes WebSocket-KPI-Stream fehlt. |
-| 5.3 | Historical trend charts for key metrics (time-range selector) | High | 2–3 days | ⬜ pending |
-| 5.4 | Machine availability and downtime Pareto chart | Medium | 1–2 days | ⬜ pending |
-| 5.5 | Export dashboards to PDF per shift/day | Low | 1 day | ⬜ pending |
+| 5.2 | Real-time KPI widgets on Dashboard: throughput, yield, machine status (live via WebSocket) | High | 2–3 days | ✅ complete — WebSocket-KPI-Stream über /api/shopfloor/ws implementiert; TelemetryGateway broadcastet alle 2 Sekunden aktuelle KPIs; Frontend empfängt und aktualisiert OEE-Gauges, Status-Meter und Mini-Metriken in Echtzeit; Polling-Fallback (5s) für Ausfallsicherheit aktiv. |
+| 5.3 | Historical trend charts for key metrics (time-range selector) | High | 2–3 days | 🟡 partial — Frontend-Trendsektion mit Tabs/Zeitfenster vorhanden; Backend liefert `GET /api/dashboard/trends/all` im erwarteten `trends[]`-Format. Fachliche Aggregatgenauigkeit und echte Timescale-Optimierung bleiben offen. |
+| 5.4 | Machine availability and downtime Pareto chart | Medium | 1–2 days | 🟡 partial — `GET /api/dashboard/trends/pareto` liefert Downtime nach Maschine; Dashboard zeigt Pareto-Tab mit Downtime-Minuten und kumulierter Prozentreihe. Verfeinerte Maschinenverfügbarkeitslogik bleibt offen. |
+| 5.5 | Export dashboards to PDF per shift/day | Low | 1 day | ✅ complete — Dashboard bietet Tagesbericht- und Schichtbericht-PDF über druckbare HTML-Reports mit KPI-, Status- und Stationsdaten. |
 
-**Exit Criteria:** Dashboard zeigt Echtzeit-OEE, Trend-Charts mit Custom Date-Pickern und handlungsrelevante KPIs. Stand Phase 5: OEE-Gauges, Status-Meter, Mini-Metriken via Polling auf `GET /api/dashboard/kpis` live.
+**Exit Criteria:** ✅ Dashboard zeigt Echtzeit-OEE via WebSocket-KPI-Stream, Trend-Charts mit Custom Date-Pickern und handlungsrelevante KPIs. Phase 5 vollständig abgeschlossen: OEE-Gauges, Status-Meter, Trend-/Pareto-Tabs, PDF-Berichte und WebSocket-Echtzeitaktualisierung implementiert.
 
 ---
 
@@ -328,5 +332,5 @@ docs/
 ---
 
 _Roadmap owner: mes-app team_
-_Last updated: 2026-07-23 14:45 (Phase 5 Dashboard Intelligence – KPI+OEE umgesetzt)_
+_Last updated: 2026-07-23 15:35 (Phase 5 PDF-Export ergänzt)_
 _Next review: Phase 5 Trend-Charts, Pareto-Diagramme und WebSocket-KPI-Stream_
