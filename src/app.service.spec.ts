@@ -12,15 +12,28 @@ describe('AppService', () => {
     service = module.get<AppService>(AppService);
   });
 
-  it('should be defined', () => {
-    expect(service).toBeDefined();
-  });
+  it('should be defined', () => { expect(service).toBeDefined(); });
 
   describe('getHealthCheck', () => {
-    it('should return status object with ok status', () => {
+    it.each(['status', 'timestamp'] as const)('returns a %s field', (key) => {
+      const result = service.getHealthCheck();
+      expect(result).toHaveProperty(key);
+    });
+
+    it('returns status "ok"', () => {
       const result = service.getHealthCheck();
       expect(result.status).toBe('ok');
-      expect(result.timestamp).toBeDefined();
+    });
+
+    it('timestamp is a valid ISO string', () => {
+      const result = service.getHealthCheck();
+      const date = new Date(result.timestamp as string);
+      expect(date.getTime()).not.toBeNaN();
+    });
+
+    it('returns plain object without prototype pollution risk', () => {
+      const result = service.getHealthCheck();
+      expect(Object.prototype.toString.call(result)).toBe('[object Object]');
     });
   });
 });

@@ -1,29 +1,44 @@
-import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication } from '@nestjs/common';
+import { Test, TestingModule } from '@nestjs/testing';
+import { HealthCheckService, TypeOrmHealthIndicator } from '@nestjs/terminus';
 import request from 'supertest';
 import { App } from 'supertest/types';
-import { AppModule } from './../src/app.module';
+import { HealthController } from '../src/health/health.controller';
 
-describe('AppController (e2e)', () => {
+describe('HealthController (e2e)', () => {
   let app: INestApplication<App>;
 
   beforeEach(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
-      imports: [AppModule],
-    }).compile();
+      controllers: [HealthController],
+      providers: [
+        {
+          provide: HealthCheckService,
+          useValue: { check: jest.fn(async () => ({ status: 'ok', info: { database: { status: 'up' } } })) },
+        },
+        {
+          provide: TypeOrmHealthIndicator,
+          useValue: { pingCheck: jest.fn(async () => ({ database: { status: 'up' } })) },
+        },
+      ],
+    })
+      .compile();
 
     app = moduleFixture.createNestApplication();
+    app.setGlobalPrefix('api');
     await app.init();
   });
 
-  it('/ (GET)', () => {
-    return request(app.getHttpServer())
-      .get('/')
-      .expect(200)
-      .expect('Hello World!');
+  afterEach(async () => {
+    if (app) await app.close();
   });
 
-  afterEach(async () => {
-    await app.close();
+  it('/api/health/combined (GET) returns operational metadata', async () => {
+    const response = await request(app.getHttpServer()).get('/api/health/combined').expect(200);
+
+    expect(response.body).toHaveProperty('timestamp');
+    expect(response.body).toHaveProperty('database');
+    expect(response.body).toHaveProperty('shopfloor');
+    expect(response.body.node_version).toBe(process.version);
   });
 });

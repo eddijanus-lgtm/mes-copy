@@ -32,23 +32,6 @@ export class AlarmsController {
   @Roles(UserRoleEnum.ADMIN, UserRoleEnum.OPERATOR, UserRoleEnum.VIEWER)
   getActiveAlarmCount() { return this.alarmsService.setActiveCount(); }
 
-  @Get(':id')
-  @Roles(UserRoleEnum.ADMIN, UserRoleEnum.OPERATOR, UserRoleEnum.VIEWER)
-  findOne(@Param('id', ParseUUIDPipe) id: string) { return this.alarmsService.findOne(id); }
-
-  @Patch(':id')
-  @Roles(UserRoleEnum.ADMIN, UserRoleEnum.OPERATOR)
-  update(@Param('id', ParseUUIDPipe) id: string, @Body() dto: UpdateAlarmDto) { return this.alarmsService.update(id, dto); }
-
-  @Post(':id/acknowledge')
-  @Roles(UserRoleEnum.ADMIN, UserRoleEnum.OPERATOR)
-  @HttpCode(HttpStatus.OK)
-  acknowledge(@Param('id', ParseUUIDPipe) id: string) { return this.alarmsService.acknowledge(id); }
-
-  @Delete(':id')
-  @Roles(UserRoleEnum.ADMIN)
-  remove(@Param('id', ParseUUIDPipe) id: string) { return this.alarmsService.remove(id); }
-
   @Post('bulk/acknowledge')
   @Roles(UserRoleEnum.ADMIN, UserRoleEnum.OPERATOR)
   @HttpCode(HttpStatus.OK)
@@ -67,4 +50,21 @@ export class AlarmsController {
       machine_id: machineId || undefined,
     });
   }
+
+  @Get(':id')
+  @Roles(UserRoleEnum.ADMIN, UserRoleEnum.OPERATOR, UserRoleEnum.VIEWER)
+  findOne(@Param('id', ParseUUIDPipe) id: string) { return this.alarmsService.findOne(id); }
+
+  @Patch(':id')
+  @Roles(UserRoleEnum.ADMIN, UserRoleEnum.OPERATOR)
+  update(@Param('id', ParseUUIDPipe) id: string, @Body() dto: UpdateAlarmDto) { return this.alarmsService.update(id, dto); }
+
+  @Post(':id/acknowledge')
+  @Roles(UserRoleEnum.ADMIN, UserRoleEnum.OPERATOR)
+  @HttpCode(HttpStatus.OK)
+  acknowledge(@Param('id', ParseUUIDPipe) id: string) { return this.alarmsService.acknowledge(id); }
+
+  @Delete(':id')
+  @Roles(UserRoleEnum.ADMIN)
+  remove(@Param('id', ParseUUIDPipe) id: string) { return this.alarmsService.remove(id); }
 }
