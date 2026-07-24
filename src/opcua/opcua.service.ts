@@ -21,6 +21,8 @@ export class OpcUaService implements OnModuleInit, OnModuleDestroy {
   private readonly telemetryCallbacks = new Set<(event: ShopfloorTelemetryEvent) => void>();
   private readonly stMesCallbacks = new Set<(resourceId: number, active: boolean) => void>();
   private readonly processCompletedCallbacks = new Set<(resourceId: number, timestamp: Date) => void>();
+  private readonly connectedCallbacks = new Set<() => void>();
+  private readonly disconnectedCallbacks = new Set<(reason: string) => void>();
   private readonly lastStMesStartState = new Map<number, boolean>();
 
   constructor(private readonly configService: ConfigService) {}
@@ -47,6 +49,7 @@ export class OpcUaService implements OnModuleInit, OnModuleDestroy {
       this.logger.log('Connected to OPC UA server at ' + this.address);
       await this.startStMesSubscriptions();
       this.startPolling();
+      for (const cb of this.connectedCallbacks) try { cb(); } catch (e) { this.logger.error('connected callback failed', e); }
     } catch (error) {
       this.connected = false;
       this.logger.warn('OPC UA connection failed: ' + (error as Error).message);
@@ -117,6 +120,16 @@ export class OpcUaService implements OnModuleInit, OnModuleDestroy {
     return () => this.processCompletedCallbacks.delete(callback);
   }
 
+  onConnected(callback: () => void): () => void {
+    this.connectedCallbacks.add(callback);
+    return () => this.connectedCallbacks.delete(callback);
+  }
+
+  onDisconnected(callback: (reason: string) => void): () => void {
+    this.disconnectedCallbacks.add(callback);
+    return () => this.disconnectedCallbacks.delete(callback);
+  }
+
   publishStMesEvent(payload: Record<string, unknown>) {
     this.emitTelemetry({ kind: 'stmes.handshake', ...payload });
   }
@@ -164,6 +177,8 @@ export class OpcUaService implements OnModuleInit, OnModuleDestroy {
         const wasActive = this.lastStMesStartState.get(resourceId);
         if (active && !wasActive) {
           for (const callback of this.stMesCallbacks) callback(resourceId, true);
+        } else if (!active && wasActive) {
+          for (const callback of this.stMesCallbacks) callback(resourceId, false);
         }
         this.lastStMesStartState.set(resourceId, active);
       }
@@ -190,6 +205,7 @@ export class OpcUaService implements OnModuleInit, OnModuleDestroy {
   private handleDisconnect(reason: string) {
     if (!this.connected && !this.session) return;
     this.logger.warn('OPC UA disconnected: ' + reason);
+    for (const cb of this.disconnectedCallbacks) try { cb(reason); } catch (e) { this.logger.error('disconnected callback failed', e); }
     this.connected = false;
     if (this.pollingTimer) clearInterval(this.pollingTimer);
     this.pollingTimer = undefined;

@@ -84,8 +84,9 @@ if lsof -i :5173 > /dev/null 2>&1; then
 else
   echo "[*] Starte Frontend (Vite) …"
   cd "$PROJECT_DIR/frontend"
-  nohup npm run dev -- --host 0.0.0.0 > >(tee /tmp/wara-mes-frontend.log) 2>&1 &
-  sleep 3
+  nohup npm run dev > /tmp/wara-mes-frontend.log 2>&1 &
+  disown
+  sleep 5
 
   if lsof -i :5173 > /dev/null 2>&1; then
     echo "[OK] Frontend läuft auf Port 5173."

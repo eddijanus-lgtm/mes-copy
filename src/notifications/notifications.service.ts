@@ -3,7 +3,6 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import * as nodemailer from 'nodemailer';
 import { MqttGatewayService } from '../opcua/mqtt-gateway.service';
-import { TelemetryGateway } from '../opcua/telemetry.gateway';
 import { AlertRuleEntity, AlertHistoryEntity, NotificationChannelEntity } from './entities';
 import type { NotificationChannel } from './entities';
 
@@ -20,7 +19,6 @@ export class NotificationsService {
     @InjectRepository(AlertHistoryEntity)
     private readonly historyRepo: Repository<AlertHistoryEntity>,
     private readonly mqttGateway?: MqttGatewayService,
-    private readonly telemetryGateway?: TelemetryGateway,
   ) {
     const host = process.env.SMTP_HOST;
     const port = parseInt(process.env.SMTP_PORT || '587', 10);
@@ -42,10 +40,6 @@ export class NotificationsService {
 
     if (this.mqttGateway && process.env.ALERT_MQTT_TOPIC) {
       this.logger.log(`MQTT alert broker will publish to ${process.env.ALERT_MQTT_TOPIC}`);
-    }
-
-    if (this.telemetryGateway) {
-      this.logger.log('Telemetry gateway available for WebSocket alert broadcasting');
     }
   }
 
@@ -86,18 +80,7 @@ export class NotificationsService {
       }
     }
 
-    if (rule.channels?.includes('websocket')) {
-      try {
-        await this.sendWebSocket(rule, message);
-        channels.push('websocket');
-        delivered = true;
-      } catch (e) {
-        const machineName3 = rule.machine_id || 'unknown';
-        if (!error) error = String(e.message || e);
-      }
-    }
-
-    if (!delivered && !this.mqttGateway && !this.telemetryGateway) {
+    if (!delivered && !this.mqttGateway) {
       this.logger.warn('At least one notification channel (mqtt/websocket) should be configured for delivery fallback');
     }
 
@@ -150,24 +133,6 @@ export class NotificationsService {
 
     await this.mqttGateway['client'].publish(topic, JSON.stringify(payload));
     this.logger.log(`MQTT alert dispatched for ${rule.id} on topic ${topic}`);
-  }
-
-  private async sendWebSocket(rule: AlertRuleEntity, messageText: string): Promise<void> {
-    if (!this.telemetryGateway) throw new Error('Telemetry gateway not available');
-    const eventPayload = {
-      type: 'alert',
-      alert: {
-        rule_id: rule.id,
-        rule_name: rule.name,
-        severity: rule.severity,
-        message: messageText,
-        machine_id: rule.machine_id,
-        timestamp: new Date().toISOString(),
-      },
-    };
-
-    this.telemetryGateway['server'].emit('alert', eventPayload);
-    this.logger.log(`WebSocket alert broadcast for ${rule.id}`);
   }
 
   async evaluateRules(telemetryData: Record<string, any>): Promise<void> {

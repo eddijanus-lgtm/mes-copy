@@ -191,6 +191,7 @@ export class RoutingService {
         carrier.current_step_no = nextStep.step_no;
         carrier.current_resource_id = null;
         carrier.status = CarrierStatusEnum.ASSIGNED;
+        await manager.save(carrier);
       } else {
         carrier.current_resource_id = null;
         carrier.status = CarrierStatusEnum.COMPLETED;
@@ -200,11 +201,22 @@ export class RoutingService {
           if (order.completed_quantity >= order.quantity) {
             order.status = 'completed';
             order.end_time = completedAt;
+            const orderCarriers = await manager.find(CarrierEntity, { where: { order_id: order.id } });
+            for (const oc of orderCarriers) {
+              oc.status = CarrierStatusEnum.AVAILABLE;
+              oc.order_id = undefined;
+              oc.current_step_no = 1;
+              oc.current_resource_id = null;
+            }
+            await manager.save(orderCarriers);
+          } else {
+            await manager.save(carrier);
           }
           await manager.save(order);
+        } else {
+          await manager.save(carrier);
         }
       }
-      await manager.save(carrier);
       return true;
     });
   }

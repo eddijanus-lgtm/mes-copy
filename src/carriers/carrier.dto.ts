@@ -20,4 +20,17 @@ export class UpdateCarrierDto {
   @IsOptional()
   @IsEnum(CarrierStatusEnum)
   status?: CarrierStatusEnum;
+
+  @IsOptional()
+  @IsUUID()
+  order_id?: string | null;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  current_step_no?: number;
+
+  @IsOptional()
+  @IsInt()
+  current_resource_id?: number | null;
 }

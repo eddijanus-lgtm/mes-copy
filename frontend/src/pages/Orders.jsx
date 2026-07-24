@@ -3,8 +3,7 @@ import { api } from "../api/client.js";
 import { useAuth } from "../providers/AuthProvider.jsx";
 import { canDeleteOrders, canManageOrders } from "../utils/roles.js";
 
-const DEMO_CARRIERS = [128, 129];
-const EMPTY_FORM = { id: null, name: "", priority: 1, machine_id: "", operation: "Webshop-Produkt konfigurieren", quantity: 2, completed_quantity: 0, status: "pending" };
+const EMPTY_FORM = { id: null, name: "", priority: 1, machine_id: "", operation: "Webshop-Produkt konfigurieren", quantity: 1, completed_quantity: 0, status: "pending" };
 const STATUS_LABELS = { pending: "Ausstehend", in_progress: "In Arbeit", completed: "Abgeschlossen", cancelled: "Abgebrochen", on_hold: "Pausiert" };
 
 export default function OrdersPage() {
@@ -64,7 +63,7 @@ export default function OrdersPage() {
     }
     try {
       if (form.id) await api.patch(`/orders/${form.id}`, payload);
-      else await api.post("/orders/demo-production", payload);
+      else await api.post("/orders", payload);
       await refresh();
       setModalOpen(false);
       setForm(EMPTY_FORM);
@@ -141,7 +140,7 @@ export default function OrdersPage() {
         {filtered.length === 0 && <p className="rounded-xl border border-neutral-200 bg-white p-10 text-center text-sm text-neutral-400">Keine passenden Aufträge gefunden.</p>}
       </div>
 
-      {modalOpen && <OrderModal form={form} setForm={setForm} machines={machines} saving={saving} onSubmit={submit} onClose={() => { setModalOpen(false); setForm(EMPTY_FORM); }} />}
+      {modalOpen && <OrderModal form={form} setForm={setForm} machines={machines} carriers={carriers} saving={saving} onSubmit={submit} onClose={() => { setModalOpen(false); setForm(EMPTY_FORM); }} />}
       {deleteCandidate && <DeleteOrderDialog order={deleteCandidate} deleting={deleting} onCancel={() => setDeleteCandidate(null)} onConfirm={remove} />}
     </div>
   );
@@ -208,8 +207,9 @@ function OrderCard({ order, route, carriers, machineName, resourceNames, canMana
   );
 }
 
-function OrderModal({ form, setForm, machines, saving, onSubmit, onClose }) {
+function OrderModal({ form, setForm, machines, carriers, saving, onSubmit, onClose }) {
   const totalMs = Number(form.quantity || 0) * (90000 + 15000 + 120000 + 15000 + 60000);
+  const availableCount = carriers.filter((c) => c.status === "available").length;
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-neutral-950/50 p-4" onMouseDown={onClose}>
       <div className="my-auto w-full max-w-2xl rounded-2xl bg-white shadow-2xl" onMouseDown={(event) => event.stopPropagation()}>
@@ -219,10 +219,10 @@ function OrderModal({ form, setForm, machines, saving, onSubmit, onClose }) {
           <Field label="Startstation"><select required value={form.machine_id} onChange={(event) => setForm((current) => ({ ...current, machine_id: event.target.value }))} className="form-input"><option value="">Station wählen</option>{machines.map((machine) => <option key={machine.id} value={machine.id}>{machine.name}</option>)}</select></Field>
           <Field label="Produkt / Operation"><input required value={form.operation} onChange={(event) => setForm((current) => ({ ...current, operation: event.target.value }))} className="form-input" /></Field>
           <Field label="Priorität"><input required type="number" min="1" value={form.priority} onChange={(event) => setForm((current) => ({ ...current, priority: event.target.value }))} className="form-input" /></Field>
-          <Field label="Menge"><input required type="number" min="1" max="2" value={form.quantity} onChange={(event) => setForm((current) => ({ ...current, quantity: event.target.value }))} className="form-input" /></Field>
+          <Field label={`Menge (max. ${availableCount})`}><input required type="number" min="1" max={availableCount} value={form.quantity} onChange={(event) => setForm((current) => ({ ...current, quantity: event.target.value }))} className="form-input" /></Field>
           {form.id && <Field label="Fertigmenge"><input required type="number" min="0" max={form.quantity} value={form.completed_quantity} onChange={(event) => setForm((current) => ({ ...current, completed_quantity: event.target.value }))} className="form-input" /></Field>}
           {form.id && <Field label="Status"><select value={form.status} onChange={(event) => setForm((current) => ({ ...current, status: event.target.value }))} className="form-input">{Object.entries(STATUS_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></Field>}
-          {!form.id && <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900 sm:col-span-2"><strong>Wird automatisch angelegt:</strong> Route S01 Deckelzufuehrung {"->"} S02 Kugeldosierung {"->"} Q01 Endkontrolle, Carrier {DEMO_CARRIERS.slice(0, Number(form.quantity || 1)).join(" und ")}, Webshop-Parameter iPar1-iPar4 und geplanter Demo-Zyklus ca. {Math.ceil(totalMs / 1000)} Sekunden.</div>}
+          {!form.id && <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900 sm:col-span-2"><strong>Wird automatisch angelegt:</strong> Route S01 Deckelzufuehrung {"->"} S02 Kugeldosierung {"->"} Q01 Endkontrolle, {form.quantity} von {availableCount} verfuegbaren Carriern zugeordnet, Webshop-Parameter iPar1-iPar4 und geplanter Demo-Zyklus ca. {Math.ceil(totalMs / 1000)} Sekunden.</div>}
           <div className="flex justify-end gap-2 border-t border-neutral-100 pt-4 sm:col-span-2"><button type="button" onClick={onClose} className="rounded-lg px-4 py-2 text-sm font-medium text-neutral-600 hover:bg-neutral-100">Abbrechen</button><button disabled={saving} type="submit" className="rounded-lg bg-brand-primary px-5 py-2 text-sm font-semibold text-white disabled:opacity-50">{saving ? "Speichert..." : "Speichern"}</button></div>
         </form>
       </div>

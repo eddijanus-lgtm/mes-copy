@@ -1,31 +1,41 @@
 import { useState, useEffect } from 'react';
 
 export default function SystemStatus() {
-  const [backendOnline, setBackendOnline] = useState(null);
-  const [dbOnline, setDbOnline] = useState(null);
+  const [backendOnline, setBackendOnline] = useState('checking');
+  const [dbOnline, setDbOnline] = useState('checking');
   const [token, setToken] = useState(false);
 
   useEffect(() => {
-    checkBackend();
-    const interval = setInterval(checkBackend, 5000);
+    setToken(Boolean(localStorage.getItem('jwt_token')));
+    fetch('/api/health')
+      .then(res => res.json())
+      .then(health => {
+        setBackendOnline(health.status === 'ok' ? 'online' : 'error');
+        setDbOnline(health.info?.database?.status === 'up' ? 'online' : 'error');
+      })
+      .catch(() => {
+        setBackendOnline('offline');
+        setDbOnline('unknown');
+      });
+
+    const interval = setInterval(() => {
+      fetch('/api/health')
+        .then(res => res.json())
+        .then(health => {
+          setBackendOnline(health.status === 'ok' ? 'online' : 'error');
+          setDbOnline(health.info?.database?.status === 'up' ? 'online' : 'error');
+        })
+        .catch(() => {
+          setBackendOnline('offline');
+          setDbOnline('unknown');
+        });
+    }, 5000);
+
     return () => clearInterval(interval);
   }, []);
 
-  async function checkBackend() {
-    setToken(Boolean(localStorage.getItem('jwt_token')));
-    try {
-      const res = await fetch('/api/health');
-      const health = await res.json();
-      setBackendOnline(res.ok ? 'online' : 'error');
-      setDbOnline(health.info?.database?.status === 'up' ? 'online' : 'error');
-    } catch {
-      setBackendOnline('offline');
-      setDbOnline('unknown');
-    }
-  }
-
   const status = backendOnline === 'online' ? '🟢 Online' :
-                 backendOnline === 'error' ? '🟠 Error' : '⚫ Offline';
+                  backendOnline === 'error' ? '🟠 Error' : '⚫ Offline';
 
   const dbStatus = dbOnline === 'online' ? '🟢 Connected' :
                    dbOnline === 'error' ? '🟠 Error' : '⚫ Unknown';

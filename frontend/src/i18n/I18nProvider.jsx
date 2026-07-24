@@ -1,4 +1,4 @@
-import { createContext, useState, useEffect, useCallback } from "react";
+import { createContext, useState, useEffect, useCallback, useContext } from "react";
 import { de, en } from "../i18n/locales.js";
 
 export const I18nContext = createContext();

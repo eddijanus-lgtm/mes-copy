@@ -3,7 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { OrderEntity } from './order.entity';
 import type { CreateOrderDto, UpdateOrderDto } from './order.dto';
-import { CarrierEntity } from '../carriers/carrier.entity';
+import { CarrierEntity, CarrierStatusEnum } from '../carriers/carrier.entity';
 import { OrderRouteStepEntity } from './order-route-step.entity';
 
 @Injectable()
@@ -17,17 +17,50 @@ export class OrdersService {
     private readonly routeStepsRepo: Repository<OrderRouteStepEntity>,
   ) {}
 
-  async create(dto: CreateOrderDto): Promise<OrderEntity> {
+  async create(dto: CreateOrderDto) {
+    const availableCarriers = await this.carriersRepo.find({
+      where: { status: CarrierStatusEnum.AVAILABLE },
+      order: { carrier_number: 'ASC' },
+    });
+
+    if (availableCarriers.length < dto.quantity) {
+      throw new BadRequestException(
+        `Nicht genügend Carrier verfügbar: ${dto.quantity} benötigt, ${availableCarriers.length} verfügbar`,
+      );
+    }
+
     const order = this.ordersRepo.create({
       name: dto.name,
       priority: dto.priority,
       machine_id: dto.machine_id,
       operation: dto.operation,
       quantity: dto.quantity,
-      start_time: dto.start_time,
+      status: 'in_progress',
+      start_time: dto.start_time ?? new Date(),
       target_complete_time: dto.target_complete_time,
+      completed_quantity: 0,
     });
-    return this.ordersRepo.save(order);
+    const savedOrder = await this.ordersRepo.save(order);
+
+    const routeStepsData = [
+      { step_no: 1, resource_id: 1, operation_no: 10, operation: 'Deckelfarbe bereitstellen', parameters: { iPar1: 1, iPar2: 3, iPar3: 5, iPar4: 7 } },
+      { step_no: 2, resource_id: 2, operation_no: 20, operation: 'Kugeln dosieren', parameters: { iPar1: 1, iPar2: 3, iPar3: 5, iPar4: 7 } },
+      { step_no: 3, resource_id: 3, operation_no: 30, operation: 'Deckel und Kugeln pruefen', parameters: { iPar1: 1, iPar2: 3, iPar3: 5, iPar4: 7 } },
+    ];
+    const route = await this.routeStepsRepo.save(
+      routeStepsData.map(step => this.routeStepsRepo.create({ ...step, order_id: savedOrder.id })),
+    );
+
+    const carriersToAssign = availableCarriers.slice(0, dto.quantity);
+    for (const carrier of carriersToAssign) {
+      carrier.order_id = savedOrder.id;
+      carrier.current_step_no = 1;
+      carrier.current_resource_id = null;
+      carrier.status = CarrierStatusEnum.ASSIGNED;
+    }
+    const assignedCarriers = await this.carriersRepo.save(carriersToAssign);
+
+    return { ...savedOrder, carriers: assignedCarriers, route };
   }
 
   async findAll(): Promise<OrderEntity[]> {
@@ -68,6 +101,14 @@ export class OrdersService {
     if (order.completed_quantity >= order.quantity) {
       order.status = 'completed' as const;
       order.end_time = new Date();
+      const carriers = await this.carriersRepo.find({ where: { order_id: id } });
+      for (const c of carriers) {
+        c.status = CarrierStatusEnum.AVAILABLE;
+        c.order_id = undefined;
+        c.current_step_no = 1;
+        c.current_resource_id = null;
+      }
+      await this.carriersRepo.save(carriers);
     }
     return this.ordersRepo.save(order);
   }

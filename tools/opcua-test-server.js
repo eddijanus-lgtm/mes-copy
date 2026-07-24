@@ -37,12 +37,43 @@ const stationConfigs = [
 ];
 const stations = stationConfigs.map(createStationState);
 
-const carrierPlans = [
-  { carrierId: 128, partNo: 'WEBSHOP-PRODUCT-DEMO', releaseDelay: 3000 },
-  { carrierId: 129, partNo: 'WEBSHOP-PRODUCT-DEMO', releaseDelay: 10000 },
-];
+const mesApiUrl = process.env.MES_API_URL || 'http://localhost:3000/api';
+const mesApiUser = process.env.MES_API_USER || 'admin';
+const mesApiPass = process.env.MES_API_PASS || 'admin123!';
 const transferMs = 2000;
 const releaseEveryMs = 30000;
+
+async function fetchCarriersFromMes() {
+  try {
+    const loginRes = await fetch(`${mesApiUrl}/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: mesApiUser, password: mesApiPass }),
+    });
+    if (!loginRes.ok) throw new Error(`Login failed: ${loginRes.status}`);
+    const { access_token } = await loginRes.json();
+    const carriersRes = await fetch(`${mesApiUrl}/carriers`, {
+      headers: { Authorization: `Bearer ${access_token}` },
+    });
+    if (!carriersRes.ok) throw new Error(`Fetch carriers failed: ${carriersRes.status}`);
+    const carriers = await carriersRes.json();
+    return carriers
+      .filter((c) => c.order_id && (c.status === 'assigned' || c.status === 'in_process'))
+      .map((c, i) => ({
+        carrierId: c.carrier_number,
+        partNo: 'WEBSHOP-PRODUCT-DEMO',
+        releaseDelay: (i + 1) * 2000,
+      }));
+  } catch (err) {
+    console.warn(`MES API nicht erreichbar (${err.message}), fallback auf DEMO_CARRIER_IDS`);
+    const ids = (process.env.DEMO_CARRIER_IDS || '128,129').split(',').map(Number);
+    return ids.map((id, i) => ({
+      carrierId: id,
+      partNo: 'WEBSHOP-PRODUCT-DEMO',
+      releaseDelay: (i + 1) * 2000,
+    }));
+  }
+}
 
 const server = new OPCUAServer({
   port,
@@ -71,10 +102,14 @@ function createStationState(config) {
       ldtTimeStamp: new Date('1970-01-01T00:00:00.000Z'),
     },
     currentCarrier: null,
+    waitingQueue: [],
     pendingCompletion: false,
     producedCount: 0,
     failedCount: 0,
     responseSeen: false,
+    xStartBlockedUntil: 0,
+    requestTimeout: null,
+    rejectCounts: {},
   };
 }
 
@@ -150,9 +185,30 @@ function addStation(namespace, station) {
   addVariable(namespace, processData, 'ldtTimeStamp', `${processPrefix}.ldtTimeStamp`, DataType.DateTime, () => station.processData.ldtTimeStamp, (value) => { station.processData.ldtTimeStamp = new Date(value); });
 }
 
+function processNextInQueue(station) {
+  if (station.waitingQueue.length === 0) return;
+  if (station.query.xStart || station.state.xBusy) return;
+  const now = Date.now();
+  if (station.xStartBlockedUntil > now) {
+    setTimeout(() => processNextInQueue(station), Math.min(100, station.xStartBlockedUntil - now)).unref();
+    return;
+  }
+  const next = station.waitingQueue.shift();
+  console.log(`${station.name}: naechster Carrier ${next.carrierId} aus der Queue (${station.waitingQueue.length} verbleibend)`);
+  requestMesData(station, next);
+}
+
 function requestMesData(station, carrier) {
   if (station.query.xStart || station.state.xBusy) {
-    setTimeout(() => requestMesData(station, carrier), 250).unref();
+    station.waitingQueue.push(carrier);
+    console.log(`${station.name}: carrier ${carrier.carrierId} in die Queue (Position ${station.waitingQueue.length})`);
+    return;
+  }
+  const now = Date.now();
+  if (station.xStartBlockedUntil > now) {
+    station.waitingQueue.push(carrier);
+    console.log(`${station.name}: carrier ${carrier.carrierId} in die Queue (xStart blockiert, Position ${station.waitingQueue.length})`);
+    setTimeout(() => processNextInQueue(station), Math.min(100, station.xStartBlockedUntil - now)).unref();
     return;
   }
   station.responseSeen = false;
@@ -169,6 +225,25 @@ function requestMesData(station, carrier) {
   station.query.xError = false;
   station.query.xStart = true;
   station.state.xBusy = true;
+
+  if (station.requestTimeout) clearTimeout(station.requestTimeout);
+  station.requestTimeout = setTimeout(() => {
+    if (station.query.xStart) {
+      const carrierId = station.query.uiCarrierId;
+      station.rejectCounts[carrierId] = (station.rejectCounts[carrierId] || 0) + 1;
+      console.log(`${station.name}: MES-Timeout nach 15s, Station wird freigegeben (${station.rejectCounts[carrierId]}. Mal)`);
+      if (station.rejectCounts[carrierId] >= 3 && station.state.xAuto) {
+        console.log(`${station.name}: Carrier ${carrierId} haengt – Station wird gestoppt`);
+        station.state.xAuto = false;
+        station.state.xErrL0 = true;
+      }
+      station.query.xStart = false;
+      station.state.xBusy = false;
+      station.currentCarrier = null;
+      station.requestTimeout = null;
+      setTimeout(() => processNextInQueue(station), 100).unref();
+    }
+  }, 15000).unref();
 
   console.log(`${station.name}: carrier ${carrier.carrierId} angekommen, MES-Daten angefordert`);
 }
@@ -205,6 +280,7 @@ function completeStationCycle(station) {
   station.state.xBusy = false;
   station.currentCarrier = null;
   station.pendingCompletion = false;
+  station.xStartBlockedUntil = Date.now() + 600;
 
   if (!failed && station.query.uiNextResourceId) {
     const nextStation = stations.find((candidate) => candidate.resourceId === station.query.uiNextResourceId);
@@ -213,12 +289,18 @@ function completeStationCycle(station) {
       setTimeout(() => requestMesData(nextStation, carrier), transferMs).unref();
     }
   }
+
+  setTimeout(() => processNextInQueue(station), 100).unref();
 }
 
 function simulatePlc(station) {
   
   setInterval(() => {
     if (station.control.xCmdReset) {
+      const stuckCarrier = station.currentCarrier || {
+        carrierId: station.processData ? station.processData.iCarrierID : 0,
+        partNo: 'WEBSHOP-PRODUCT-DEMO',
+      };
       station.query.xStart = false;
       station.query.xQryBusy = false;
       station.query.xDone = false;
@@ -226,10 +308,19 @@ function simulatePlc(station) {
       station.state.xBusy = false;
       station.state.xReset = true;
       station.state.xErrL0 = false;
+      station.state.xAuto = true;
       station.currentCarrier = null;
+      station.waitingQueue = [];
       station.responseSeen = false;
       station.control.xCmdReset = false;
-      console.log(`${station.name}: Reset-Befehl vom MES ausgefuehrt`);
+      delete station.rejectCounts[stuckCarrier.carrierId];
+      if (station.resourceId === 3) {
+        console.log(`${station.name}: Reset – Carrier ${stuckCarrier.carrierId} bleibt an Q01, wird fortgesetzt`);
+        setTimeout(() => requestMesData(station, stuckCarrier), transferMs).unref();
+      } else {
+        console.log(`${station.name}: Reset – Carrier ${stuckCarrier.carrierId} wird zu S01 transportiert`);
+        setTimeout(() => releaseCarrier(stuckCarrier), transferMs).unref();
+      }
     }
 
     if (station.control.xCmdStop) {
@@ -259,21 +350,32 @@ function simulatePlc(station) {
 
     if (station.query.xStart && (station.query.xDone || station.query.xError) && !station.responseSeen) {
       station.responseSeen = true;
+      if (station.requestTimeout) { clearTimeout(station.requestTimeout); station.requestTimeout = null; }
       console.log(`${station.name}: MES-Antwort result=${station.query.uiResultCode}, order=${station.query.sOrderNo || '-'}`);
       if (station.query.xDone) {
+        delete station.rejectCounts[station.query.uiCarrierId];
         console.log(`${station.name}: ${station.operation} gestartet, cycleTime=${station.cycleTimeMs} ms`);
         setTimeout(() => completeStationCycle(station), station.cycleTimeMs).unref();
       } else {
-        console.log(`${station.name}: carrier ${station.query.uiCarrierId} abgewiesen`);
+        const carrierId = station.query.uiCarrierId;
+        station.rejectCounts[carrierId] = (station.rejectCounts[carrierId] || 0) + 1;
+        console.log(`${station.name}: carrier ${carrierId} abgewiesen (${station.rejectCounts[carrierId]}. Mal)`);
+        if (station.rejectCounts[carrierId] >= 3 && station.state.xAuto) {
+          console.log(`${station.name}: Carrier ${carrierId} haengt – Station wird gestoppt`);
+          station.state.xAuto = false;
+          station.state.xErrL0 = true;
+        }
         station.query.xStart = false;
         station.state.xBusy = false;
         station.currentCarrier = null;
+        setTimeout(() => processNextInQueue(station), 100).unref();
       }
     }
   }, 100).unref();
 }
 
 function releaseCarrier(carrier) {
+  if (deactivatedCarrierIds.has(carrier.carrierId)) return;
   console.log(`Wareneingang: carrier ${carrier.carrierId} (${carrier.partNo}) in die Linie freigegeben`);
   requestMesData(stations[0], carrier);
 }
@@ -287,6 +389,32 @@ function scheduleCarrierReleases(carrier) {
     releaseCarrier(carrier);
     setInterval(() => releaseCarrier(carrier), releaseEveryMs).unref();
   }, carrier.releaseDelay).unref();
+}
+
+const knownCarrierIds = new Set();
+const deactivatedCarrierIds = new Set();
+
+function scheduleNewCarrier(carrierPlan) {
+  if (knownCarrierIds.has(carrierPlan.carrierId)) {
+    deactivatedCarrierIds.delete(carrierPlan.carrierId);
+    return;
+  }
+  knownCarrierIds.add(carrierPlan.carrierId);
+  scheduleCarrierReleases(carrierPlan);
+  console.log(`Neuer Carrier ${carrierPlan.carrierId} automatisch aufgenommen`);
+}
+
+async function refreshCarriers() {
+  try {
+    const plans = await fetchCarriersFromMes();
+    const activeIds = new Set(plans.map((p) => p.carrierId));
+    for (const id of knownCarrierIds) {
+      if (!activeIds.has(id)) deactivatedCarrierIds.add(id);
+    }
+    for (const plan of plans) scheduleNewCarrier(plan);
+  } catch (err) {
+    // silent – fetchCarriersFromMes already logs warnings
+  }
 }
 
 async function start() {
@@ -303,9 +431,9 @@ async function start() {
     console.log(`- Resource ${station.resourceId}: ${station.name}, operation=${station.operation}, cycle=${station.cycleTimeMs} ms`);
     simulatePlc(station);
   }
-  for (const carrier of carrierPlans) {
-    scheduleCarrierReleases(carrier);
-  }
+  await refreshCarriers();
+  console.log(`Carrier automatisch von ${mesApiUrl} geladen, Polling alle 15s`);
+  setInterval(() => void refreshCarriers(), 15000).unref();
 }
 
 async function shutdown() {
