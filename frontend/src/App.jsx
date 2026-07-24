@@ -11,8 +11,11 @@ import LoginPage from "./pages/Login.jsx";
 import UsersPage from "./pages/Users.jsx";
 import CarriersPage from "./pages/Carriers.jsx";
 import OrdersPage from "./pages/Orders.jsx";
+import NotificationsPage from "./pages/Notifications.jsx";
+import ShiftsPage from "./pages/Shifts.jsx";
 import { useAuth } from "./providers/AuthProvider.jsx";
 import { hasRole, ROLES } from "./utils/roles.js";
+import { I18nProvider } from "./i18n/I18nProvider.jsx";
 
 function AdminRoute({ children }) {
   const { user } = useAuth();
@@ -38,6 +41,8 @@ function ProtectedApp() {
           <Route path="shopfloor/*" element={<ShopfloorPage />} />
           <Route path="users" element={<AdminRoute><UsersPage /></AdminRoute>} />
           <Route path="carriers" element={<CarriersPage />} />
+          <Route path="notifications" element={<NotificationsPage />} />
+          <Route path="shifts" element={<ShiftsPage />} />
         </Routes>
       </main>
     </div>
@@ -46,12 +51,14 @@ function ProtectedApp() {
 
 export default function App() {
   return (
-    <>
-      <Routes>
-        <Route path="/login" element={<LoginPage />} />
-        <Route path="/*" element={<ProtectedApp />} />
-      </Routes>
-      <SystemStatus />
-    </>
+    <I18nProvider>
+      <>
+        <Routes>
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="/*" element={<ProtectedApp />} />
+        </Routes>
+        <SystemStatus />
+      </>
+    </I18nProvider>
   );
 }

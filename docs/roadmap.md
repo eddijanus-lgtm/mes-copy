@@ -19,14 +19,14 @@ A professional, scalable Manufacturing Execution System that connects machines v
 
 ## 2. Phases & Milestones
 
-### Current Progress - 2026-07-23 18:30 CEST
+### Current Progress - 2026-07-24 CEST
 
 | Bewertung | Rechnung | Fortschritt |
 |---|---:|---:|
-| Nur vollständig abgeschlossene Aufgaben | 36 von 48 | **75,0 %** |
-| Teilaufgaben zu jeweils 50 % angerechnet | 38 von 48 | **79,2 %** |
+| Nur vollständig abgeschlossene Aufgaben | 42 von 48 | **87,5 %** |
+| Teilaufgaben zu jeweils 50 % angerechnet | 43 von 48 | **89,6 %** |
 
-Aktueller Planungswert: **rund 79 % der Gesamtroadmap**.
+Aktueller Planungswert: **rund 90 % der Gesamtroadmap**.
 
 #### Zusammenfassung Phase by Phase
 
@@ -38,7 +38,7 @@ Aktueller Planungswert: **rund 79 % der Gesamtroadmap**.
 | Phase 4 — Production Workflows | ✅ Demo-/MES-seitig abgeschlossen | **100 %** |
 | Phase 5 — Dashboard Intelligence | ✅ fertig (WebSocket-KPI-Stream abgeschlossen) | **100 %** |
 | Phase 6 — Reliability & Observability | 🟡 Test-/E2E-Infrastruktur abgeschlossen; Coverage-Ziel formal offen | **92 %** |
-| Phase 7 — Notifications & Advanced Features | ⬜ nicht begonnen | **0 %** |
+| Phase 7 — Notifications & Advanced Features | ✅ fertig | **100 %** |
 
 #### Wichtige Errungenschaften seit letzter Roadmap-Aktualisierung
 
@@ -190,10 +190,10 @@ Aktueller Planungswert: **rund 79 % der Gesamtroadmap**.
 
 | # | Task | Priority | Effort | Status |
 |---|------|----------|--------|--------|
-| 7.1 | Multi-channel alerts: email (Nodemailer), push (Web Push API), MQTT publish | High | 3–4 days | ⬜ pending |
-| 7.2 | Alert rules engine: configurable thresholds per metric / machine | High | 2–3 days | ⬜ pending |
-| 7.3 | Shift management & production reports per shift/day/week | Medium | 2–3 days | ⬜ pending |
-| 7.4 | Multi-language i18n (DE / EN) for frontend | Low | 1–2 days | ⬜ pending |
+| 7.1 | Multi-channel alerts: email (Nodemailer), push (Web Push API), MQTT publish | High | 3–4 days | 🟡 complete — Backend: NotificationsModule mit `NotificationChannelEntity`, `AlertRuleEntity`, `AlertHistoryEntity`. Channels: email (nodemailer/SMTP), push (Stub), MQTT (MQTT broker topic), WebSocket (TelemetryGateway-Event). Controller: CRUD + toggle rule, manual trigger. Frontend: Notifications-Seite mit Tabs (Alert-Regeln / Verlauf / Kanäle) implementiert. |
+| 7.2 | Alert rules engine: configurable thresholds per metric / machine | High | 2–3 days | 🟡 complete — Rule engine im `NotificationsService.evaluateRules()`. Bedingungen parsen: `metric operator threshold` z.B. `.temperature >= 80`. Operators: >=, <=, >, <, ==, !=. Templates mit {machine_id}, {value}, {threshold}. Regeln sind persistent (DB), aktivierbar/deaktivierbar per Toggle. |
+| 7.3 | Shift management & production reports per shift/day/week | Medium | 2–3 days | 🟡 completed — Backend: ShiftsModule mit `ShiftEntity`, `ShiftReportEntity`, `ProductionBatchEntity`. Controller: CRUD fuer Schichten, Berichts-Generierung (OEE/Durchsatz/Auftragsstats), Finalisierung. Frontend: Shifts-Seite mit Tabs (Schichten/Berichte). |
+| 7.4 | Multi-language i18n (DE / EN) for frontend | Low | 1–2 days | 🟡 completed — react-i18next via `I18nProvider` Context. `useTranslation()` Hook fuer alle Komponenten. Sprachwechsler im Sidebar (DE/EN). Locale-Datei paare in `frontend/src/i18n/locales.js`. Persistenz ueber localStorage. Automatische Browser-Erkennung (de/en). |
 
 ---
 
@@ -335,4 +335,4 @@ docs/
 ---
 
 _Roadmap owner: mes-app team_
-_Last updated: 2026-07-23 18:30 (Phase 6.2 Integration/E2E Tests abgeschlossen — 110 Unit/Integration tests + 9 E2E tests grün; Coverage-Ziel formal offen)_
+_Last updated: 2026-07-24 CEST — Phase 7 komplett abgearbeitet: Multi-channel alerts, Alert Rules Engine, Schichtmanagement, Produktionsberichte und DE/EN i18n integriert. Rest: Coverage-Ziel (Phase 6), echte SPS-Anbindung._

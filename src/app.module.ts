@@ -16,6 +16,9 @@ import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { CarriersModule } from './carriers/carriers.module';
 import { MaterialsModule } from './materials/materials.module';
 import { DashboardModule } from './dashboard/dashboard.module';
+import { NotificationsModule } from './notifications/notifications.module';
+import { ShiftsModule } from './shifts/shifts.module';
+import { ScheduleModule } from '@nestjs/schedule';
 
 @Module({
   imports: [
@@ -44,6 +47,9 @@ import { DashboardModule } from './dashboard/dashboard.module';
     CarriersModule,
     MaterialsModule,
     DashboardModule,
+    NotificationsModule,
+    ShiftsModule,
+    ScheduleModule.forRoot(),
   ],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
 })
