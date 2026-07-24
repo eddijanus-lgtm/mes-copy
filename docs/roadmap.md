@@ -1,6 +1,6 @@
 # MES Production Control System – Roadmap 2026
 
-_Document version: v1.2 — July 2026_
+_Document version: v1.3 — July 2026_
 
 ---
 
@@ -22,11 +22,11 @@ A professional, scalable Manufacturing Execution System that connects machines v
 ### Current Progress - 2026-07-24 CEST
 
 | Bewertung | Rechnung | Fortschritt |
-|---|---:|---:|
-| Nur vollständig abgeschlossene Aufgaben | 42 von 48 | **87,5 %** |
-| Teilaufgaben zu jeweils 50 % angerechnet | 43 von 48 | **89,6 %** |
+|---|---|---:|---:|
+| Nur vollständig abgeschlossene Aufgaben | 45 von 48 | **93,75 %** |
+| Teilaufgaben zu jeweils 50 % angerechnet | 46 von 48 | **95,8 %** |
 
-Aktueller Planungswert: **rund 90 % der Gesamtroadmap**.
+Aktueller Planungswert: **rund 95 % der Gesamtroadmap**.
 
 #### Zusammenfassung Phase by Phase
 
@@ -41,6 +41,11 @@ Aktueller Planungswert: **rund 90 % der Gesamtroadmap**.
 | Phase 7 — Notifications & Advanced Features | ✅ fertig | **100 %** |
 
 #### Wichtige Errungenschaften seit letzter Roadmap-Aktualisierung
+
+- **FIFO-Queue pro Station**: `requestMesData` legt Carrier bei besetzter Station in eine `waitingQueue[]`; nach Fertigstellung/Abweisung/Timeout wird der nächste Carrier mittels `processNextInQueue()` automatisch nachgezogen. Explizite Logs (`in die Queue Position N`, `naechster Carrier X aus der Queue (N verbleibend)`) machen die Warteschlange sichtbar. Queue wird bei `xCmdReset` geleert.
+- **Polling erkennt fallende xStart-Flanke**: Die OPC UA Polling-Schleife ruft jetzt auch `acknowledge` auf, wenn `xStart` von `true` auf `false` wechselt. Damit wird das `processing`-Set einer Station immer korrekt freigegeben, auch wenn die Subscription den Ablauf verpasst.
+- **MES-Timeout zählt als Rejection**: Der 15s-Timeout im Testserver inkrementiert jetzt `rejectCounts`. Nach 3 Timeouts pro Carrier stoppt die Station (`xAuto=false, xErrL0=true`). Die Stuck-Erkennung greift somit auch bei Verbindungsabbrüchen.
+- **ConnectionRecoveryService**: Neues Modul in `src/opcua/connection-recovery.service.ts`. Erzeugt `critical`-Alarm bei OPC UA Disconnect während aktiver Produktion. Nach Reconnect/Startup: Carrier-Positionsabgleich via OPC UA `readNode`, Step-Korrektur wenn Carrier an einer Station gefunden wird.
 
 - `Edge Gateway` wurde fachlich korrekt zu `Shopfloor Gateway` umbenannt. Der Shopfloor Gateway ist die OT/IT-Vermittlungsschicht zwischen SPS und MES — keine Produktionsroute.
 - Alle API-Pfade, Frontend-Routen und Telemetrie-Typen auf `/shopfloor/*`, `shopfloor.telemetry`, `/api/shopfloor/ws` aktualisiert; Backend- und Frontend-Builds unverändert erfolgreich.
@@ -335,4 +340,4 @@ docs/
 ---
 
 _Roadmap owner: mes-app team_
-_Last updated: 2026-07-24 CEST — Phase 7 komplett abgearbeitet: Multi-channel alerts, Alert Rules Engine, Schichtmanagement, Produktionsberichte und DE/EN i18n integriert. Rest: Coverage-Ziel (Phase 6), echte SPS-Anbindung._
+_Last updated: 2026-07-24 CEST (v1.3) — FIFO-Queue pro Station, Polling-fallende-Flanke, MES-Timeout-Rejection, ConnectionRecoveryService. Rest: Coverage-Ziel (Phase 6), echte SPS-Anbindung._
