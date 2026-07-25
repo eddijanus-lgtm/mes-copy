@@ -1,0 +1,83 @@
+{
+  "profileVersion": "1.0",
+  "machineId": "YOUR_MACHINE_ID",
+  "displayName": "YOUR_MACHINE_DISPLAY_NAME",
+  "description": "Replace with a meaningful machine description",
+  "transport": "opcua",
+  "operatingMode": "control",
+  "connection": {
+    "endpointUrl": "opc.tcp://YOUR_ENDPOINT:4840",
+    "applicationName": "YOUR_APPLICATION_NAME",
+    "security": {
+      "mode": "SignAndEncrypt",
+      "policy": "Basic256Sha256",
+      "certificatePathEnv": "OPCUA_CERTIFICATE_PATH",
+      "privateKeyPathEnv": "OPCUA_PRIVATE_KEY_PATH"
+    },
+    "authentication": {
+      "type": "username",
+      "usernameEnv": "OPCUA_USERNAME",
+      "passwordEnv": "OPCUA_PASSWORD"
+    },
+    "connectionTimeoutMs": 15000,
+    "sessionTimeoutMs": 120000,
+    "reconnect": {
+      "enabled": true,
+      "initialDelayMs": 2000,
+      "maximumDelayMs": 60000,
+      "backoffMultiplier": 2,
+      "maxAttempts": 0
+    }
+  },
+  "namespaces": [
+    {
+      "key": "main",
+      "uri": "YOUR_NAMESPACE_URI"
+    }
+  ],
+  "stations": [
+    {
+      "stationId": "YOUR_STATION_ID",
+      "displayName": "YOUR_STATION_DISPLAY_NAME",
+      "description": "Replace with station description",
+      "enabled": true,
+      "signals": [
+        {
+          "key": "workRequest",
+          "role": "workRequest",
+          "direction": "machineToMes",
+          "namespace": "main",
+          "identifier": "YOUR_WORK_REQUEST_IDENTIFIER",
+          "dataType": "Boolean",
+          "access": "read",
+          "required": true
+        },
+        {
+          "key": "carrierId",
+          "role": "carrierId",
+          "direction": "machineToMes",
+          "namespace": "main",
+          "identifier": "YOUR_CARRIER_ID_IDENTIFIER",
+          "dataType": "String",
+          "access": "read",
+          "required": true
+        },
+        {
+          "key": "processResult",
+          "role": "processResult",
+          "direction": "machineToMes",
+          "namespace": "main",
+          "identifier": "YOUR_PROCESS_RESULT_IDENTIFIER",
+          "dataType": "UInt32",
+          "access": "read",
+          "required": true
+        }
+      ]
+    }
+  ],
+  "metadata": {
+    "manufacturer": "YOUR_MANUFACTURER",
+    "model": "YOUR_MODEL",
+    "version": "YOUR_VERSION"
+  }
+}
