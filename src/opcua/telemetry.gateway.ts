@@ -1,12 +1,13 @@
-import { Logger, OnModuleDestroy } from '@nestjs/common';
+import { Logger, OnModuleDestroy, Inject } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { OnGatewayConnection, OnGatewayDisconnect, OnGatewayInit, WebSocketGateway, WebSocketServer } from '@nestjs/websockets';
 import { RawData, WebSocket, WebSocketServer as WsServer } from 'ws';
 import { UserRoleEnum } from '../users/user.entity';
 import { ShopfloorTelemetryEvent } from './shopfloor-telemetry';
 import { MqttGatewayService } from './mqtt-gateway.service';
-import { OpcUaService } from './opcua.service';
 import { DashboardService } from '../dashboard/dashboard.service';
+import { MACHINE_ADAPTER } from '../machines/adapters/machine-adapter.token';
+import type { MachineAdapter } from '../machines/adapters/machine-adapter.types';
 
 @WebSocketGateway({ path: '/api/shopfloor/ws' })
 export class TelemetryGateway implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect, OnModuleDestroy {
@@ -21,13 +22,13 @@ export class TelemetryGateway implements OnGatewayInit, OnGatewayConnection, OnG
 
   constructor(
     private readonly jwtService: JwtService,
-    private readonly opcUaService: OpcUaService,
+    @Inject(MACHINE_ADAPTER) private readonly machine: MachineAdapter,
     private readonly mqttGatewayService: MqttGatewayService,
     private readonly dashboardService: DashboardService,
   ) {}
 
   afterInit() {
-    this.unsubscribeOpcUa = this.opcUaService.onTelemetry((event) => this.broadcast(event));
+    this.unsubscribeOpcUa = this.machine.onTelemetry((event) => this.broadcast(event));
     this.unsubscribeMqtt = this.mqttGatewayService.onTelemetry((event) => this.broadcast(event));
     this.startKpiBroadcast();
   }

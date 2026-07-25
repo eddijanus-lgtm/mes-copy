@@ -1,8 +1,9 @@
-import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit, Inject } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { DemoRoutingResultCode, RoutingService } from '../orders/routing.service';
-import { OpcUaService } from './opcua.service';
+import { MACHINE_ADAPTER } from '../machines/adapters/machine-adapter.token';
+import type { MachineAdapter } from '../machines/adapters/machine-adapter.types';
 import { StMesHandshakeEntity, StMesHandshakeStatusEnum } from './stmes-handshake.entity';
 
 @Injectable()
@@ -11,17 +12,17 @@ export class StMesHandshakeService implements OnModuleInit {
   private readonly processing = new Set<number>();
 
   constructor(
-    private readonly opcUa: OpcUaService,
+    @Inject(MACHINE_ADAPTER) private readonly machine: MachineAdapter,
     private readonly routing: RoutingService,
     @InjectRepository(StMesHandshakeEntity) private readonly handshakes: Repository<StMesHandshakeEntity>,
   ) {}
 
   onModuleInit() {
-    this.opcUa.onStMesRequest((resourceId, active) => {
+    this.machine.onWorkRequest((resourceId, active) => {
       if (active) void this.dispatch(resourceId);
       else void this.acknowledge(resourceId);
     });
-    this.opcUa.onProcessCompleted((resourceId, timestamp) => void this.completeProcess(resourceId, timestamp));
+    this.machine.onProcessCompleted((resourceId, timestamp) => void this.completeProcess(resourceId, timestamp));
   }
 
   findRecent(limit = 100) {
@@ -31,39 +32,31 @@ export class StMesHandshakeService implements OnModuleInit {
   private async dispatch(resourceId: number) {
     if (this.processing.has(resourceId)) return;
     this.processing.add(resourceId);
-    const prefix = this.queryPrefix(resourceId);
     let journal: StMesHandshakeEntity | undefined;
 
     try {
-      const [carrierNumber, requestedResourceId] = await Promise.all([
-        this.opcUa.readNode(prefix + 'uiCarrierId'),
-        this.opcUa.readNode(prefix + 'uiResourceId'),
-      ]);
+      const request = await this.machine.readStationRequest(resourceId);
       journal = await this.handshakes.save(this.handshakes.create({
         resource_id: resourceId,
-        carrier_number: Number(carrierNumber),
-        request_payload: { carrierNumber, requestedResourceId },
+        carrier_number: request.carrierNumber,
+        request_payload: { carrierNumber: request.carrierNumber, requestedResourceId: request.requestedResourceId },
       }));
-      this.opcUa.publishStMesEvent({
+      this.machine.publishHandshakeEvent({
         resourceId,
         phase: 'requested',
-        carrierNumber: Number(carrierNumber),
-        message: `SPS fordert Daten fuer Carrier ${Number(carrierNumber)} an`,
+        carrierNumber: request.carrierNumber,
+        message: `SPS fordert Daten fuer Carrier ${request.carrierNumber} an`,
       });
 
-      await this.opcUa.writeNodes([
-        { nodeId: prefix + 'xQryBusy', dataType: 'Boolean', value: true },
-        { nodeId: prefix + 'xDone', dataType: 'Boolean', value: false },
-        { nodeId: prefix + 'xError', dataType: 'Boolean', value: false },
-      ]);
-      this.opcUa.publishStMesEvent({
+      await this.machine.markRequestBusy(resourceId);
+      this.machine.publishHandshakeEvent({
         resourceId,
         phase: 'busy',
-        carrierNumber: Number(carrierNumber),
+        carrierNumber: request.carrierNumber,
         message: 'MES prueft Auftrag und Routenschritt',
       });
 
-      const decision = await this.routing.resolveStationRequest(resourceId, Number(carrierNumber));
+      const decision = await this.routing.resolveStationRequest(resourceId, request.carrierNumber);
       const ok = decision.resultCode === DemoRoutingResultCode.OK;
       const parameters = decision.parameters || {};
       const response = {
@@ -79,21 +72,7 @@ export class StMesHandshakeService implements OnModuleInit {
         resultCode: decision.resultCode,
       };
 
-      await this.opcUa.writeNodes([
-        { nodeId: prefix + 'sOrderNo', dataType: 'String', value: response.orderNo },
-        { nodeId: prefix + 'sPartNo', dataType: 'String', value: response.partNo },
-        { nodeId: prefix + 'uiOperationNo', dataType: 'UInt16', value: response.operationNo },
-        { nodeId: prefix + 'iStepNo', dataType: 'Int16', value: response.stepNo },
-        { nodeId: prefix + 'uiNextResourceId', dataType: 'UInt16', value: response.nextResourceId },
-        { nodeId: prefix + 'iPar1', dataType: 'Int16', value: response.iPar1 },
-        { nodeId: prefix + 'iPar2', dataType: 'Int16', value: response.iPar2 },
-        { nodeId: prefix + 'iPar3', dataType: 'Int16', value: response.iPar3 },
-        { nodeId: prefix + 'iPar4', dataType: 'Int16', value: response.iPar4 },
-        { nodeId: prefix + 'uiResultCode', dataType: 'UInt16', value: response.resultCode },
-        { nodeId: prefix + 'xQryBusy', dataType: 'Boolean', value: false },
-        { nodeId: prefix + 'xDone', dataType: 'Boolean', value: ok },
-        { nodeId: prefix + 'xError', dataType: 'Boolean', value: !ok },
-      ]);
+      await this.machine.writeRoutingResponse(resourceId, { ...response, accepted: ok });
 
       Object.assign(journal, {
         carrier_id: decision.carrierId,
@@ -104,10 +83,10 @@ export class StMesHandshakeService implements OnModuleInit {
         status: ok ? StMesHandshakeStatusEnum.RESPONDED : StMesHandshakeStatusEnum.ERROR,
       });
       await this.handshakes.save(journal);
-      this.opcUa.publishStMesEvent({
+      this.machine.publishHandshakeEvent({
         resourceId,
         phase: ok ? 'done' : 'error',
-        carrierNumber: Number(carrierNumber),
+        carrierNumber: request.carrierNumber,
         resultCode: decision.resultCode,
         orderNo: response.orderNo,
         operationNo: response.operationNo,
@@ -117,12 +96,7 @@ export class StMesHandshakeService implements OnModuleInit {
     } catch (error) {
       this.logger.error(`Demo stMES dispatch failed for resource ${resourceId}: ${(error as Error).message}`);
       try {
-        await this.opcUa.writeNodes([
-          { nodeId: prefix + 'uiResultCode', dataType: 'UInt16', value: DemoRoutingResultCode.INTERNAL_ERROR },
-          { nodeId: prefix + 'xQryBusy', dataType: 'Boolean', value: false },
-          { nodeId: prefix + 'xDone', dataType: 'Boolean', value: false },
-          { nodeId: prefix + 'xError', dataType: 'Boolean', value: true },
-        ]);
+        await this.machine.writeInternalError(resourceId, DemoRoutingResultCode.INTERNAL_ERROR);
       } catch (writeError) {
         this.logger.error(`Demo stMES error response failed: ${(writeError as Error).message}`);
       }
@@ -132,7 +106,7 @@ export class StMesHandshakeService implements OnModuleInit {
         journal.error_message = (error as Error).message;
         await this.handshakes.save(journal);
       }
-      this.opcUa.publishStMesEvent({
+      this.machine.publishHandshakeEvent({
         resourceId,
         phase: 'error',
         resultCode: DemoRoutingResultCode.INTERNAL_ERROR,
@@ -142,13 +116,8 @@ export class StMesHandshakeService implements OnModuleInit {
   }
 
   private async acknowledge(resourceId: number) {
-    const prefix = this.queryPrefix(resourceId);
     try {
-      await this.opcUa.writeNodes([
-        { nodeId: prefix + 'xQryBusy', dataType: 'Boolean', value: false },
-        { nodeId: prefix + 'xDone', dataType: 'Boolean', value: false },
-        { nodeId: prefix + 'xError', dataType: 'Boolean', value: false },
-      ]);
+      await this.machine.acknowledgeRequest(resourceId);
       const latest = await this.handshakes.findOne({
         where: { resource_id: resourceId },
         order: { created_at: 'DESC' },
@@ -157,7 +126,7 @@ export class StMesHandshakeService implements OnModuleInit {
         latest.status = StMesHandshakeStatusEnum.ACKNOWLEDGED;
         latest.acknowledged_at = new Date();
         await this.handshakes.save(latest);
-        this.opcUa.publishStMesEvent({
+        this.machine.publishHandshakeEvent({
           resourceId,
           phase: 'acknowledged',
           carrierNumber: latest.carrier_number,
@@ -172,11 +141,11 @@ export class StMesHandshakeService implements OnModuleInit {
 
   private async completeProcess(resourceId: number, timestamp: Date) {
     try {
-      const carrierNumber = Number(await this.opcUa.readNode(`ns=1;s=Station${resourceId}.dbProcessData.iCarrierID`));
+      const carrierNumber = await this.machine.readCompletedCarrierNumber(resourceId);
       const completed = await this.routing.completeStationStep(resourceId, carrierNumber, timestamp);
       if (completed) {
         this.logger.log(`Completed route step for carrier ${carrierNumber} at resource ${resourceId}`);
-        this.opcUa.publishStMesEvent({
+        this.machine.publishHandshakeEvent({
           resourceId,
           phase: 'process_completed',
           carrierNumber,
@@ -187,9 +156,5 @@ export class StMesHandshakeService implements OnModuleInit {
     } catch (error) {
       this.logger.error(`Process completion failed for resource ${resourceId}: ${(error as Error).message}`);
     }
-  }
-
-  private queryPrefix(resourceId: number) {
-    return `ns=1;s=Station${resourceId}.stMES.Query.`;
   }
 }
