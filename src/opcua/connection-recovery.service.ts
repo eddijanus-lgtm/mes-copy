@@ -1,7 +1,8 @@
-import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit, Inject } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { OpcUaService } from './opcua.service';
+import { MACHINE_ADAPTER } from '../machines/adapters/machine-adapter.token';
+import type { MachineAdapter, MachineRecoverySnapshot } from '../machines/adapters/machine-adapter.types';
 import { AlarmsService } from '../alarms/alarms.service';
 import { OrderEntity } from '../orders/order.entity';
 import { OrderRouteStepEntity } from '../orders/order-route-step.entity';
@@ -13,7 +14,7 @@ export class ConnectionRecoveryService implements OnModuleInit {
   private hadActiveOrders = false;
 
   constructor(
-    private readonly opcUa: OpcUaService,
+    @Inject(MACHINE_ADAPTER) private readonly machine: MachineAdapter,
     private readonly alarms: AlarmsService,
     @InjectRepository(OrderEntity) private readonly ordersRepo: Repository<OrderEntity>,
     @InjectRepository(CarrierEntity) private readonly carriersRepo: Repository<CarrierEntity>,
@@ -21,8 +22,8 @@ export class ConnectionRecoveryService implements OnModuleInit {
   ) {}
 
   async onModuleInit() {
-    this.opcUa.onDisconnected((reason) => void this.handleDisconnect(reason));
-    this.opcUa.onConnected(() => void this.handleReconnect());
+    this.machine.onDisconnected((reason) => void this.handleDisconnect(reason));
+    this.machine.onConnected(() => void this.handleReconnect());
 
     await this.recoverFromStartup();
   }
@@ -79,17 +80,10 @@ export class ConnectionRecoveryService implements OnModuleInit {
 
     for (const resourceId of resourceIds) {
       try {
-        const carrierNumber = Number(await this.opcUa.readNode(
-          `ns=1;s=Station${resourceId}.stMES.Query.uiCarrierId`,
-        ));
-        const xStart = Boolean(await this.opcUa.readNode(
-          `ns=1;s=Station${resourceId}.stMES.Query.xStart`,
-        ));
-        const xBusy = Boolean(await this.opcUa.readNode(
-          `ns=1;s=Station${resourceId}.stMES.State.xBusy`,
-        ));
+        const snapshot: MachineRecoverySnapshot = await this.machine.readRecoverySnapshot(resourceId);
+        const { carrierNumber, requestActive, processBusy } = snapshot;
 
-        if (carrierNumber > 0 && (xStart || xBusy)) {
+        if (carrierNumber > 0 && (requestActive || processBusy)) {
           stationCarriers.push({ resourceId, carrierNumber });
         }
       } catch (err) {

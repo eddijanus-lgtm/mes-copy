@@ -3,24 +3,35 @@ import { Test, TestingModule } from '@nestjs/testing';
 import request from 'supertest';
 import { App } from 'supertest/types';
 
-jest.mock('../src/opcua/opcua.service', () => ({ OpcUaService: class OpcUaService {} }));
-jest.mock('../src/opcua/mqtt-gateway.service', () => ({ MqttGatewayService: class MqttGatewayService {} }));
-jest.mock('../src/opcua/stmes-handshake.service', () => ({ StMesHandshakeService: class StMesHandshakeService {} }));
-jest.mock('../src/opcua/webshop-orders.service', () => ({ WebshopOrdersService: class WebshopOrdersService {} }));
-
+import { MACHINE_ADAPTER } from '../src/machines/adapters/machine-adapter.token';
+import { MachineAdapter, MachineConnectionStatus } from '../src/machines/adapters/machine-adapter.types';
 import { MqttGatewayService } from '../src/opcua/mqtt-gateway.service';
-import { OpcUaService } from '../src/opcua/opcua.service';
-import { ShopfloorGatewayController } from '../src/opcua/shopfloor-gateway.controller';
 import { StMesHandshakeService } from '../src/opcua/stmes-handshake.service';
 import { WebshopOrdersService } from '../src/opcua/webshop-orders.service';
+import { ShopfloorGatewayController } from '../src/opcua/shopfloor-gateway.controller';
 
 describe('ShopfloorGatewayController (e2e)', () => {
   let app: INestApplication<App>;
-  const opcUaService = {
-    getServerStatus: jest.fn(async () => ({ connected: true, endpoint: 'opc.tcp://mock:4840/UA/WaraMesTest' })),
-    isConnected: jest.fn(() => true),
-    readNode: jest.fn(async () => 128),
-    writeNodes: jest.fn(async () => undefined),
+  const machineAdapter: jest.Mocked<MachineAdapter> = {
+    getConnectionStatus: jest.fn().mockResolvedValue({ connected: true, endpoint: 'opc.tcp://mock:4840/UA/WaraMesTest' }),
+    isConnected: jest.fn().mockReturnValue(true),
+    readDiagnosticAddress: jest.fn().mockResolvedValue(128),
+    writeDiagnosticAddresses: jest.fn().mockResolvedValue(undefined),
+    executeControlCommand: jest.fn().mockResolvedValue(undefined),
+    executeLegacyControlCommand: jest.fn().mockResolvedValue(undefined),
+    onTelemetry: jest.fn().mockReturnValue(() => {}),
+    onWorkRequest: jest.fn().mockReturnValue(() => {}),
+    onProcessCompleted: jest.fn().mockReturnValue(() => {}),
+    onConnected: jest.fn().mockReturnValue(() => {}),
+    onDisconnected: jest.fn().mockReturnValue(() => {}),
+    readStationRequest: jest.fn().mockResolvedValue({ carrierNumber: 1, requestedResourceId: 1 }),
+    markRequestBusy: jest.fn().mockResolvedValue(undefined),
+    writeRoutingResponse: jest.fn().mockResolvedValue(undefined),
+    writeInternalError: jest.fn().mockResolvedValue(undefined),
+    acknowledgeRequest: jest.fn().mockResolvedValue(undefined),
+    readCompletedCarrierNumber: jest.fn().mockResolvedValue(1),
+    readRecoverySnapshot: jest.fn().mockResolvedValue({ carrierNumber: 1, requestActive: false, processBusy: false }),
+    publishHandshakeEvent: jest.fn(),
   };
   const mqttGatewayService = {
     isConnected: jest.fn(() => true),
@@ -35,7 +46,7 @@ describe('ShopfloorGatewayController (e2e)', () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
       controllers: [ShopfloorGatewayController],
       providers: [
-        { provide: OpcUaService, useValue: opcUaService },
+        { provide: MACHINE_ADAPTER, useValue: machineAdapter },
         { provide: MqttGatewayService, useValue: mqttGatewayService },
         { provide: StMesHandshakeService, useValue: stMesHandshakeService },
         { provide: WebshopOrdersService, useValue: webshopOrdersService },
@@ -67,7 +78,7 @@ describe('ShopfloorGatewayController (e2e)', () => {
       .expect(201);
 
     expect(response.status).toBe(201);
-    expect(opcUaService.readNode).toHaveBeenCalledWith('ns=1;s=Station1.stMES.Query.uiCarrierId');
+    expect(machineAdapter.readDiagnosticAddress).toHaveBeenCalledWith('ns=1;s=Station1.stMES.Query.uiCarrierId');
   });
 
   it('maps machine control commands to OPC UA control nodes', async () => {
@@ -77,9 +88,7 @@ describe('ShopfloorGatewayController (e2e)', () => {
       .expect(201)
       .expect(({ body }) => expect(body).toMatchObject({ success: true, command: 'pause', resourceId: 2 }));
 
-    expect(opcUaService.writeNodes).toHaveBeenCalledWith([
-      { nodeId: 'ns=1;s=Station2.stMES.Control.xCmdPause', dataType: 'Boolean', value: true },
-    ]);
+    expect(machineAdapter.executeControlCommand).toHaveBeenCalledWith(2, 'pause');
   });
 
   it('publishes MQTT messages through the gateway contract', async () => {
