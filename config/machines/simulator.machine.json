@@ -42,52 +42,12 @@
       },
       "signals": [
         {
-          "key": "workRequest",
-          "role": "workRequest",
-          "direction": "machineToMes",
-          "namespace": "station",
-          "identifier": "WorkRequest",
-          "dataType": "Boolean",
-          "access": "read",
-          "required": true
-        },
-        {
-          "key": "requestBusy",
-          "role": "requestBusy",
-          "direction": "mesToMachine",
-          "namespace": "station",
-          "identifier": "RequestBusy",
-          "dataType": "Boolean",
-          "access": "write",
-          "required": true
-        },
-        {
-          "key": "requestCompleted",
-          "role": "requestCompleted",
-          "direction": "mesToMachine",
-          "namespace": "station",
-          "identifier": "RequestCompleted",
-          "dataType": "Boolean",
-          "access": "write",
-          "required": true
-        },
-        {
           "key": "carrierId",
           "role": "carrierId",
           "direction": "machineToMes",
           "namespace": "station",
-          "identifier": "CarrierId",
+          "identifier": "ns=1;s=Station1.stMES.Query.uiCarrierId",
           "dataType": "UInt32",
-          "access": "read",
-          "required": true
-        },
-        {
-          "key": "orderId",
-          "role": "orderId",
-          "direction": "machineToMes",
-          "namespace": "station",
-          "identifier": "OrderId",
-          "dataType": "String",
           "access": "read",
           "required": true
         },
@@ -96,99 +56,259 @@
           "role": "resourceId",
           "direction": "machineToMes",
           "namespace": "station",
-          "identifier": "ResourceId",
+          "identifier": "ns=1;s=Station1.stMES.Query.uiResourceId",
           "dataType": "UInt32",
           "access": "read",
           "required": true
         },
         {
-          "key": "processCompleted",
-          "role": "processCompleted",
-          "direction": "machineToMes",
+          "key": "requestBusy",
+          "role": "requestBusy",
+          "direction": "mesToMachine",
           "namespace": "station",
-          "identifier": "ProcessCompleted",
+          "identifier": "ns=1;s=Station1.stMES.Query.xQryBusy",
           "dataType": "Boolean",
-          "access": "read",
+          "access": "write",
+          "required": true
+        },
+        {
+          "key": "requestAccepted",
+          "role": "requestAccepted",
+          "direction": "mesToMachine",
+          "namespace": "station",
+          "identifier": "ns=1;s=Station1.stMES.Query.xDone",
+          "dataType": "Boolean",
+          "access": "write",
+          "required": true
+        },
+        {
+          "key": "requestRejected",
+          "role": "requestRejected",
+          "direction": "mesToMachine",
+          "namespace": "station",
+          "identifier": "ns=1;s=Station1.stMES.Query.xError",
+          "dataType": "Boolean",
+          "access": "write",
+          "required": true
+        },
+        {
+          "key": "orderId",
+          "role": "orderId",
+          "direction": "mesToMachine",
+          "namespace": "station",
+          "identifier": "ns=1;s=Station1.stMES.Query.sOrderNo",
+          "dataType": "String",
+          "access": "write",
+          "required": true
+        },
+        {
+          "key": "partNumber",
+          "role": "partNumber",
+          "direction": "mesToMachine",
+          "namespace": "station",
+          "identifier": "ns=1;s=Station1.stMES.Query.sPartNo",
+          "dataType": "String",
+          "access": "write",
+          "required": true
+        },
+        {
+          "key": "operationId",
+          "role": "operationId",
+          "direction": "mesToMachine",
+          "namespace": "station",
+          "identifier": "ns=1;s=Station1.stMES.Query.uiOperationNo",
+          "dataType": "UInt16",
+          "access": "write",
+          "required": true
+        },
+        {
+          "key": "stepNumber",
+          "role": "stepNumber",
+          "direction": "mesToMachine",
+          "namespace": "station",
+          "identifier": "ns=1;s=Station1.stMES.Query.iStepNo",
+          "dataType": "Int16",
+          "access": "write",
+          "required": true
+        },
+        {
+          "key": "nextStationId",
+          "role": "nextStationId",
+          "direction": "mesToMachine",
+          "namespace": "station",
+          "identifier": "ns=1;s=Station1.stMES.Query.uiNextResourceId",
+          "dataType": "UInt16",
+          "access": "write",
+          "required": true
+        },
+        {
+          "key": "custom",
+          "role": "custom",
+          "direction": "mesToMachine",
+          "namespace": "station",
+          "identifier": "ns=1;s=Station1.stMES.Query.iPar1",
+          "dataType": "Int16",
+          "access": "write",
           "required": true
         },
         {
           "key": "processResult",
           "role": "processResult",
+          "direction": "mesToMachine",
+          "namespace": "station",
+          "identifier": "ns=1;s=Station1.stMES.Query.uiResultCode",
+          "dataType": "UInt16",
+          "access": "write",
+          "required": true
+        },
+        {
+          "key": "workRequest",
+          "role": "workRequest",
           "direction": "machineToMes",
           "namespace": "station",
-          "identifier": "ProcessResult",
-          "dataType": "UInt32",
+          "identifier": "ns=1;s=Station1.stMES.Query.xStart",
+          "dataType": "Boolean",
           "access": "read",
           "required": true
         },
         {
-          "key": "timestamp",
-          "role": "timestamp",
+          "key": "processActive",
+          "role": "processActive",
           "direction": "machineToMes",
           "namespace": "station",
-          "identifier": "Timestamp",
-          "dataType": "DateTime",
+          "identifier": "ns=1;s=Station1.stMES.State.xBusy",
+          "dataType": "Boolean",
           "access": "read",
+          "required": true
+        },
+        {
+          "key": "carrierIdProcess",
+          "role": "carrierId",
+          "direction": "machineToMes",
+          "namespace": "station",
+          "identifier": "ns=1;s=Station1.dbProcessData.iCarrierID",
+          "dataType": "Int16",
+          "access": "read",
+          "required": true
+        },
+        {
+          "key": "requestCompleted",
+          "role": "requestCompleted",
+          "direction": "mesToMachine",
+          "namespace": "station",
+          "identifier": "ns=1;s=Station1.stMES.Query.xDone",
+          "dataType": "Boolean",
+          "access": "write",
+          "required": true
+        },
+        {
+          "key": "requestRejected",
+          "role": "requestRejected",
+          "direction": "mesToMachine",
+          "namespace": "station",
+          "identifier": "ns=1;s=Station1.stMES.Query.xError",
+          "dataType": "Boolean",
+          "access": "write",
+          "required": true
+        },
+        {
+          "key": "cmdStart",
+          "role": "custom",
+          "direction": "mesToMachine",
+          "namespace": "station",
+          "identifier": "ns=1;s=Station1.stMES.Control.xCmdStart",
+          "dataType": "Boolean",
+          "access": "write",
+          "required": true
+        },
+        {
+          "key": "cmdStop",
+          "role": "custom",
+          "direction": "mesToMachine",
+          "namespace": "station",
+          "identifier": "ns=1;s=Station1.stMES.Control.xCmdStop",
+          "dataType": "Boolean",
+          "access": "write",
+          "required": true
+        },
+        {
+          "key": "cmdReset",
+          "role": "custom",
+          "direction": "mesToMachine",
+          "namespace": "station",
+          "identifier": "ns=1;s=Station1.stMES.Control.xCmdReset",
+          "dataType": "Boolean",
+          "access": "write",
+          "required": true
+        },
+        {
+          "key": "cmdPause",
+          "role": "custom",
+          "direction": "mesToMachine",
+          "namespace": "station",
+          "identifier": "ns=1;s=Station1.stMES.Control.xCmdPause",
+          "dataType": "Boolean",
+          "access": "write",
+          "required": true
+        },
+        {
+          "key": "legacyStart",
+          "role": "custom",
+          "direction": "mesToMachine",
+          "namespace": "station",
+          "identifier": "ns=1;s=Station1.stMES.Query.xStart",
+          "dataType": "Boolean",
+          "access": "write",
+          "required": true
+        },
+        {
+          "key": "legacyQryBusy",
+          "role": "custom",
+          "direction": "mesToMachine",
+          "namespace": "station",
+          "identifier": "ns=1;s=Station1.stMES.Query.xQryBusy",
+          "dataType": "Boolean",
+          "access": "write",
+          "required": true
+        },
+        {
+          "key": "legacyDone",
+          "role": "custom",
+          "direction": "mesToMachine",
+          "namespace": "station",
+          "identifier": "ns=1;s=Station1.stMES.Query.xDone",
+          "dataType": "Boolean",
+          "access": "write",
+          "required": true
+        },
+        {
+          "key": "legacyError",
+          "role": "custom",
+          "direction": "mesToMachine",
+          "namespace": "station",
+          "identifier": "ns=1;s=Station1.stMES.Query.xError",
+          "dataType": "Boolean",
+          "access": "write",
           "required": true
         }
       ]
     },
-{
-        "stationId": "station-b",
-        "displayName": "Station B",
-        "description": "Inspection station",
-        "enabled": true,
-        "metadata": {
-          "resourceId": "2"
-        },
+    {
+      "stationId": "station-b",
+      "displayName": "Station B",
+      "description": "Inspection station",
+      "enabled": true,
+      "metadata": {
+        "resourceId": "2"
+      },
       "signals": [
-        {
-          "key": "workRequest",
-          "role": "workRequest",
-          "direction": "machineToMes",
-          "namespace": "station",
-          "identifier": "WorkRequest",
-          "dataType": "Boolean",
-          "access": "read",
-          "required": true
-        },
-        {
-          "key": "requestBusy",
-          "role": "requestBusy",
-          "direction": "mesToMachine",
-          "namespace": "station",
-          "identifier": "RequestBusy",
-          "dataType": "Boolean",
-          "access": "write",
-          "required": true
-        },
-        {
-          "key": "requestCompleted",
-          "role": "requestCompleted",
-          "direction": "mesToMachine",
-          "namespace": "station",
-          "identifier": "RequestCompleted",
-          "dataType": "Boolean",
-          "access": "write",
-          "required": true
-        },
         {
           "key": "carrierId",
           "role": "carrierId",
           "direction": "machineToMes",
           "namespace": "station",
-          "identifier": "CarrierId",
+          "identifier": "ns=1;s=Station2.stMES.Query.uiCarrierId",
           "dataType": "UInt32",
-          "access": "read",
-          "required": true
-        },
-        {
-          "key": "orderId",
-          "role": "orderId",
-          "direction": "machineToMes",
-          "namespace": "station",
-          "identifier": "OrderId",
-          "dataType": "String",
           "access": "read",
           "required": true
         },
@@ -197,99 +317,259 @@
           "role": "resourceId",
           "direction": "machineToMes",
           "namespace": "station",
-          "identifier": "ResourceId",
+          "identifier": "ns=1;s=Station2.stMES.Query.uiResourceId",
           "dataType": "UInt32",
           "access": "read",
           "required": true
         },
         {
-          "key": "processCompleted",
-          "role": "processCompleted",
-          "direction": "machineToMes",
+          "key": "requestBusy",
+          "role": "requestBusy",
+          "direction": "mesToMachine",
           "namespace": "station",
-          "identifier": "ProcessCompleted",
+          "identifier": "ns=1;s=Station2.stMES.Query.xQryBusy",
           "dataType": "Boolean",
-          "access": "read",
+          "access": "write",
+          "required": true
+        },
+        {
+          "key": "requestAccepted",
+          "role": "requestAccepted",
+          "direction": "mesToMachine",
+          "namespace": "station",
+          "identifier": "ns=1;s=Station2.stMES.Query.xDone",
+          "dataType": "Boolean",
+          "access": "write",
+          "required": true
+        },
+        {
+          "key": "requestRejected",
+          "role": "requestRejected",
+          "direction": "mesToMachine",
+          "namespace": "station",
+          "identifier": "ns=1;s=Station2.stMES.Query.xError",
+          "dataType": "Boolean",
+          "access": "write",
+          "required": true
+        },
+        {
+          "key": "orderId",
+          "role": "orderId",
+          "direction": "mesToMachine",
+          "namespace": "station",
+          "identifier": "ns=1;s=Station2.stMES.Query.sOrderNo",
+          "dataType": "String",
+          "access": "write",
+          "required": true
+        },
+        {
+          "key": "partNumber",
+          "role": "partNumber",
+          "direction": "mesToMachine",
+          "namespace": "station",
+          "identifier": "ns=1;s=Station2.stMES.Query.sPartNo",
+          "dataType": "String",
+          "access": "write",
+          "required": true
+        },
+        {
+          "key": "operationId",
+          "role": "operationId",
+          "direction": "mesToMachine",
+          "namespace": "station",
+          "identifier": "ns=1;s=Station2.stMES.Query.uiOperationNo",
+          "dataType": "UInt16",
+          "access": "write",
+          "required": true
+        },
+        {
+          "key": "stepNumber",
+          "role": "stepNumber",
+          "direction": "mesToMachine",
+          "namespace": "station",
+          "identifier": "ns=1;s=Station2.stMES.Query.iStepNo",
+          "dataType": "Int16",
+          "access": "write",
+          "required": true
+        },
+        {
+          "key": "nextStationId",
+          "role": "nextStationId",
+          "direction": "mesToMachine",
+          "namespace": "station",
+          "identifier": "ns=1;s=Station2.stMES.Query.uiNextResourceId",
+          "dataType": "UInt16",
+          "access": "write",
+          "required": true
+        },
+        {
+          "key": "custom",
+          "role": "custom",
+          "direction": "mesToMachine",
+          "namespace": "station",
+          "identifier": "ns=1;s=Station2.stMES.Query.iPar1",
+          "dataType": "Int16",
+          "access": "write",
           "required": true
         },
         {
           "key": "processResult",
           "role": "processResult",
+          "direction": "mesToMachine",
+          "namespace": "station",
+          "identifier": "ns=1;s=Station2.stMES.Query.uiResultCode",
+          "dataType": "UInt16",
+          "access": "write",
+          "required": true
+        },
+        {
+          "key": "workRequest",
+          "role": "workRequest",
           "direction": "machineToMes",
           "namespace": "station",
-          "identifier": "ProcessResult",
-          "dataType": "UInt32",
+          "identifier": "ns=1;s=Station2.stMES.Query.xStart",
+          "dataType": "Boolean",
           "access": "read",
           "required": true
         },
         {
-          "key": "timestamp",
-          "role": "timestamp",
+          "key": "processActive",
+          "role": "processActive",
           "direction": "machineToMes",
           "namespace": "station",
-          "identifier": "Timestamp",
-          "dataType": "DateTime",
+          "identifier": "ns=1;s=Station2.stMES.State.xBusy",
+          "dataType": "Boolean",
           "access": "read",
+          "required": true
+        },
+        {
+          "key": "carrierIdProcess",
+          "role": "carrierId",
+          "direction": "machineToMes",
+          "namespace": "station",
+          "identifier": "ns=1;s=Station2.dbProcessData.iCarrierID",
+          "dataType": "Int16",
+          "access": "read",
+          "required": true
+        },
+        {
+          "key": "requestCompleted",
+          "role": "requestCompleted",
+          "direction": "mesToMachine",
+          "namespace": "station",
+          "identifier": "ns=1;s=Station2.stMES.Query.xDone",
+          "dataType": "Boolean",
+          "access": "write",
+          "required": true
+        },
+        {
+          "key": "requestRejected",
+          "role": "requestRejected",
+          "direction": "mesToMachine",
+          "namespace": "station",
+          "identifier": "ns=1;s=Station2.stMES.Query.xError",
+          "dataType": "Boolean",
+          "access": "write",
+          "required": true
+        },
+        {
+          "key": "cmdStart",
+          "role": "custom",
+          "direction": "mesToMachine",
+          "namespace": "station",
+          "identifier": "ns=1;s=Station2.stMES.Control.xCmdStart",
+          "dataType": "Boolean",
+          "access": "write",
+          "required": true
+        },
+        {
+          "key": "cmdStop",
+          "role": "custom",
+          "direction": "mesToMachine",
+          "namespace": "station",
+          "identifier": "ns=1;s=Station2.stMES.Control.xCmdStop",
+          "dataType": "Boolean",
+          "access": "write",
+          "required": true
+        },
+        {
+          "key": "cmdReset",
+          "role": "custom",
+          "direction": "mesToMachine",
+          "namespace": "station",
+          "identifier": "ns=1;s=Station2.stMES.Control.xCmdReset",
+          "dataType": "Boolean",
+          "access": "write",
+          "required": true
+        },
+        {
+          "key": "cmdPause",
+          "role": "custom",
+          "direction": "mesToMachine",
+          "namespace": "station",
+          "identifier": "ns=1;s=Station2.stMES.Control.xCmdPause",
+          "dataType": "Boolean",
+          "access": "write",
+          "required": true
+        },
+        {
+          "key": "legacyStart",
+          "role": "custom",
+          "direction": "mesToMachine",
+          "namespace": "station",
+          "identifier": "ns=1;s=Station2.stMES.Query.xStart",
+          "dataType": "Boolean",
+          "access": "write",
+          "required": true
+        },
+        {
+          "key": "legacyQryBusy",
+          "role": "custom",
+          "direction": "mesToMachine",
+          "namespace": "station",
+          "identifier": "ns=1;s=Station2.stMES.Query.xQryBusy",
+          "dataType": "Boolean",
+          "access": "write",
+          "required": true
+        },
+        {
+          "key": "legacyDone",
+          "role": "custom",
+          "direction": "mesToMachine",
+          "namespace": "station",
+          "identifier": "ns=1;s=Station2.stMES.Query.xDone",
+          "dataType": "Boolean",
+          "access": "write",
+          "required": true
+        },
+        {
+          "key": "legacyError",
+          "role": "custom",
+          "direction": "mesToMachine",
+          "namespace": "station",
+          "identifier": "ns=1;s=Station2.stMES.Query.xError",
+          "dataType": "Boolean",
+          "access": "write",
           "required": true
         }
       ]
     },
-{
-        "stationId": "station-c",
-        "displayName": "Station C",
-        "description": "Packing station",
-        "enabled": true,
-        "metadata": {
-          "resourceId": "3"
-        },
+    {
+      "stationId": "station-c",
+      "displayName": "Station C",
+      "description": "Packing station",
+      "enabled": true,
+      "metadata": {
+        "resourceId": "3"
+      },
       "signals": [
-        {
-          "key": "workRequest",
-          "role": "workRequest",
-          "direction": "machineToMes",
-          "namespace": "station",
-          "identifier": "WorkRequest",
-          "dataType": "Boolean",
-          "access": "read",
-          "required": true
-        },
-        {
-          "key": "requestBusy",
-          "role": "requestBusy",
-          "direction": "mesToMachine",
-          "namespace": "station",
-          "identifier": "RequestBusy",
-          "dataType": "Boolean",
-          "access": "write",
-          "required": true
-        },
-        {
-          "key": "requestCompleted",
-          "role": "requestCompleted",
-          "direction": "mesToMachine",
-          "namespace": "station",
-          "identifier": "RequestCompleted",
-          "dataType": "Boolean",
-          "access": "write",
-          "required": true
-        },
         {
           "key": "carrierId",
           "role": "carrierId",
           "direction": "machineToMes",
           "namespace": "station",
-          "identifier": "CarrierId",
+          "identifier": "ns=1;s=Station3.stMES.Query.uiCarrierId",
           "dataType": "UInt32",
-          "access": "read",
-          "required": true
-        },
-        {
-          "key": "orderId",
-          "role": "orderId",
-          "direction": "machineToMes",
-          "namespace": "station",
-          "identifier": "OrderId",
-          "dataType": "String",
           "access": "read",
           "required": true
         },
@@ -298,39 +578,239 @@
           "role": "resourceId",
           "direction": "machineToMes",
           "namespace": "station",
-          "identifier": "ResourceId",
+          "identifier": "ns=1;s=Station3.stMES.Query.uiResourceId",
           "dataType": "UInt32",
           "access": "read",
           "required": true
         },
         {
-          "key": "processCompleted",
-          "role": "processCompleted",
-          "direction": "machineToMes",
+          "key": "requestBusy",
+          "role": "requestBusy",
+          "direction": "mesToMachine",
           "namespace": "station",
-          "identifier": "ProcessCompleted",
+          "identifier": "ns=1;s=Station3.stMES.Query.xQryBusy",
           "dataType": "Boolean",
-          "access": "read",
+          "access": "write",
+          "required": true
+        },
+        {
+          "key": "requestAccepted",
+          "role": "requestAccepted",
+          "direction": "mesToMachine",
+          "namespace": "station",
+          "identifier": "ns=1;s=Station3.stMES.Query.xDone",
+          "dataType": "Boolean",
+          "access": "write",
+          "required": true
+        },
+        {
+          "key": "requestRejected",
+          "role": "requestRejected",
+          "direction": "mesToMachine",
+          "namespace": "station",
+          "identifier": "ns=1;s=Station3.stMES.Query.xError",
+          "dataType": "Boolean",
+          "access": "write",
+          "required": true
+        },
+        {
+          "key": "orderId",
+          "role": "orderId",
+          "direction": "mesToMachine",
+          "namespace": "station",
+          "identifier": "ns=1;s=Station3.stMES.Query.sOrderNo",
+          "dataType": "String",
+          "access": "write",
+          "required": true
+        },
+        {
+          "key": "partNumber",
+          "role": "partNumber",
+          "direction": "mesToMachine",
+          "namespace": "station",
+          "identifier": "ns=1;s=Station3.stMES.Query.sPartNo",
+          "dataType": "String",
+          "access": "write",
+          "required": true
+        },
+        {
+          "key": "operationId",
+          "role": "operationId",
+          "direction": "mesToMachine",
+          "namespace": "station",
+          "identifier": "ns=1;s=Station3.stMES.Query.uiOperationNo",
+          "dataType": "UInt16",
+          "access": "write",
+          "required": true
+        },
+        {
+          "key": "stepNumber",
+          "role": "stepNumber",
+          "direction": "mesToMachine",
+          "namespace": "station",
+          "identifier": "ns=1;s=Station3.stMES.Query.iStepNo",
+          "dataType": "Int16",
+          "access": "write",
+          "required": true
+        },
+        {
+          "key": "nextStationId",
+          "role": "nextStationId",
+          "direction": "mesToMachine",
+          "namespace": "station",
+          "identifier": "ns=1;s=Station3.stMES.Query.uiNextResourceId",
+          "dataType": "UInt16",
+          "access": "write",
+          "required": true
+        },
+        {
+          "key": "custom",
+          "role": "custom",
+          "direction": "mesToMachine",
+          "namespace": "station",
+          "identifier": "ns=1;s=Station3.stMES.Query.iPar1",
+          "dataType": "Int16",
+          "access": "write",
           "required": true
         },
         {
           "key": "processResult",
           "role": "processResult",
+          "direction": "mesToMachine",
+          "namespace": "station",
+          "identifier": "ns=1;s=Station3.stMES.Query.uiResultCode",
+          "dataType": "UInt16",
+          "access": "write",
+          "required": true
+        },
+        {
+          "key": "workRequest",
+          "role": "workRequest",
           "direction": "machineToMes",
           "namespace": "station",
-          "identifier": "ProcessResult",
-          "dataType": "UInt32",
+          "identifier": "ns=1;s=Station3.stMES.Query.xStart",
+          "dataType": "Boolean",
           "access": "read",
           "required": true
         },
         {
-          "key": "timestamp",
-          "role": "timestamp",
+          "key": "processActive",
+          "role": "processActive",
           "direction": "machineToMes",
           "namespace": "station",
-          "identifier": "Timestamp",
-          "dataType": "DateTime",
+          "identifier": "ns=1;s=Station3.stMES.State.xBusy",
+          "dataType": "Boolean",
           "access": "read",
+          "required": true
+        },
+        {
+          "key": "carrierIdProcess",
+          "role": "carrierId",
+          "direction": "machineToMes",
+          "namespace": "station",
+          "identifier": "ns=1;s=Station3.dbProcessData.iCarrierID",
+          "dataType": "Int16",
+          "access": "read",
+          "required": true
+        },
+        {
+          "key": "requestCompleted",
+          "role": "requestCompleted",
+          "direction": "mesToMachine",
+          "namespace": "station",
+          "identifier": "ns=1;s=Station3.stMES.Query.xDone",
+          "dataType": "Boolean",
+          "access": "write",
+          "required": true
+        },
+        {
+          "key": "requestRejected",
+          "role": "requestRejected",
+          "direction": "mesToMachine",
+          "namespace": "station",
+          "identifier": "ns=1;s=Station3.stMES.Query.xError",
+          "dataType": "Boolean",
+          "access": "write",
+          "required": true
+        },
+        {
+          "key": "cmdStart",
+          "role": "custom",
+          "direction": "mesToMachine",
+          "namespace": "station",
+          "identifier": "ns=1;s=Station3.stMES.Control.xCmdStart",
+          "dataType": "Boolean",
+          "access": "write",
+          "required": true
+        },
+        {
+          "key": "cmdStop",
+          "role": "custom",
+          "direction": "mesToMachine",
+          "namespace": "station",
+          "identifier": "ns=1;s=Station3.stMES.Control.xCmdStop",
+          "dataType": "Boolean",
+          "access": "write",
+          "required": true
+        },
+        {
+          "key": "cmdReset",
+          "role": "custom",
+          "direction": "mesToMachine",
+          "namespace": "station",
+          "identifier": "ns=1;s=Station3.stMES.Control.xCmdReset",
+          "dataType": "Boolean",
+          "access": "write",
+          "required": true
+        },
+        {
+          "key": "cmdPause",
+          "role": "custom",
+          "direction": "mesToMachine",
+          "namespace": "station",
+          "identifier": "ns=1;s=Station3.stMES.Control.xCmdPause",
+          "dataType": "Boolean",
+          "access": "write",
+          "required": true
+        },
+        {
+          "key": "legacyStart",
+          "role": "custom",
+          "direction": "mesToMachine",
+          "namespace": "station",
+          "identifier": "ns=1;s=Station3.stMES.Query.xStart",
+          "dataType": "Boolean",
+          "access": "write",
+          "required": true
+        },
+        {
+          "key": "legacyQryBusy",
+          "role": "custom",
+          "direction": "mesToMachine",
+          "namespace": "station",
+          "identifier": "ns=1;s=Station3.stMES.Query.xQryBusy",
+          "dataType": "Boolean",
+          "access": "write",
+          "required": true
+        },
+        {
+          "key": "legacyDone",
+          "role": "custom",
+          "direction": "mesToMachine",
+          "namespace": "station",
+          "identifier": "ns=1;s=Station3.stMES.Query.xDone",
+          "dataType": "Boolean",
+          "access": "write",
+          "required": true
+        },
+        {
+          "key": "legacyError",
+          "role": "custom",
+          "direction": "mesToMachine",
+          "namespace": "station",
+          "identifier": "ns=1;s=Station3.stMES.Query.xError",
+          "dataType": "Boolean",
+          "access": "write",
           "required": true
         }
       ]
