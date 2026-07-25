@@ -100,4 +100,35 @@ describe('ShopfloorGatewayController (e2e)', () => {
 
     expect(mqttGatewayService.publish).toHaveBeenCalledWith('mes/test', { hello: 'world' });
   });
+
+  it('writes multiple OPC UA nodes through the gateway contract', async () => {
+    await request(app.getHttpServer())
+      .post('/api/shopfloor/opcua/write')
+      .send({
+        writes: [
+          { address: 'ns=1;s=Station1.stMES.Control.xCmdStart', dataType: 'Boolean', value: true },
+          { address: 'ns=1;s=Station1.stMES.Query.uiResultCode', dataType: 'UInt16', value: 0 },
+        ],
+      })
+      .expect(201);
+
+    expect(machineAdapter.writeDiagnosticAddresses).toHaveBeenCalledWith([
+      { address: 'ns=1;s=Station1.stMES.Control.xCmdStart', dataType: 'Boolean', value: true },
+      { address: 'ns=1;s=Station1.stMES.Query.uiResultCode', dataType: 'UInt16', value: 0 },
+    ]);
+  });
+
+  it('rejects OPC UA write with invalid payload', async () => {
+    await request(app.getHttpServer())
+      .post('/api/shopfloor/opcua/write')
+      .send({ writes: [] })
+      .expect(400);
+  });
+
+  it('rejects OPC UA write with missing address', async () => {
+    await request(app.getHttpServer())
+      .post('/api/shopfloor/opcua/write')
+      .send({ writes: [{ dataType: 'Boolean', value: true }] })
+      .expect(400);
+  });
 });

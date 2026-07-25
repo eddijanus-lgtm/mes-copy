@@ -1,13 +1,13 @@
 import { ApiTags, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
 import { Controller, Get, Post, Body, Inject } from '@nestjs/common';
 import { MqttGatewayService } from './mqtt-gateway.service';
-import { MqttPublishDto, OpcUaReadDto, MachineControlDto } from './shopfloor-gateway.dto';
+import { MqttPublishDto, OpcUaReadDto, MachineControlDto, OpcUaWriteDto, OpcUaWriteItemDto } from './shopfloor-gateway.dto';
 import { Roles } from '../auth/roles.decorator';
 import { UserRoleEnum } from '../users/user.entity';
 import { StMesHandshakeService } from './stmes-handshake.service';
 import { WebshopOrdersService } from './webshop-orders.service';
 import { MACHINE_ADAPTER } from '../machines/adapters/machine-adapter.token';
-import type { MachineAdapter } from '../machines/adapters/machine-adapter.types';
+import type { MachineAdapter, MachineAddressWrite } from '../machines/adapters/machine-adapter.types';
 
 @Controller('shopfloor')
 export class ShopfloorGatewayController {
@@ -91,13 +91,13 @@ export class ShopfloorGatewayController {
 
   @Post('opcua/write')
   @Roles(UserRoleEnum.ADMIN)
-  async writeOpcUaNode(@Body() dto: MachineControlDto) {
-    const writes = Object.entries(dto).map(([k, v]) => ({
-      address: v as string,
-      dataType: 'String',
-      value: k,
+  async writeOpcUaNode(@Body() dto: OpcUaWriteDto) {
+    const writes: MachineAddressWrite[] = dto.writes.map(item => ({
+      address: item.address,
+      dataType: item.dataType,
+      value: item.value,
     }));
     await this.machine.writeDiagnosticAddresses(writes);
-    return { success: true };
+    return { success: true, written: dto.writes.length };
   }
 }
