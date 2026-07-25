@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { readFileSync } from 'node:fs';
-import { resolve, relative, isAbsolute, normalize } from 'node:path';
+import { resolve, relative, isAbsolute, normalize, sep } from 'node:path';
 import {
   MachineProfile,
   MachineProfileTransport,
@@ -21,7 +21,6 @@ import {
   MachineStationProfile,
   MachineSignalProfile,
   MachineSignalScalingProfile,
-  MachineEnvironmentReference,
 } from './machine-profile.types';
 import {
   MACHINE_PROFILE_PATH_CONFIG_KEY,
@@ -34,16 +33,13 @@ import {
   MachineProfileParseError,
 } from './machine-profile.errors';
 
-function getNodeErrorCode(error: unknown): string | undefined {
-  if (typeof error === 'object' && error !== null && 'code' in error) {
-    const code = (error as Record<string, unknown>).code;
-    if (typeof code === 'string') return code;
-  }
-  return undefined;
-}
-
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function getNodeErrorCode(error: unknown): string | undefined {
+  if (!isRecord(error)) return undefined;
+  return typeof error.code === 'string' ? error.code : undefined;
 }
 
 function isString(value: unknown): value is string {
@@ -56,10 +52,6 @@ function isBoolean(value: unknown): value is boolean {
 
 function isNumber(value: unknown): value is number {
   return typeof value === 'number' && !Number.isNaN(value);
-}
-
-function isStringArray(value: unknown): value is readonly string[] {
-  return Array.isArray(value) && value.every((item) => isString(item));
 }
 
 function isStringRecord(value: unknown): value is Readonly<Record<string, string>> {
@@ -200,13 +192,6 @@ function isMachineConnectionProfile(value: unknown): value is MachineConnectionP
   return true;
 }
 
-function isMachineEnvironmentReference(value: unknown): value is MachineEnvironmentReference {
-  if (!isRecord(value)) return false;
-  if (!isString(value.env)) return false;
-  if (value.required !== undefined && !isBoolean(value.required)) return false;
-  return true;
-}
-
 function isMachineProfile(value: unknown): value is MachineProfile {
   if (!isRecord(value)) return false;
   if (!isString(value.profileVersion)) return false;
@@ -229,18 +214,20 @@ function hasNullByte(value: string): boolean {
 }
 
 function resolveProfilePath(profilePath: string, baseDirectory?: string): string {
-  const trimmedPath = profilePath.trim();
-  const base = baseDirectory !== undefined ? baseDirectory : process.cwd();
+  const base = baseDirectory !== undefined ? resolve(baseDirectory) : process.cwd();
 
-  if (isAbsolute(trimmedPath)) {
-    return normalize(trimmedPath);
+  if (isAbsolute(profilePath)) {
+    return normalize(profilePath);
   }
 
-  const resolved = resolve(base, trimmedPath);
-  const normalizedBase = normalize(base);
-  const relativePath = relative(normalizedBase, resolved);
+  const resolved = resolve(base, profilePath);
+  const relativePath = relative(base, resolved);
 
-  if (relativePath.startsWith('..')) {
+  if (
+    relativePath === '..' ||
+    relativePath.startsWith('..' + sep) ||
+    isAbsolute(relativePath)
+  ) {
     throw new MachineProfileConfigurationError(
       'PROFILE_PATH_INVALID',
       'Relative profile path escapes the base directory.',
@@ -305,8 +292,9 @@ export class MachineProfileService {
       );
     }
 
+    let trimmedBase: string | undefined;
     if (options.baseDirectory !== undefined) {
-      const trimmedBase = options.baseDirectory.trim();
+      trimmedBase = options.baseDirectory.trim();
       if (trimmedBase.length === 0 || hasNullByte(trimmedBase)) {
         throw new MachineProfileConfigurationError(
           'PROFILE_PATH_INVALID',
@@ -318,7 +306,7 @@ export class MachineProfileService {
     let resolvedPath: string;
 
     try {
-      resolvedPath = resolveProfilePath(trimmedPath, options.baseDirectory);
+      resolvedPath = resolveProfilePath(trimmedPath, trimmedBase);
     } catch (error) {
       if (error instanceof MachineProfileConfigurationError) {
         throw error;
