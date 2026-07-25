@@ -1,0 +1,335 @@
+{
+  "profileVersion": "1.0",
+  "machineId": "simulator",
+  "displayName": "Simulator",
+  "description": "Local OPC UA simulator machine for development and testing",
+  "transport": "opcua",
+  "operatingMode": "observe",
+  "connection": {
+    "endpointUrl": "opc.tcp://localhost:4840",
+    "applicationName": "WaraSimulator",
+    "security": {
+      "mode": "None",
+      "policy": "None"
+    },
+    "authentication": {
+      "type": "anonymous"
+    },
+    "connectionTimeoutMs": 10000,
+    "sessionTimeoutMs": 60000,
+    "reconnect": {
+      "enabled": true,
+      "initialDelayMs": 1000,
+      "maximumDelayMs": 30000,
+      "backoffMultiplier": 2,
+      "maxAttempts": 10
+    }
+  },
+  "namespaces": [
+    {
+      "key": "station",
+      "uri": "urn:wara:simulator"
+    }
+  ],
+  "stations": [
+    {
+      "stationId": "station-a",
+      "displayName": "Station A",
+      "description": "First assembly station",
+      "enabled": true,
+      "signals": [
+        {
+          "key": "workRequest",
+          "role": "workRequest",
+          "direction": "machineToMes",
+          "namespace": "station",
+          "identifier": "WorkRequest",
+          "dataType": "Boolean",
+          "access": "read",
+          "required": true
+        },
+        {
+          "key": "requestBusy",
+          "role": "requestBusy",
+          "direction": "mesToMachine",
+          "namespace": "station",
+          "identifier": "RequestBusy",
+          "dataType": "Boolean",
+          "access": "write",
+          "required": true
+        },
+        {
+          "key": "requestCompleted",
+          "role": "requestCompleted",
+          "direction": "mesToMachine",
+          "namespace": "station",
+          "identifier": "RequestCompleted",
+          "dataType": "Boolean",
+          "access": "write",
+          "required": true
+        },
+        {
+          "key": "carrierId",
+          "role": "carrierId",
+          "direction": "machineToMes",
+          "namespace": "station",
+          "identifier": "CarrierId",
+          "dataType": "UInt32",
+          "access": "read",
+          "required": true
+        },
+        {
+          "key": "orderId",
+          "role": "orderId",
+          "direction": "machineToMes",
+          "namespace": "station",
+          "identifier": "OrderId",
+          "dataType": "String",
+          "access": "read",
+          "required": true
+        },
+        {
+          "key": "resourceId",
+          "role": "resourceId",
+          "direction": "machineToMes",
+          "namespace": "station",
+          "identifier": "ResourceId",
+          "dataType": "UInt32",
+          "access": "read",
+          "required": true
+        },
+        {
+          "key": "processCompleted",
+          "role": "processCompleted",
+          "direction": "machineToMes",
+          "namespace": "station",
+          "identifier": "ProcessCompleted",
+          "dataType": "Boolean",
+          "access": "read",
+          "required": true
+        },
+        {
+          "key": "processResult",
+          "role": "processResult",
+          "direction": "machineToMes",
+          "namespace": "station",
+          "identifier": "ProcessResult",
+          "dataType": "UInt32",
+          "access": "read",
+          "required": true
+        },
+        {
+          "key": "timestamp",
+          "role": "timestamp",
+          "direction": "machineToMes",
+          "namespace": "station",
+          "identifier": "Timestamp",
+          "dataType": "DateTime",
+          "access": "read",
+          "required": true
+        }
+      ]
+    },
+    {
+      "stationId": "station-b",
+      "displayName": "Station B",
+      "description": "Inspection station",
+      "enabled": true,
+      "signals": [
+        {
+          "key": "workRequest",
+          "role": "workRequest",
+          "direction": "machineToMes",
+          "namespace": "station",
+          "identifier": "WorkRequest",
+          "dataType": "Boolean",
+          "access": "read",
+          "required": true
+        },
+        {
+          "key": "requestBusy",
+          "role": "requestBusy",
+          "direction": "mesToMachine",
+          "namespace": "station",
+          "identifier": "RequestBusy",
+          "dataType": "Boolean",
+          "access": "write",
+          "required": true
+        },
+        {
+          "key": "requestCompleted",
+          "role": "requestCompleted",
+          "direction": "mesToMachine",
+          "namespace": "station",
+          "identifier": "RequestCompleted",
+          "dataType": "Boolean",
+          "access": "write",
+          "required": true
+        },
+        {
+          "key": "carrierId",
+          "role": "carrierId",
+          "direction": "machineToMes",
+          "namespace": "station",
+          "identifier": "CarrierId",
+          "dataType": "UInt32",
+          "access": "read",
+          "required": true
+        },
+        {
+          "key": "orderId",
+          "role": "orderId",
+          "direction": "machineToMes",
+          "namespace": "station",
+          "identifier": "OrderId",
+          "dataType": "String",
+          "access": "read",
+          "required": true
+        },
+        {
+          "key": "resourceId",
+          "role": "resourceId",
+          "direction": "machineToMes",
+          "namespace": "station",
+          "identifier": "ResourceId",
+          "dataType": "UInt32",
+          "access": "read",
+          "required": true
+        },
+        {
+          "key": "processCompleted",
+          "role": "processCompleted",
+          "direction": "machineToMes",
+          "namespace": "station",
+          "identifier": "ProcessCompleted",
+          "dataType": "Boolean",
+          "access": "read",
+          "required": true
+        },
+        {
+          "key": "processResult",
+          "role": "processResult",
+          "direction": "machineToMes",
+          "namespace": "station",
+          "identifier": "ProcessResult",
+          "dataType": "UInt32",
+          "access": "read",
+          "required": true
+        },
+        {
+          "key": "timestamp",
+          "role": "timestamp",
+          "direction": "machineToMes",
+          "namespace": "station",
+          "identifier": "Timestamp",
+          "dataType": "DateTime",
+          "access": "read",
+          "required": true
+        }
+      ]
+    },
+    {
+      "stationId": "station-c",
+      "displayName": "Station C",
+      "description": "Packing station",
+      "enabled": true,
+      "signals": [
+        {
+          "key": "workRequest",
+          "role": "workRequest",
+          "direction": "machineToMes",
+          "namespace": "station",
+          "identifier": "WorkRequest",
+          "dataType": "Boolean",
+          "access": "read",
+          "required": true
+        },
+        {
+          "key": "requestBusy",
+          "role": "requestBusy",
+          "direction": "mesToMachine",
+          "namespace": "station",
+          "identifier": "RequestBusy",
+          "dataType": "Boolean",
+          "access": "write",
+          "required": true
+        },
+        {
+          "key": "requestCompleted",
+          "role": "requestCompleted",
+          "direction": "mesToMachine",
+          "namespace": "station",
+          "identifier": "RequestCompleted",
+          "dataType": "Boolean",
+          "access": "write",
+          "required": true
+        },
+        {
+          "key": "carrierId",
+          "role": "carrierId",
+          "direction": "machineToMes",
+          "namespace": "station",
+          "identifier": "CarrierId",
+          "dataType": "UInt32",
+          "access": "read",
+          "required": true
+        },
+        {
+          "key": "orderId",
+          "role": "orderId",
+          "direction": "machineToMes",
+          "namespace": "station",
+          "identifier": "OrderId",
+          "dataType": "String",
+          "access": "read",
+          "required": true
+        },
+        {
+          "key": "resourceId",
+          "role": "resourceId",
+          "direction": "machineToMes",
+          "namespace": "station",
+          "identifier": "ResourceId",
+          "dataType": "UInt32",
+          "access": "read",
+          "required": true
+        },
+        {
+          "key": "processCompleted",
+          "role": "processCompleted",
+          "direction": "machineToMes",
+          "namespace": "station",
+          "identifier": "ProcessCompleted",
+          "dataType": "Boolean",
+          "access": "read",
+          "required": true
+        },
+        {
+          "key": "processResult",
+          "role": "processResult",
+          "direction": "machineToMes",
+          "namespace": "station",
+          "identifier": "ProcessResult",
+          "dataType": "UInt32",
+          "access": "read",
+          "required": true
+        },
+        {
+          "key": "timestamp",
+          "role": "timestamp",
+          "direction": "machineToMes",
+          "namespace": "station",
+          "identifier": "Timestamp",
+          "dataType": "DateTime",
+          "access": "read",
+          "required": true
+        }
+      ]
+    }
+  ],
+  "metadata": {
+    "manufacturer": "WARA",
+    "model": "Simulator v1",
+    "version": "1.0.0"
+  }
+}
