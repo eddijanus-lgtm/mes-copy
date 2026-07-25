@@ -1,7 +1,7 @@
 import { ConfigService } from '@nestjs/config';
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { join, resolve, parse, relative, isAbsolute } from 'node:path';
 import { MachineProfileService } from './machine-profile.service';
 import { MACHINE_PROFILE_PATH_CONFIG_KEY } from './machine-profile-loader.types';
 import {
@@ -408,22 +408,27 @@ describe('MachineProfileService', () => {
       }
     });
 
-    it('throws PROFILE_PATH_INVALID when relative() returns an absolute path (cross-drive)', () => {
-      const tmpDir = createTempDir();
-      try {
-        const subDir = join(tmpDir, 'sub');
-        mkdirSync(subDir, { recursive: true });
-        const configService = new ConfigService({});
-        const service = new MachineProfileService(configService);
+    const itOnWindows = process.platform === 'win32' ? it : it.skip;
+    itOnWindows('throws PROFILE_PATH_INVALID when relative() returns an absolute path (cross-drive)', () => {
+      const currentDrive = parse(process.cwd()).root;
+      const otherDrive = currentDrive.startsWith('C:') ? 'D:' : 'C:';
+      const baseDirectory = `${currentDrive}machine-profile-base`;
+      const profilePath = `${otherDrive}profile.json`;
 
-        let error: unknown;
-        try { service.loadProfile({ profilePath: '../target.json', baseDirectory: subDir }); } catch (e) { error = e; }
-        expect(error).toBeInstanceOf(MachineProfileConfigurationError);
-        if (error instanceof MachineProfileConfigurationError) {
-          expect(error.code).toBe('PROFILE_PATH_INVALID');
-        }
-      } finally {
-        removeTempDir(tmpDir);
+      expect(isAbsolute(profilePath)).toBe(false);
+
+      const resolvedTarget = resolve(baseDirectory, profilePath);
+      const relativePath = relative(resolve(baseDirectory), resolvedTarget);
+      expect(isAbsolute(relativePath)).toBe(true);
+
+      const configService = new ConfigService({});
+      const service = new MachineProfileService(configService);
+
+      let error: unknown;
+      try { service.loadProfile({ profilePath, baseDirectory }); } catch (e) { error = e; }
+      expect(error).toBeInstanceOf(MachineProfileConfigurationError);
+      if (error instanceof MachineProfileConfigurationError) {
+        expect(error.code).toBe('PROFILE_PATH_INVALID');
       }
     });
 
@@ -849,7 +854,10 @@ describe('MachineProfileService', () => {
 
       let error: unknown;
       try { service.getProfile(); } catch (e) { error = e; }
-      expect(error).toBeDefined();
+      expect(error).toBeInstanceOf(MachineProfileFileNotFoundError);
+      if (error instanceof MachineProfileFileNotFoundError) {
+        expect(error.code).toBe('PROFILE_FILE_NOT_FOUND');
+      }
 
       const profile = service.loadProfile({ profilePath: SIMULATOR_ABSOLUTE });
       expect(profile.machineId).toBe('simulator');
