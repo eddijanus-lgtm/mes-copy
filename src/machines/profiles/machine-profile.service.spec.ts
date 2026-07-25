@@ -1,8 +1,7 @@
 import { ConfigService } from '@nestjs/config';
-import { readFileSync } from 'node:fs';
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join, resolve, isAbsolute } from 'node:path';
+import { join, resolve, parse, relative, isAbsolute } from 'node:path';
 import { MachineProfileService } from './machine-profile.service';
 import { MACHINE_PROFILE_PATH_CONFIG_KEY } from './machine-profile-loader.types';
 import {
@@ -12,8 +11,6 @@ import {
   MachineProfileReadError,
   MachineProfileParseError,
 } from './machine-profile.errors';
-import { MachineProfile } from './machine-profile.types';
-
 const PROJECT_ROOT = process.cwd();
 const SIMULATOR_RELATIVE = 'config/machines/simulator.machine.json';
 const TEMPLATE_RELATIVE = 'config/machines/wara.machine.template.json';
@@ -31,10 +28,6 @@ function writeJsonFile(dir: string, name: string, data: unknown): string {
   const path = join(dir, name);
   writeFileSync(path, JSON.stringify(data, null, 2), 'utf8');
   return path;
-}
-
-function readSimulatorProfile(): unknown {
-  return JSON.parse(readFileSync(SIMULATOR_ABSOLUTE, 'utf8'));
 }
 
 function createValidProfile(overrides?: Record<string, unknown>): Record<string, unknown> {
@@ -124,15 +117,11 @@ describe('MachineProfileService', () => {
       const configService = new ConfigService({});
       const service = new MachineProfileService(configService);
 
-      expect(() => service.loadConfiguredProfile()).toThrow(
-        MachineProfileConfigurationError,
-      );
-      try {
-        service.loadConfiguredProfile();
-      } catch (error) {
-        if (error instanceof MachineProfileConfigurationError) {
-          expect(error.code).toBe('PROFILE_PATH_MISSING');
-        }
+      let error: unknown;
+      try { service.loadConfiguredProfile(); } catch (e) { error = e; }
+      expect(error).toBeInstanceOf(MachineProfileConfigurationError);
+      if (error instanceof MachineProfileConfigurationError) {
+        expect(error.code).toBe('PROFILE_PATH_MISSING');
       }
     });
 
@@ -142,15 +131,11 @@ describe('MachineProfileService', () => {
       });
       const service = new MachineProfileService(configService);
 
-      expect(() => service.loadConfiguredProfile()).toThrow(
-        MachineProfileConfigurationError,
-      );
-      try {
-        service.loadConfiguredProfile();
-      } catch (error) {
-        if (error instanceof MachineProfileConfigurationError) {
-          expect(error.code).toBe('PROFILE_PATH_MISSING');
-        }
+      let error: unknown;
+      try { service.loadConfiguredProfile(); } catch (e) { error = e; }
+      expect(error).toBeInstanceOf(MachineProfileConfigurationError);
+      if (error instanceof MachineProfileConfigurationError) {
+        expect(error.code).toBe('PROFILE_PATH_MISSING');
       }
     });
 
@@ -160,12 +145,11 @@ describe('MachineProfileService', () => {
       });
       const service = new MachineProfileService(configService);
 
-      try {
-        service.loadConfiguredProfile();
-      } catch (error) {
-        if (error instanceof MachineProfileConfigurationError) {
-          expect(error.code).toBe('PROFILE_PATH_MISSING');
-        }
+      let error: unknown;
+      try { service.loadConfiguredProfile(); } catch (e) { error = e; }
+      expect(error).toBeInstanceOf(MachineProfileConfigurationError);
+      if (error instanceof MachineProfileConfigurationError) {
+        expect(error.code).toBe('PROFILE_PATH_MISSING');
       }
     });
 
@@ -175,12 +159,11 @@ describe('MachineProfileService', () => {
       });
       const service = new MachineProfileService(configService);
 
-      try {
-        service.loadConfiguredProfile();
-      } catch (error) {
-        if (error instanceof MachineProfileConfigurationError) {
-          expect(error.code).toBe('PROFILE_PATH_MISSING');
-        }
+      let error: unknown;
+      try { service.loadConfiguredProfile(); } catch (e) { error = e; }
+      expect(error).toBeInstanceOf(MachineProfileConfigurationError);
+      if (error instanceof MachineProfileConfigurationError) {
+        expect(error.code).toBe('PROFILE_PATH_MISSING');
       }
     });
 
@@ -190,12 +173,11 @@ describe('MachineProfileService', () => {
       });
       const service = new MachineProfileService(configService);
 
-      try {
-        service.loadConfiguredProfile();
-      } catch (error) {
-        if (error instanceof MachineProfileConfigurationError) {
-          expect(error.code).toBe('PROFILE_PATH_INVALID');
-        }
+      let error: unknown;
+      try { service.loadConfiguredProfile(); } catch (e) { error = e; }
+      expect(error).toBeInstanceOf(MachineProfileConfigurationError);
+      if (error instanceof MachineProfileConfigurationError) {
+        expect(error.code).toBe('PROFILE_PATH_INVALID');
       }
     });
   });
@@ -265,12 +247,11 @@ describe('MachineProfileService', () => {
       const configService = new ConfigService({});
       const service = new MachineProfileService(configService);
 
-      try {
-        service.loadProfile({ profilePath: '', baseDirectory: PROJECT_ROOT });
-      } catch (error) {
-        if (error instanceof MachineProfileConfigurationError) {
-          expect(error.code).toBe('PROFILE_PATH_MISSING');
-        }
+      let error: unknown;
+      try { service.loadProfile({ profilePath: '', baseDirectory: PROJECT_ROOT }); } catch (e) { error = e; }
+      expect(error).toBeInstanceOf(MachineProfileConfigurationError);
+      if (error instanceof MachineProfileConfigurationError) {
+        expect(error.code).toBe('PROFILE_PATH_MISSING');
       }
     });
 
@@ -278,12 +259,11 @@ describe('MachineProfileService', () => {
       const configService = new ConfigService({});
       const service = new MachineProfileService(configService);
 
-      try {
-        service.loadProfile({ profilePath: '   ', baseDirectory: PROJECT_ROOT });
-      } catch (error) {
-        if (error instanceof MachineProfileConfigurationError) {
-          expect(error.code).toBe('PROFILE_PATH_MISSING');
-        }
+      let error: unknown;
+      try { service.loadProfile({ profilePath: '   ', baseDirectory: PROJECT_ROOT }); } catch (e) { error = e; }
+      expect(error).toBeInstanceOf(MachineProfileConfigurationError);
+      if (error instanceof MachineProfileConfigurationError) {
+        expect(error.code).toBe('PROFILE_PATH_MISSING');
       }
     });
 
@@ -291,12 +271,11 @@ describe('MachineProfileService', () => {
       const configService = new ConfigService({});
       const service = new MachineProfileService(configService);
 
-      try {
-        service.loadProfile({ profilePath: 'bad\0path.json', baseDirectory: PROJECT_ROOT });
-      } catch (error) {
-        if (error instanceof MachineProfileConfigurationError) {
-          expect(error.code).toBe('PROFILE_PATH_INVALID');
-        }
+      let error: unknown;
+      try { service.loadProfile({ profilePath: 'bad\0path.json', baseDirectory: PROJECT_ROOT }); } catch (e) { error = e; }
+      expect(error).toBeInstanceOf(MachineProfileConfigurationError);
+      if (error instanceof MachineProfileConfigurationError) {
+        expect(error.code).toBe('PROFILE_PATH_INVALID');
       }
     });
 
@@ -304,12 +283,11 @@ describe('MachineProfileService', () => {
       const configService = new ConfigService({});
       const service = new MachineProfileService(configService);
 
-      try {
-        service.loadProfile({ profilePath: 'profile.json', baseDirectory: '' });
-      } catch (error) {
-        if (error instanceof MachineProfileConfigurationError) {
-          expect(error.code).toBe('PROFILE_PATH_INVALID');
-        }
+      let error: unknown;
+      try { service.loadProfile({ profilePath: 'profile.json', baseDirectory: '' }); } catch (e) { error = e; }
+      expect(error).toBeInstanceOf(MachineProfileConfigurationError);
+      if (error instanceof MachineProfileConfigurationError) {
+        expect(error.code).toBe('PROFILE_PATH_INVALID');
       }
     });
 
@@ -317,12 +295,11 @@ describe('MachineProfileService', () => {
       const configService = new ConfigService({});
       const service = new MachineProfileService(configService);
 
-      try {
-        service.loadProfile({ profilePath: 'profile.json', baseDirectory: '   ' });
-      } catch (error) {
-        if (error instanceof MachineProfileConfigurationError) {
-          expect(error.code).toBe('PROFILE_PATH_INVALID');
-        }
+      let error: unknown;
+      try { service.loadProfile({ profilePath: 'profile.json', baseDirectory: '   ' }); } catch (e) { error = e; }
+      expect(error).toBeInstanceOf(MachineProfileConfigurationError);
+      if (error instanceof MachineProfileConfigurationError) {
+        expect(error.code).toBe('PROFILE_PATH_INVALID');
       }
     });
 
@@ -330,12 +307,11 @@ describe('MachineProfileService', () => {
       const configService = new ConfigService({});
       const service = new MachineProfileService(configService);
 
-      try {
-        service.loadProfile({ profilePath: 'profile.json', baseDirectory: 'bad\0dir' });
-      } catch (error) {
-        if (error instanceof MachineProfileConfigurationError) {
-          expect(error.code).toBe('PROFILE_PATH_INVALID');
-        }
+      let error: unknown;
+      try { service.loadProfile({ profilePath: 'profile.json', baseDirectory: 'bad\0dir' }); } catch (e) { error = e; }
+      expect(error).toBeInstanceOf(MachineProfileConfigurationError);
+      if (error instanceof MachineProfileConfigurationError) {
+        expect(error.code).toBe('PROFILE_PATH_INVALID');
       }
     });
 
@@ -349,16 +325,110 @@ describe('MachineProfileService', () => {
         const service = new MachineProfileService(configService);
         const traversalPath = join('..', '..', tmpDir, 'escaped.json');
 
-        try {
-          service.loadProfile({ profilePath: traversalPath, baseDirectory: PROJECT_ROOT });
-          expect(true).toBe(false);
-        } catch (error) {
-          if (error instanceof MachineProfileConfigurationError) {
-            expect(error.code).toBe('PROFILE_PATH_INVALID');
-          }
+        let error: unknown;
+        try { service.loadProfile({ profilePath: traversalPath, baseDirectory: PROJECT_ROOT }); } catch (e) { error = e; }
+        expect(error).toBeInstanceOf(MachineProfileConfigurationError);
+        if (error instanceof MachineProfileConfigurationError) {
+          expect(error.code).toBe('PROFILE_PATH_INVALID');
         }
       } finally {
         removeTempDir(tmpDir);
+      }
+    });
+
+    it('trims whitespace from baseDirectory', () => {
+      const configService = new ConfigService({});
+      const service = new MachineProfileService(configService);
+      const profile = service.loadProfile({
+        profilePath: SIMULATOR_RELATIVE,
+        baseDirectory: `  ${PROJECT_ROOT}  `,
+      });
+      expect(profile.machineId).toBe('simulator');
+    });
+
+    it('loads profile from a folder named ..cache', () => {
+      const tmpDir = createTempDir();
+      try {
+        const cacheDir = join(tmpDir, '..cache');
+        mkdirSync(cacheDir, { recursive: true });
+        writeJsonFile(cacheDir, 'profile.json', createValidProfile({ machineId: 'cache-test' }));
+
+        const configService = new ConfigService({});
+        const service = new MachineProfileService(configService);
+        const profile = service.loadProfile({
+          profilePath: join('..cache', 'profile.json'),
+          baseDirectory: tmpDir,
+        });
+
+        expect(profile.machineId).toBe('cache-test');
+      } finally {
+        removeTempDir(tmpDir);
+      }
+    });
+
+    it('throws PROFILE_PATH_INVALID for ../outside.json', () => {
+      const tmpDir = createTempDir();
+      try {
+        const subDir = join(tmpDir, 'sub');
+        mkdirSync(subDir, { recursive: true });
+        writeJsonFile(tmpDir, 'outside.json', createValidProfile());
+
+        const configService = new ConfigService({});
+        const service = new MachineProfileService(configService);
+
+        let error: unknown;
+        try { service.loadProfile({ profilePath: '../outside.json', baseDirectory: subDir }); } catch (e) { error = e; }
+        expect(error).toBeInstanceOf(MachineProfileConfigurationError);
+        if (error instanceof MachineProfileConfigurationError) {
+          expect(error.code).toBe('PROFILE_PATH_INVALID');
+        }
+      } finally {
+        removeTempDir(tmpDir);
+      }
+    });
+
+    it('throws PROFILE_PATH_INVALID for ../../outside.json', () => {
+      const tmpDir = createTempDir();
+      try {
+        const deepDir = join(tmpDir, 'a', 'b');
+        mkdirSync(deepDir, { recursive: true });
+        writeJsonFile(tmpDir, 'outside.json', createValidProfile());
+
+        const configService = new ConfigService({});
+        const service = new MachineProfileService(configService);
+
+        let error: unknown;
+        try { service.loadProfile({ profilePath: '../../outside.json', baseDirectory: deepDir }); } catch (e) { error = e; }
+        expect(error).toBeInstanceOf(MachineProfileConfigurationError);
+        if (error instanceof MachineProfileConfigurationError) {
+          expect(error.code).toBe('PROFILE_PATH_INVALID');
+        }
+      } finally {
+        removeTempDir(tmpDir);
+      }
+    });
+
+    const itOnWindows = process.platform === 'win32' ? it : it.skip;
+    itOnWindows('throws PROFILE_PATH_INVALID when relative() returns an absolute path (cross-drive)', () => {
+      const currentDrive = parse(process.cwd()).root;
+      const otherDrive = currentDrive.startsWith('C:') ? 'D:' : 'C:';
+      const baseDirectory = `${currentDrive}machine-profile-base`;
+      const profilePath = `${otherDrive}profile.json`;
+
+      expect(isAbsolute(profilePath)).toBe(false);
+
+      const resolvedTarget = resolve(baseDirectory, profilePath);
+      const relativePath = relative(resolve(baseDirectory), resolvedTarget);
+      expect(isAbsolute(relativePath)).toBe(true);
+
+      const configService = new ConfigService({});
+      const service = new MachineProfileService(configService);
+
+      let error: unknown;
+      try { service.loadProfile({ profilePath, baseDirectory }); } catch (e) { error = e; }
+      expect(error).toBeInstanceOf(MachineProfileConfigurationError);
+      if (error instanceof MachineProfileConfigurationError) {
+        expect(error.code).toBe('PROFILE_PATH_INVALID');
       }
     });
 
@@ -390,14 +460,13 @@ describe('MachineProfileService', () => {
         const configService = new ConfigService({});
         const service = new MachineProfileService(configService);
 
-        try {
-          service.loadProfile({ profilePath: missingPath });
-        } catch (error) {
-          if (error instanceof MachineProfileFileNotFoundError) {
-            expect(error.code).toBe('PROFILE_FILE_NOT_FOUND');
-            expect(error.profilePath).toBe(resolve(missingPath));
-            expect(error.originalCause).toBeDefined();
-          }
+        let error: unknown;
+        try { service.loadProfile({ profilePath: missingPath }); } catch (e) { error = e; }
+        expect(error).toBeInstanceOf(MachineProfileFileNotFoundError);
+        if (error instanceof MachineProfileFileNotFoundError) {
+          expect(error.code).toBe('PROFILE_FILE_NOT_FOUND');
+          expect(error.profilePath).toBe(resolve(missingPath));
+          expect(error.originalCause).toBeDefined();
         }
       } finally {
         removeTempDir(tmpDir);
@@ -410,13 +479,12 @@ describe('MachineProfileService', () => {
         const configService = new ConfigService({});
         const service = new MachineProfileService(configService);
 
-        try {
-          service.loadProfile({ profilePath: tmpDir });
-        } catch (error) {
-          if (error instanceof MachineProfileReadError) {
-            expect(error.code).toBe('PROFILE_FILE_UNREADABLE');
-            expect(error.profilePath).toBe(resolve(tmpDir));
-          }
+        let error: unknown;
+        try { service.loadProfile({ profilePath: tmpDir }); } catch (e) { error = e; }
+        expect(error).toBeInstanceOf(MachineProfileReadError);
+        if (error instanceof MachineProfileReadError) {
+          expect(error.code).toBe('PROFILE_FILE_UNREADABLE');
+          expect(error.profilePath).toBe(resolve(tmpDir));
         }
       } finally {
         removeTempDir(tmpDir);
@@ -439,14 +507,13 @@ describe('MachineProfileService', () => {
         const configService = new ConfigService({});
         const service = new MachineProfileService(configService);
 
-        try {
-          service.loadProfile({ profilePath: badJsonPath });
-        } catch (error) {
-          if (error instanceof MachineProfileParseError) {
-            expect(error.code).toBe('PROFILE_JSON_INVALID');
-            expect(error.message).not.toContain(SENSITIVE_VALUE);
-            expect(error.profilePath).toBe(resolve(badJsonPath));
-          }
+        let error: unknown;
+        try { service.loadProfile({ profilePath: badJsonPath }); } catch (e) { error = e; }
+        expect(error).toBeInstanceOf(MachineProfileParseError);
+        if (error instanceof MachineProfileParseError) {
+          expect(error.code).toBe('PROFILE_JSON_INVALID');
+          expect(error.message).not.toContain(SENSITIVE_VALUE);
+          expect(error.profilePath).toBe(resolve(badJsonPath));
         }
       } finally {
         removeTempDir(tmpDir);
@@ -466,11 +533,9 @@ describe('MachineProfileService', () => {
         service.loadProfile({ profilePath: goodPath });
         expect(service.getProfile().machineId).toBe('test-machine');
 
-        try {
-          service.loadProfile({ profilePath: badPath });
-        } catch {
-          // expected
-        }
+        let error: unknown;
+        try { service.loadProfile({ profilePath: badPath }); } catch (e) { error = e; }
+        expect(error).toBeInstanceOf(MachineProfileParseError);
 
         expect(service.getProfile().machineId).toBe('test-machine');
       } finally {
@@ -505,13 +570,12 @@ describe('MachineProfileService', () => {
         const path = writeJsonFile(tmpDir, `${Date.now()}.json`, profileData);
         const service = createService();
 
-        try {
-          service.loadProfile({ profilePath: path });
-        } catch (error) {
-          if (error instanceof MachineProfileParseError) {
-            expect(error.code).toBe('PROFILE_JSON_INVALID');
-            expect(error.message).not.toContain(JSON.stringify(profileData));
-          }
+        let error: unknown;
+        try { service.loadProfile({ profilePath: path }); } catch (e) { error = e; }
+        expect(error).toBeInstanceOf(MachineProfileParseError);
+        if (error instanceof MachineProfileParseError) {
+          expect(error.code).toBe('PROFILE_JSON_INVALID');
+          expect(error.message).not.toContain(JSON.stringify(profileData));
         }
       });
     }
@@ -582,8 +646,8 @@ describe('MachineProfileService', () => {
 
     it('accepts profiles without optional fields', () => {
       const profile = createValidProfile();
-      delete (profile as Record<string, unknown>).description;
-      delete (profile as Record<string, unknown>).metadata;
+      delete profile.description;
+      delete profile.metadata;
       delete (profile.stations[0] as Record<string, unknown>).description;
       delete (profile.stations[0].signals[0] as Record<string, unknown>).description;
       delete (profile.stations[0].signals[0] as Record<string, unknown>).scaling;
@@ -608,49 +672,104 @@ describe('MachineProfileService', () => {
       expect(loaded.machineId).toBe('test-machine');
     });
 
-    it('rejects non-string env in env reference', () => {
+    it('rejects non-string certificatePathEnv in security', () => {
       const profile = createValidProfile({
         connection: {
           endpointUrl: 'opc.tcp://host:4840',
           applicationName: 'App',
-          security: { mode: 'None', policy: 'None' },
-          authentication: { type: 'anonymous' },
+          security: { mode: 'SignAndEncrypt', policy: 'Basic256Sha256', certificatePathEnv: 123 },
+          authentication: { type: 'username', usernameEnv: 'USER', passwordEnv: 'PASS' },
           connectionTimeoutMs: 10000,
           sessionTimeoutMs: 60000,
-          reconnect: { enabled: true, initialDelayMs: 1000, maximumDelayMs: 30000, backoffMultiplier: 2 },
+          reconnect: { enabled: true, initialDelayMs: 1000, maximumDelayMs: 30000, backoffMultiplier: 2, maxAttempts: 10 },
         },
-        namespaces: [{ key: 'main', uri: 'urn:test' }],
-        stations: [],
       });
-      (profile.namespaces[0] as Record<string, unknown>).env = 123;
 
-      const path = writeJsonFile(tmpDir, 'bad-env.json', profile);
+      const path = writeJsonFile(tmpDir, 'bad-cert-env.json', profile);
       const configService = new ConfigService({});
       const service = new MachineProfileService(configService);
 
-      try {
-        service.loadProfile({ profilePath: path });
-      } catch (error) {
-        if (error instanceof MachineProfileParseError) {
-          expect(error.code).toBe('PROFILE_JSON_INVALID');
-        }
+      let error: unknown;
+      try { service.loadProfile({ profilePath: path }); } catch (e) { error = e; }
+      expect(error).toBeInstanceOf(MachineProfileParseError);
+      if (error instanceof MachineProfileParseError) {
+        expect(error.code).toBe('PROFILE_JSON_INVALID');
+      }
+    });
+
+    it('rejects non-string passwordEnv in authentication', () => {
+      const profile = createValidProfile({
+        connection: {
+          endpointUrl: 'opc.tcp://host:4840',
+          applicationName: 'App',
+          security: { mode: 'SignAndEncrypt', policy: 'Basic256Sha256' },
+          authentication: { type: 'username', usernameEnv: 'USER', passwordEnv: false },
+          connectionTimeoutMs: 10000,
+          sessionTimeoutMs: 60000,
+          reconnect: { enabled: true, initialDelayMs: 1000, maximumDelayMs: 30000, backoffMultiplier: 2, maxAttempts: 10 },
+        },
+      });
+
+      const path = writeJsonFile(tmpDir, 'bad-pass-env.json', profile);
+      const configService = new ConfigService({});
+      const service = new MachineProfileService(configService);
+
+      let error: unknown;
+      try { service.loadProfile({ profilePath: path }); } catch (e) { error = e; }
+      expect(error).toBeInstanceOf(MachineProfileParseError);
+      if (error instanceof MachineProfileParseError) {
+        expect(error.code).toBe('PROFILE_JSON_INVALID');
       }
     });
 
     it('rejects non-numeric scaling factor', () => {
-      const profile = createValidProfile();
-      profile.stations[0].signals[0].scaling = { factor: 'wrong', offset: 10 } as never;
+      const path = writeJsonFile(tmpDir, 'bad-scaling.json', {
+        profileVersion: '1.0',
+        machineId: 'test-machine',
+        displayName: 'Test Machine',
+        description: 'A test machine profile',
+        transport: 'opcua',
+        operatingMode: 'observe',
+        connection: {
+          endpointUrl: 'opc.tcp://localhost:4840',
+          applicationName: 'TestApp',
+          security: { mode: 'None', policy: 'None' },
+          authentication: { type: 'anonymous' },
+          connectionTimeoutMs: 10000,
+          sessionTimeoutMs: 60000,
+          reconnect: { enabled: true, initialDelayMs: 1000, maximumDelayMs: 30000, backoffMultiplier: 2, maxAttempts: 10 },
+        },
+        namespaces: [{ key: 'test', uri: 'urn:test:namespace' }],
+        stations: [
+          {
+            stationId: 'station-1',
+            displayName: 'Station 1',
+            enabled: true,
+            signals: [
+              {
+                key: 'workRequest',
+                role: 'workRequest',
+                direction: 'machineToMes',
+                namespace: 'test',
+                identifier: 'WorkRequest',
+                dataType: 'Boolean',
+                access: 'read',
+                required: true,
+                scaling: { factor: 'wrong', offset: 10 },
+              },
+            ],
+          },
+        ],
+      });
 
-      const path = writeJsonFile(tmpDir, 'bad-scaling.json', profile);
       const configService = new ConfigService({});
       const service = new MachineProfileService(configService);
 
-      try {
-        service.loadProfile({ profilePath: path });
-      } catch (error) {
-        if (error instanceof MachineProfileParseError) {
-          expect(error.code).toBe('PROFILE_JSON_INVALID');
-        }
+      let error: unknown;
+      try { service.loadProfile({ profilePath: path }); } catch (e) { error = e; }
+      expect(error).toBeInstanceOf(MachineProfileParseError);
+      if (error instanceof MachineProfileParseError) {
+        expect(error.code).toBe('PROFILE_JSON_INVALID');
       }
     });
   });
@@ -716,11 +835,9 @@ describe('MachineProfileService', () => {
         const badPath = join(tmpDir, 'bad.json');
         writeFileSync(badPath, '{ broken', 'utf8');
 
-        try {
-          service.loadProfile({ profilePath: badPath });
-        } catch {
-          // expected
-        }
+        let error: unknown;
+        try { service.loadProfile({ profilePath: badPath }); } catch (e) { error = e; }
+        expect(error).toBeInstanceOf(MachineProfileParseError);
 
         const cached = service.getProfile();
         expect(cached).toBe(first);
@@ -735,13 +852,17 @@ describe('MachineProfileService', () => {
       });
       const service = new MachineProfileService(configService);
 
-      try {
-        service.getProfile();
-      } catch {
-        // expected
+      let error: unknown;
+      try { service.getProfile(); } catch (e) { error = e; }
+      expect(error).toBeInstanceOf(MachineProfileFileNotFoundError);
+      if (error instanceof MachineProfileFileNotFoundError) {
+        expect(error.code).toBe('PROFILE_FILE_NOT_FOUND');
       }
 
-      expect((service as Record<string, unknown>).loadedProfile).toBeUndefined();
+      const profile = service.loadProfile({ profilePath: SIMULATOR_ABSOLUTE });
+      expect(profile.machineId).toBe('simulator');
+      const cached = service.getProfile();
+      expect(cached).toBe(profile);
     });
   });
 
