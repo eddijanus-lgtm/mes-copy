@@ -42,6 +42,13 @@ export interface MachineAddressWrite {
   readonly value: unknown;
 }
 
+export interface MachineStationDescriptor {
+  readonly resourceId: number;
+  readonly stationId: string;
+  readonly displayName: string;
+  readonly enabled: boolean;
+}
+
 export interface MachineAdapter {
   isConnected(): boolean;
   getConnectionStatus(): Promise<MachineConnectionStatus>;
@@ -101,4 +108,6 @@ export interface MachineAdapter {
   writeDiagnosticAddresses(
     writes: readonly MachineAddressWrite[],
   ): Promise<void>;
+
+  getStations(): readonly MachineStationDescriptor[];
 }

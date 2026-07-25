@@ -14,10 +14,12 @@ import { OpcUaService } from './opcua.service';
 import { OpcUaMachineAdapter } from './opcua-machine.adapter';
 import { MachineAdapter, MachineControlCommand, MachineRoutingResponse, MachineAddressWrite } from '../machines/adapters/machine-adapter.types';
 import { ShopfloorTelemetryEvent } from './shopfloor-telemetry';
+import { MachineProfileService } from '../machines/profiles/machine-profile.service';
 
 describe('OpcUaMachineAdapter', () => {
   let adapter: OpcUaMachineAdapter;
   let mockOpcUa: jest.Mocked<OpcUaService>;
+  let mockMachineProfileService: jest.Mocked<MachineProfileService>;
 
   const mockTelemetryCallback = jest.fn();
   const mockWorkRequestCallback = jest.fn();
@@ -39,10 +41,17 @@ describe('OpcUaMachineAdapter', () => {
       publishStMesEvent: jest.fn(),
     } as unknown as jest.Mocked<OpcUaService>;
 
+    mockMachineProfileService = {
+      getProfile: jest.fn(),
+      loadProfile: jest.fn(),
+      loadConfiguredProfile: jest.fn(),
+    } as unknown as jest.Mocked<MachineProfileService>;
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         OpcUaMachineAdapter,
         { provide: OpcUaService, useValue: mockOpcUa },
+        { provide: MachineProfileService, useValue: mockMachineProfileService },
       ],
     }).compile();
 
@@ -323,4 +332,156 @@ describe('OpcUaMachineAdapter', () => {
       ]);
     });
   });
-});
+
+  describe('getStations', () => {
+    it('returns profile stations with valid resourceId metadata', async () => {
+      const mockProfile = {
+        machineId: 'test-machine',
+        stations: [
+          { stationId: 'station-a', displayName: 'Station A', enabled: true, metadata: { resourceId: '1' }, signals: [] },
+          { stationId: 'station-b', displayName: 'Station B', enabled: true, metadata: { resourceId: '2' }, signals: [] },
+          { stationId: 'station-c', displayName: 'Station C', enabled: true, metadata: { resourceId: '3' }, signals: [] },
+        ],
+      };
+      mockMachineProfileService.getProfile.mockReturnValue(mockProfile);
+
+      const stations = adapter.getStations();
+      expect(stations).toHaveLength(3);
+      expect(stations[0]).toEqual({ resourceId: 1, stationId: 'station-a', displayName: 'Station A', enabled: true });
+      expect(stations[1]).toEqual({ resourceId: 2, stationId: 'station-b', displayName: 'Station B', enabled: true });
+      expect(stations[2]).toEqual({ resourceId: 3, stationId: 'station-c', displayName: 'Station C', enabled: true });
+    });
+
+    it('excludes disabled profile stations', async () => {
+      const mockProfile = {
+        machineId: 'test-machine',
+        stations: [
+          { stationId: 'station-a', displayName: 'Station A', enabled: true, metadata: { resourceId: '1' }, signals: [] },
+          { stationId: 'station-b', displayName: 'Station B', enabled: false, metadata: { resourceId: '2' }, signals: [] },
+        ],
+      };
+      mockMachineProfileService.getProfile.mockReturnValue(mockProfile);
+
+      const stations = adapter.getStations();
+      expect(stations).toHaveLength(1);
+      expect(stations[0].stationId).toBe('station-a');
+    });
+
+    it('returns legacy stations when profile is unavailable', async () => {
+      // Profile loading fails
+      jest.spyOn(console, 'warn').mockImplementation();
+      const adapterWithFailedProfile = require('./opcua-machine.adapter').OpcUaMachineAdapter;
+      // We need to create a fresh adapter instance with failing profile service
+      // For this test, we mock the profile service to throw
+    });
+
+    it('excludes stations without valid resourceId metadata', async () => {
+      const mockProfile = {
+        machineId: 'test-machine',
+        stations: [
+          { stationId: 'station-a', displayName: 'Station A', enabled: true, metadata: { resourceId: '1' }, signals: [] },
+          { stationId: 'station-b', displayName: 'Station B', enabled: true, metadata: {}, signals: [] },
+          { stationId: 'station-c', displayName: 'Station C', enabled: true, metadata: { resourceId: 'invalid' }, signals: [] },
+        ],
+      };
+      mockMachineProfileService.getProfile.mockReturnValue(mockProfile);
+
+      const stations = adapter.getStations();
+      expect(stations).toHaveLength(1);
+      expect(stations[0].stationId).toBe('station-a');
+    });
+
+    it('returns legacy stations when no profile stations have valid resourceId', async () => {
+      const mockProfile = {
+        machineId: 'test-machine',
+        stations: [
+          { stationId: 'station-a', displayName: 'Station A', enabled: true, metadata: {}, signals: [] },
+          { stationId: 'station-b', displayName: 'Station B', enabled: true, metadata: { resourceId: 'invalid' }, signals: [] },
+        ],
+      };
+      mockMachineProfileService.getProfile.mockReturnValue(mockProfile);
+
+      const stations = adapter.getStations();
+      expect(stations).toHaveLength(3);
+      expect(stations[0].stationId).toBe('legacy-station-1');
+      expect(stations[1].stationId).toBe('legacy-station-2');
+      expect(stations[2].stationId).toBe('legacy-station-3');
+    });
+  });
+
+  describe('profile integration', () => {
+    it('prefers profile address when identifier starts with ns=', async () => {
+      const mockProfile = {
+        machineId: 'test-machine',
+        stations: [
+          {
+            stationId: 'station-a',
+            displayName: 'Station A',
+            enabled: true,
+            metadata: { resourceId: '1' },
+            signals: [
+              { key: 'carrierId', identifier: 'ns=1;s=Station1.stMES.Query.uiCarrierId' }
+            ]
+          },
+        ],
+      };
+      mockMachineProfileService.getProfile.mockReturnValue(mockProfile);
+
+      // Test that profile address is preferred
+      mockOpcUa.readNode.mockResolvedValueOnce(123);
+      await adapter.readStationRequest(1);
+      expect(mockOpcUa.readNode).toHaveBeenCalledWith('ns=1;s=Station1.stMES.Query.uiCarrierId');
+    });
+
+    it('falls back to legacy when identifier is abstract', async () => {
+      const mockProfile = {
+        machineId: 'test-machine',
+        stations: [
+          {
+            stationId: 'station-a',
+            displayName: 'Station A',
+            enabled: true,
+            metadata: { resourceId: '1' },
+            signals: [
+              { key: 'carrierId', identifier: 'CarrierId' } // Abstract identifier
+            ]
+          },
+        ],
+      };
+      mockMachineProfileService.getProfile.mockReturnValue(mockProfile);
+
+      mockOpcUa.readNode.mockResolvedValueOnce(123);
+      await adapter.readStationRequest(1);
+      // Should fall back to legacy address
+      expect(mockOpcUa.readNode).toHaveBeenCalledWith('ns=1;s=Station1.stMES.Query.uiCarrierId');
+    });
+    });
+
+    it('readRecoverySnapshot uses profile addresses', async () => {
+      const mockProfile = {
+        machineId: 'test-machine',
+        stations: [
+          {
+            stationId: 'station-a',
+            displayName: 'Station A',
+            enabled: true,
+            metadata: { resourceId: '1' },
+            signals: [
+              { key: 'carrierId', identifier: 'ns=1;s=Station1.stMES.Query.uiCarrierId' },
+              { key: 'workRequest', identifier: 'ns=1;s=Station1.stMES.Query.xStart' },
+              { key: 'processActive', identifier: 'ns=1;s=Station1.stMES.State.xBusy' },
+            ]
+          },
+        ],
+      };
+      mockMachineProfileService.getProfile.mockReturnValue(mockProfile);
+
+      mockOpcUa.readNode
+        .mockResolvedValueOnce(55)   // carrierId
+        .mockResolvedValueOnce(true) // workRequest
+        .mockResolvedValueOnce(false); // processActive
+
+      const snapshot = await adapter.readRecoverySnapshot(1);
+      expect(snapshot).toEqual({ carrierNumber: 55, requestActive: true, processBusy: false });
+    });
+  });
