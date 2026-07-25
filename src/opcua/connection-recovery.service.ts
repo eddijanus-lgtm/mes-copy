@@ -2,7 +2,7 @@ import { Injectable, Logger, OnModuleInit, Inject } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { MACHINE_ADAPTER } from '../machines/adapters/machine-adapter.token';
-import type { MachineAdapter, MachineRecoverySnapshot } from '../machines/adapters/machine-adapter.types';
+import type { MachineAdapter, MachineRecoverySnapshot, MachineStationDescriptor } from '../machines/adapters/machine-adapter.types';
 import { AlarmsService } from '../alarms/alarms.service';
 import { OrderEntity } from '../orders/order.entity';
 import { OrderRouteStepEntity } from '../orders/order-route-step.entity';
@@ -75,7 +75,10 @@ export class ConnectionRecoveryService implements OnModuleInit {
   }
 
   private async recoverStations() {
-    const resourceIds = [1, 2, 3];
+    const resourceIds = this.machine
+      .getStations()
+      .filter((station: MachineStationDescriptor) => station.enabled)
+      .map((station: MachineStationDescriptor) => station.resourceId);
     const stationCarriers: Array<{ resourceId: number; carrierNumber: number }> = [];
 
     for (const resourceId of resourceIds) {

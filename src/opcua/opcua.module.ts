@@ -6,6 +6,7 @@ import { MqttGatewayService } from './mqtt-gateway.service';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { OrdersModule } from '../orders/orders.module';
 import { AlarmsModule } from '../alarms/alarms.module';
+import { MachineProfilesModule } from '../machines/profiles/machine-profiles.module';
 import { StMesHandshakeEntity } from './stmes-handshake.entity';
 import { StMesHandshakeService } from './stmes-handshake.service';
 import { WebshopOrdersService } from './webshop-orders.service';
@@ -16,7 +17,7 @@ import { CarrierEntity } from '../carriers/carrier.entity';
 import { MACHINE_ADAPTER } from '../machines/adapters/machine-adapter.token';
 
 @Module({
-  imports: [ConfigModule, OrdersModule, AlarmsModule, TypeOrmModule.forFeature([StMesHandshakeEntity, OrderEntity, OrderRouteStepEntity, CarrierEntity])],
+  imports: [ConfigModule, OrdersModule, AlarmsModule, MachineProfilesModule, TypeOrmModule.forFeature([StMesHandshakeEntity, OrderEntity, OrderRouteStepEntity, CarrierEntity])],
   providers: [
     OpcUaService,
     { provide: MACHINE_ADAPTER, useClass: OpcUaMachineAdapter },

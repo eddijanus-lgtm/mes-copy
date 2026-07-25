@@ -37,6 +37,9 @@
       "displayName": "Station A",
       "description": "First assembly station",
       "enabled": true,
+      "metadata": {
+        "resourceId": "1"
+      },
       "signals": [
         {
           "key": "workRequest",
@@ -130,11 +133,14 @@
         }
       ]
     },
-    {
-      "stationId": "station-b",
-      "displayName": "Station B",
-      "description": "Inspection station",
-      "enabled": true,
+{
+        "stationId": "station-b",
+        "displayName": "Station B",
+        "description": "Inspection station",
+        "enabled": true,
+        "metadata": {
+          "resourceId": "2"
+        },
       "signals": [
         {
           "key": "workRequest",
@@ -228,11 +234,14 @@
         }
       ]
     },
-    {
-      "stationId": "station-c",
-      "displayName": "Station C",
-      "description": "Packing station",
-      "enabled": true,
+{
+        "stationId": "station-c",
+        "displayName": "Station C",
+        "description": "Packing station",
+        "enabled": true,
+        "metadata": {
+          "resourceId": "3"
+        },
       "signals": [
         {
           "key": "workRequest",
