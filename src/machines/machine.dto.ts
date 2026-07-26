@@ -1,5 +1,5 @@
 import { Transform } from 'class-transformer';
-import { IsBoolean, IsInt, IsNotEmpty, IsString, IsEnum, IsOptional, Min } from 'class-validator';
+import { IsBoolean, IsDateString, IsInt, IsNotEmpty, IsString, IsEnum, IsOptional, Min } from 'class-validator';
 import { MachineStatusEnum } from './machine.entity';
 
 export type MachineStatus = 'online' | 'offline' | 'maintenance' | 'error' | 'idle';
@@ -91,4 +91,18 @@ export class UpdateMachineDto {
   @IsOptional()
   @IsBoolean()
   opcua_enabled?: boolean;
+}
+
+export class ImportMachinesCsvDto {
+  @IsString()
+  @IsNotEmpty()
+  content: string;
+}
+
+export class DowntimePeriodQueryDto {
+  @IsDateString()
+  start_date: string;
+
+  @IsDateString()
+  end_date: string;
 }

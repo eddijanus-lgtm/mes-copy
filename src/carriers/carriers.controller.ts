@@ -1,11 +1,13 @@
-import { ApiTags, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
-import { Body, Controller, Delete, Get, Param, ParseUUIDPipe, Patch, Post } from '@nestjs/common';
+import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
+import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, ParseUUIDPipe, Patch, Post } from '@nestjs/common';
 import { Roles } from '../auth/roles.decorator';
 import { UserRoleEnum } from '../users/user.entity';
 import { AssignCarrierDto, CreateCarrierDto, UpdateCarrierDto } from './carrier.dto';
 import { CarriersService } from './carriers.service';
 
 @Controller('carriers')
+@ApiTags('Carriers')
+@ApiBearerAuth('JWT-auth')
 export class CarriersController {
   constructor(private readonly carriers: CarriersService) {}
 
@@ -31,5 +33,6 @@ export class CarriersController {
 
   @Delete(':id')
   @Roles(UserRoleEnum.ADMIN)
+  @HttpCode(HttpStatus.NO_CONTENT)
   remove(@Param('id', ParseUUIDPipe) id: string) { return this.carriers.remove(id); }
 }

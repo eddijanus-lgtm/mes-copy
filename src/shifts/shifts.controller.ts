@@ -1,11 +1,18 @@
-import { Controller, Get, Post, Patch, Delete, Body, Param, Query } from '@nestjs/common';
-import { ApiTags, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
+import { Controller, Get, Post, Body, Param, ParseUUIDPipe, Query } from '@nestjs/common';
+import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { ShiftsService } from './shifts.service';
 import { Roles } from '../auth/roles.decorator';
 import { UserRoleEnum } from '../users/user.entity';
+import {
+  CompleteProductionBatchDto,
+  CreateProductionBatchDto,
+  CreateShiftDto,
+  FinalizeShiftReportDto,
+} from './shifts.dto';
 
 @Controller('shifts')
 @ApiTags('Shifts')
+@ApiBearerAuth('JWT-auth')
 export class ShiftsController {
   constructor(private readonly shiftsService: ShiftsService) {}
 
@@ -17,11 +24,11 @@ export class ShiftsController {
 
   @Post()
   @Roles(UserRoleEnum.ADMIN)
-  create(@Body() dto: any) { return this.shiftsService.createShift(dto); }
+  create(@Body() dto: CreateShiftDto) { return this.shiftsService.createShift(dto); }
 
   @Post(':id/close')
   @Roles(UserRoleEnum.ADMIN, UserRoleEnum.OPERATOR)
-  closeShift(@Param('id') id: string) { return this.shiftsService.closeShift(id); }
+  closeShift(@Param('id', ParseUUIDPipe) id: string) { return this.shiftsService.closeShift(id); }
 
   @Get('reports')
   @Roles(UserRoleEnum.ADMIN, UserRoleEnum.OPERATOR, UserRoleEnum.VIEWER)
@@ -32,17 +39,17 @@ export class ShiftsController {
 
   @Get('reports/:id')
   @Roles(UserRoleEnum.ADMIN, UserRoleEnum.OPERATOR, UserRoleEnum.VIEWER)
-  getReport(@Param('id') id: string) { return this.shiftsService.getReport(id); }
+  getReport(@Param('id', ParseUUIDPipe) id: string) { return this.shiftsService.getReport(id); }
 
   @Post('reports/generate/:shiftId')
   @Roles(UserRoleEnum.ADMIN, UserRoleEnum.OPERATOR)
-  generateReport(@Param('shiftId') shiftId: string, @Query('date') date?: string) {
+  generateReport(@Param('shiftId', ParseUUIDPipe) shiftId: string, @Query('date') date?: string) {
     return this.shiftsService.generateReport(shiftId, date);
   }
 
   @Post('reports/:id/finalize')
   @Roles(UserRoleEnum.ADMIN)
-  finalizeReport(@Param('id') id: string, @Body() dto?: any) {
+  finalizeReport(@Param('id', ParseUUIDPipe) id: string, @Body() dto: FinalizeShiftReportDto) {
     return this.shiftsService.finalizeReport(id, dto?.notes);
   }
 
@@ -57,17 +64,19 @@ export class ShiftsController {
   @Get('batches')
   @Roles(UserRoleEnum.ADMIN, UserRoleEnum.OPERATOR, UserRoleEnum.VIEWER)
   getBatches(@Query('shift_id') shiftId?: string) {
-    if (shiftId) return this.shiftsService['batchRepo'].find({ where: { id: shiftId?.startsWith('/') ? undefined : shiftId } });
-    return this.shiftsService['batchRepo'].find({ order: { created_at: 'DESC' } });
+    return this.shiftsService.getBatches(shiftId);
   }
 
   @Post('batches')
   @Roles(UserRoleEnum.ADMIN)
-  createBatch(@Body() dto: any) { return this.shiftsService.createBatch(dto); }
+  createBatch(@Body() dto: CreateProductionBatchDto) { return this.shiftsService.createBatch(dto); }
 
   @Post('batches/:id/complete')
   @Roles(UserRoleEnum.ADMIN, UserRoleEnum.OPERATOR)
-  completeBatch(@Param('id') id: string, @Body() dto?: any) { 
+  completeBatch(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: CompleteProductionBatchDto,
+  ) {
     return this.shiftsService.completeBatch(id, dto?.completed_quantity); 
   }
 }

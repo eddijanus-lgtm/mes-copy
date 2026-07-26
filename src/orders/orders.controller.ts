@@ -1,5 +1,5 @@
-import { ApiTags, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
-import { Controller, Get, Post, Patch, Delete, Body, Param, ParseIntPipe, ParseUUIDPipe } from '@nestjs/common';
+import { ApiOperation, ApiTags, ApiBearerAuth } from '@nestjs/swagger';
+import { Controller, Get, Post, Patch, Delete, Body, HttpCode, HttpStatus, Param, ParseIntPipe, ParseUUIDPipe } from '@nestjs/common';
 import { OrdersService } from './orders.service';
 import { CreateOrderDto, UpdateOrderDto } from './order.dto';
 import { Roles } from '../auth/roles.decorator';
@@ -8,6 +8,8 @@ import { ReplaceOrderRouteDto } from './routing.dto';
 import { RoutingService } from './routing.service';
 
 @Controller('orders')
+@ApiTags('Orders')
+@ApiBearerAuth('JWT-auth')
 export class OrdersController {
   constructor(private readonly ordersService: OrdersService, private readonly routingService: RoutingService) {}
 
@@ -36,6 +38,10 @@ export class OrdersController {
 
   @Patch(':id/progress/:completedQty')
   @Roles(UserRoleEnum.ADMIN, UserRoleEnum.OPERATOR)
+  @ApiOperation({
+    deprecated: true,
+    summary: 'Auftragsfortschritt aktualisieren (veraltet; PATCH /orders/{id} verwenden)',
+  })
   updateProgress(
     @Param('id', ParseUUIDPipe) id: string,
     @Param('completedQty', ParseIntPipe) completedQty: number,
@@ -51,6 +57,7 @@ export class OrdersController {
 
   @Delete(':id')
   @Roles(UserRoleEnum.ADMIN)
+  @HttpCode(HttpStatus.NO_CONTENT)
   remove(@Param('id', ParseUUIDPipe) id: string) { return this.ordersService.remove(id); }
 
   @Get(':id/route')

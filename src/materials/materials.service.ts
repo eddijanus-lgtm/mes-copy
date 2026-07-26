@@ -3,7 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { MaterialEntity, MaterialTypeEnum } from './material.entity';
 import { MaterialConsumptionEntity } from './material-consumption.entity';
-import { CreateMaterialDto, RegisterConsumptionDto } from './material.dto';
+import { CreateMaterialDto, RegisterConsumptionDto, UpdateMaterialDto } from './material.dto';
 
 @Injectable()
 export class MaterialsService {
@@ -39,7 +39,7 @@ export class MaterialsService {
     return material;
   }
 
-  async update(id: string, dto: CreateMaterialDto): Promise<MaterialEntity> {
+  async update(id: string, dto: UpdateMaterialDto): Promise<MaterialEntity> {
     const material = await this.findOne(id);
     Object.assign(material, dto);
     return this.materialsRepo.save(material);

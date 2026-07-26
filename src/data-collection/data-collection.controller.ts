@@ -1,4 +1,4 @@
-import { ApiTags, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
+import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { Controller, Get, Post, Body, Param, ParseArrayPipe, ParseUUIDPipe, Query } from '@nestjs/common';
 import { DataCollectionService } from './data-collection.service';
 import { CreateDataPointDto, DataPointQueryDto } from './data-point.dto';
@@ -6,6 +6,8 @@ import { Roles } from '../auth/roles.decorator';
 import { UserRoleEnum } from '../users/user.entity';
 
 @Controller('data-collection')
+@ApiTags('Data Collection')
+@ApiBearerAuth('JWT-auth')
 export class DataCollectionController {
   constructor(private readonly dataCollectionService: DataCollectionService) {}
 

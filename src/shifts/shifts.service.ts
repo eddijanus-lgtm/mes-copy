@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { ConflictException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, Between, LessThanOrEqual, MoreThanOrEqual } from 'typeorm';
 const dayjs = require('dayjs');
@@ -30,7 +30,7 @@ export class ShiftsService {
     const existing = await this.shiftRepo.findOne({
       where: { date: dto.date as string, type: dto.type },
     });
-    if (existing) throw new Error('Schicht existiert bereits am ' + dto.date);
+    if (existing) throw new ConflictException('Schicht existiert bereits am ' + dto.date);
 
     const shift = this.shiftRepo.create(dto);
     return this.shiftRepo.save(shift);
@@ -93,7 +93,7 @@ export class ShiftsService {
 
   async getReport(id: string): Promise<ShiftReportEntity> {
     const report = await this.reportRepo.findOne({ where: { id } });
-    if (!report) throw new Error(`Shift report ${id} not found`);
+    if (!report) throw new NotFoundException(`Shift report ${id} not found`);
     return report;
   }
 
@@ -113,18 +113,35 @@ export class ShiftsService {
 
   async completeBatch(batchId: string, completedQty?: number): Promise<ProductionBatchEntity> {
     const batch = await this.getBatch(batchId);
-    batch.completed_quantity = completedQty || batch.target_quantity;
+    batch.completed_quantity = completedQty ?? batch.target_quantity;
     batch.finished_at = new Date();
     return this.batchRepo.save(batch);
   }
 
   async getShiftSummary(date: string, shiftType?: 'day' | 'night' | 'swing'): Promise<ShiftReportEntity> {
-    return this.generateReport('', date);
+    const shifts = await this.shiftRepo.find({
+      where: {
+        date,
+        ...(shiftType ? { type: shiftType } : {}),
+      },
+      order: { start_time: 'ASC' },
+    });
+    if (!shifts.length) {
+      throw new NotFoundException(`No shift found for ${date}`);
+    }
+    return this.generateReport(shifts[0].id, date);
+  }
+
+  async getBatches(shiftId?: string): Promise<ProductionBatchEntity[]> {
+    return this.batchRepo.find({
+      where: shiftId ? { id: shiftId } : {},
+      order: { created_at: 'DESC' },
+    });
   }
 
   async getBatch(id: string): Promise<ProductionBatchEntity> {
     const batch = await this.batchRepo.findOne({ where: { id } });
-    if (!batch) throw new Error(`Batch ${id} not found`);
+    if (!batch) throw new NotFoundException(`Batch ${id} not found`);
     return batch;
   }
 
@@ -132,7 +149,7 @@ export class ShiftsService {
 
   private async getShift(id: string): Promise<ShiftEntity> {
     const shift = await this.shiftRepo.findOne({ where: { id } });
-    if (!shift) throw new Error(`Shift ${id} not found`);
+    if (!shift) throw new NotFoundException(`Shift ${id} not found`);
     return shift;
   }
 

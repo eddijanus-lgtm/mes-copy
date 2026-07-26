@@ -26,6 +26,9 @@ Thumbs.db
 # Logs
 *.log
 
+# Local OPC-UA commissioning reports may expose machine topology
+artifacts/opcua-scans/
+
 # Windows batch scripts - not needed in repo
 *.bat
 *.ps1

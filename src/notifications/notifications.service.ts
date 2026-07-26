@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, ServiceUnavailableException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import * as nodemailer from 'nodemailer';
@@ -99,7 +99,7 @@ export class NotificationsService {
   }
 
   private async sendEmail(rule: AlertRuleEntity, message: string, machineId?: string): Promise<void> {
-    if (!this.transporter) throw new Error('SMTP transport not configured');
+    if (!this.transporter) throw new ServiceUnavailableException('SMTP transport not configured');
 
     const to = process.env.ALERT_EMAIL_TARGETS || 'admin@localhost';
     const subject = `[MES Alert ${rule.severity.toUpperCase()}] ${rule.name}`;
@@ -120,7 +120,7 @@ export class NotificationsService {
   }
 
   private async sendMqtt(rule: AlertRuleEntity, messageText: string): Promise<void> {
-    if (!this.mqttGateway) throw new Error('MQTT gateway not available');
+    if (!this.mqttGateway) throw new ServiceUnavailableException('MQTT gateway not available');
     const topic = process.env.ALERT_MQTT_TOPIC || 'mes/alerts';
     const payload = {
       rule_id: rule.id,
@@ -211,7 +211,7 @@ export class NotificationsService {
 
   async getRule(id: string): Promise<AlertRuleEntity> {
     const rule = await this.ruleRepo.findOne({ where: { id } });
-    if (!rule) throw new Error(`Alert rule ${id} not found`);
+    if (!rule) throw new NotFoundException(`Alert rule ${id} not found`);
     return rule;
   }
 

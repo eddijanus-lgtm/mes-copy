@@ -1,10 +1,13 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, ParseUUIDPipe } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, Patch, Post, ParseUUIDPipe } from '@nestjs/common';
+import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { Roles } from '../auth/roles.decorator';
 import { UserRoleEnum } from '../users/user.entity';
 import { CreateProductDto, UpdateProductDto } from './product.dto';
 import { ProductsService } from './products.service';
 
 @Controller('products')
+@ApiTags('Products')
+@ApiBearerAuth('JWT-auth')
 export class ProductsController {
   constructor(private readonly productsService: ProductsService) {}
 
@@ -26,5 +29,6 @@ export class ProductsController {
 
   @Delete(':id')
   @Roles(UserRoleEnum.ADMIN)
+  @HttpCode(HttpStatus.NO_CONTENT)
   remove(@Param('id', ParseUUIDPipe) id: string) { return this.productsService.remove(id); }
 }

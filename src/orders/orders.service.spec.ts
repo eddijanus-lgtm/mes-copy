@@ -2,6 +2,9 @@ import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { Test, TestingModule } from '@nestjs/testing';
 import { CarrierEntity } from '../carriers/carrier.entity';
+import { MachineEntity } from '../machines/machine.entity';
+import { ProductRouteStepEntity } from '../products/product-route-step.entity';
+import { ProductEntity } from '../products/product.entity';
 import { OrderRouteStepEntity } from './order-route-step.entity';
 import { OrderEntity } from './order.entity';
 import { OrdersService } from './orders.service';
@@ -15,11 +18,50 @@ describe('OrdersService', () => {
     findOne: jest.fn(),
     delete: jest.fn(),
   };
-  const carriersRepo = { count: jest.fn() };
-  const routeStepsRepo = { delete: jest.fn() };
+  const carriersRepo = {
+    count: jest.fn(),
+    find: jest.fn(),
+    save: jest.fn(),
+  };
+  const routeStepsRepo = {
+    create: jest.fn((value) => value),
+    save: jest.fn(async (value) => value),
+    delete: jest.fn(),
+  };
+  const machinesRepo = {
+    findOne: jest.fn(),
+    find: jest.fn(),
+  };
+  const productsRepo = { findOne: jest.fn() };
+  const productRouteStepsRepo = { find: jest.fn() };
 
   beforeEach(async () => {
     jest.clearAllMocks();
+    carriersRepo.find.mockResolvedValue(
+      Array.from({ length: 10 }, (_, index) => ({
+        id: `carrier-${index + 1}`,
+        carrier_number: index + 1,
+        status: 'available',
+      })),
+    );
+    carriersRepo.save.mockImplementation(async (value) => value);
+    carriersRepo.count.mockResolvedValue(0);
+    machinesRepo.findOne.mockResolvedValue({
+      id: 'm1',
+      name: 'Station 1',
+      location: 'line-1',
+      resource_id: 1,
+      opcua_enabled: true,
+    });
+    machinesRepo.find.mockResolvedValue([
+      {
+        id: 'm1',
+        name: 'Station 1',
+        location: 'line-1',
+        resource_id: 1,
+        opcua_enabled: true,
+      },
+    ]);
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -27,6 +69,12 @@ describe('OrdersService', () => {
         { provide: getRepositoryToken(OrderEntity), useValue: ordersRepo },
         { provide: getRepositoryToken(CarrierEntity), useValue: carriersRepo },
         { provide: getRepositoryToken(OrderRouteStepEntity), useValue: routeStepsRepo },
+        { provide: getRepositoryToken(MachineEntity), useValue: machinesRepo },
+        { provide: getRepositoryToken(ProductEntity), useValue: productsRepo },
+        {
+          provide: getRepositoryToken(ProductRouteStepEntity),
+          useValue: productRouteStepsRepo,
+        },
       ],
     }).compile();
 

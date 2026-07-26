@@ -4,9 +4,9 @@
   "displayName": "Simulator",
   "description": "Local OPC UA simulator machine for development and testing",
   "transport": "opcua",
-  "operatingMode": "observe",
+  "operatingMode": "control",
   "connection": {
-    "endpointUrl": "opc.tcp://localhost:4840",
+    "endpointUrl": "opc.tcp://localhost:4840/UA/WaraMesTest",
     "applicationName": "WaraSimulator",
     "security": {
       "mode": "None",
@@ -73,7 +73,7 @@
           "direction": "machineToMes",
           "namespace": "station",
           "identifier": "ns=1;s=Station1.stMES.Query.uiResourceId",
-          "dataType": "UInt32",
+          "dataType": "UInt16",
           "access": "read",
           "required": true
         },
@@ -93,16 +93,6 @@
           "direction": "mesToMachine",
           "namespace": "station",
           "identifier": "ns=1;s=Station1.stMES.Query.xDone",
-          "dataType": "Boolean",
-          "access": "write",
-          "required": true
-        },
-        {
-          "key": "requestRejected",
-          "role": "requestRejected",
-          "direction": "mesToMachine",
-          "namespace": "station",
-          "identifier": "ns=1;s=Station1.stMES.Query.xError",
           "dataType": "Boolean",
           "access": "write",
           "required": true
@@ -204,6 +194,16 @@
           "namespace": "station",
           "identifier": "ns=1;s=Station1.dbProcessData.iCarrierID",
           "dataType": "Int16",
+          "access": "read",
+          "required": true
+        },
+        {
+          "key": "processCompleted",
+          "role": "processCompleted",
+          "direction": "machineToMes",
+          "namespace": "station",
+          "identifier": "ns=1;s=Station1.dbProcessData.ldtTimeStamp",
+          "dataType": "DateTime",
           "access": "read",
           "required": true
         },
@@ -334,7 +334,7 @@
           "direction": "machineToMes",
           "namespace": "station",
           "identifier": "ns=1;s=Station2.stMES.Query.uiResourceId",
-          "dataType": "UInt32",
+          "dataType": "UInt16",
           "access": "read",
           "required": true
         },
@@ -354,16 +354,6 @@
           "direction": "mesToMachine",
           "namespace": "station",
           "identifier": "ns=1;s=Station2.stMES.Query.xDone",
-          "dataType": "Boolean",
-          "access": "write",
-          "required": true
-        },
-        {
-          "key": "requestRejected",
-          "role": "requestRejected",
-          "direction": "mesToMachine",
-          "namespace": "station",
-          "identifier": "ns=1;s=Station2.stMES.Query.xError",
           "dataType": "Boolean",
           "access": "write",
           "required": true
@@ -465,6 +455,16 @@
           "namespace": "station",
           "identifier": "ns=1;s=Station2.dbProcessData.iCarrierID",
           "dataType": "Int16",
+          "access": "read",
+          "required": true
+        },
+        {
+          "key": "processCompleted",
+          "role": "processCompleted",
+          "direction": "machineToMes",
+          "namespace": "station",
+          "identifier": "ns=1;s=Station2.dbProcessData.ldtTimeStamp",
+          "dataType": "DateTime",
           "access": "read",
           "required": true
         },
@@ -595,7 +595,7 @@
           "direction": "machineToMes",
           "namespace": "station",
           "identifier": "ns=1;s=Station3.stMES.Query.uiResourceId",
-          "dataType": "UInt32",
+          "dataType": "UInt16",
           "access": "read",
           "required": true
         },
@@ -615,16 +615,6 @@
           "direction": "mesToMachine",
           "namespace": "station",
           "identifier": "ns=1;s=Station3.stMES.Query.xDone",
-          "dataType": "Boolean",
-          "access": "write",
-          "required": true
-        },
-        {
-          "key": "requestRejected",
-          "role": "requestRejected",
-          "direction": "mesToMachine",
-          "namespace": "station",
-          "identifier": "ns=1;s=Station3.stMES.Query.xError",
           "dataType": "Boolean",
           "access": "write",
           "required": true
@@ -726,6 +716,16 @@
           "namespace": "station",
           "identifier": "ns=1;s=Station3.dbProcessData.iCarrierID",
           "dataType": "Int16",
+          "access": "read",
+          "required": true
+        },
+        {
+          "key": "processCompleted",
+          "role": "processCompleted",
+          "direction": "machineToMes",
+          "namespace": "station",
+          "identifier": "ns=1;s=Station3.dbProcessData.ldtTimeStamp",
+          "dataType": "DateTime",
           "access": "read",
           "required": true
         },

@@ -1,4 +1,4 @@
-import { ApiTags, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
+import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { Controller, Get, Post, Body, Inject } from '@nestjs/common';
 import { MqttGatewayService } from './mqtt-gateway.service';
 import { MqttPublishDto, OpcUaReadDto, MachineControlDto, OpcUaWriteDto, OpcUaWriteItemDto } from './shopfloor-gateway.dto';
@@ -10,6 +10,8 @@ import { MACHINE_ADAPTER } from '../machines/adapters/machine-adapter.token';
 import type { MachineAdapter, MachineAddressWrite } from '../machines/adapters/machine-adapter.types';
 
 @Controller('shopfloor')
+@ApiTags('Shopfloor')
+@ApiBearerAuth('JWT-auth')
 export class ShopfloorGatewayController {
   constructor(
     @Inject(MACHINE_ADAPTER) private readonly machine: MachineAdapter,

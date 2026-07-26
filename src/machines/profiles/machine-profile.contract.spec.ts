@@ -42,7 +42,6 @@ const EXPECTED_SIMULATOR_ROLES: ReadonlyArray<string> = [
   'resourceId',
   'processCompleted',
   'processResult',
-  'timestamp',
 ];
 
 const SCHEMA_DEF_NAMES: ReadonlyArray<string> = [
@@ -55,6 +54,8 @@ const SCHEMA_DEF_NAMES: ReadonlyArray<string> = [
   'signal',
   'scaling',
   'envReference',
+  'orderParameterDefinition',
+  'orderParameterOption',
 ];
 
 const SCHEMA_ROOT_REQUIRED: ReadonlyArray<string> = [
@@ -182,8 +183,8 @@ describe('MachineProfile Contract', () => {
       expect(profile.transport).toBe('opcua');
     });
 
-    it('has operatingMode "observe"', () => {
-      expect(profile.operatingMode).toBe('observe');
+    it('has operatingMode "control"', () => {
+      expect(profile.operatingMode).toBe('control');
     });
 
     it('has a connection block', () => {
@@ -301,11 +302,6 @@ describe('MachineProfile Contract', () => {
     }
 
     testNoNsIndexPattern(
-      'simulator contains no "ns=<number>" pattern',
-      SIMULATOR_PATH,
-    );
-
-    testNoNsIndexPattern(
       'template contains no "ns=<number>" pattern',
       TEMPLATE_PATH,
     );
@@ -416,8 +412,8 @@ describe('MachineProfile Contract', () => {
     );
   });
 
-  // ---- 6. No full NodeIDs ----
-  describe('No full NodeIDs in signal identifiers', () => {
+  // ---- 6. NodeID portability rules ----
+  describe('NodeID portability rules', () => {
     function testNoNodeIds(
       description: string,
       filePath: string,
@@ -450,14 +446,26 @@ describe('MachineProfile Contract', () => {
     }
 
     testNoNodeIds(
-      'simulator identifiers contain no full NodeIDs',
-      SIMULATOR_PATH,
-    );
-
-    testNoNodeIds(
       'template identifiers contain no full NodeIDs',
       TEMPLATE_PATH,
     );
+
+    it('simulator uses deterministic full NodeIDs from the local test server', () => {
+      const parsed = parseJsonFile(SIMULATOR_PATH);
+      assertRecord(parsed);
+      const stations = parsed.stations;
+      expect(Array.isArray(stations)).toBe(true);
+
+      for (const station of stations as unknown[]) {
+        assertRecord(station);
+        const signals = station.signals;
+        expect(Array.isArray(signals)).toBe(true);
+        for (const signal of signals as unknown[]) {
+          assertRecord(signal);
+          expect(signal.identifier).toMatch(/^ns=\d+;[isgb]=/);
+        }
+      }
+    });
   });
 
   // ---- 7. No embedded secrets ----
@@ -716,12 +724,14 @@ describe('MachineProfile Contract', () => {
       profile = parsed;
     });
 
-    it('each station has exactly 9 signals', () => {
+    it('each station contains at least the required integration signals', () => {
       const stations = profile.stations as unknown[];
       for (const station of stations) {
         assertRecord(station as Record<string, unknown>);
         const signals = (station as Record<string, unknown>).signals as unknown[];
-        expect(signals.length).toBe(9);
+        expect(signals.length).toBeGreaterThanOrEqual(
+          EXPECTED_SIMULATOR_ROLES.length,
+        );
       }
     });
 

@@ -75,9 +75,7 @@ export default function MachinesPage() {
     setImporting(true);
     try {
       const text = await file.text();
-      const fd = new FormData();
-      fd.set('file', text, file.name);
-      const res = await api.post('/machines/import/csv', fd);
+      const res = await api.post('/machines/import/csv', { content: text });
       setImportResult(res);
     } catch (err) {
       setError('Import fehlgeschlagen: ' + (err.message || 'Unbekannter Fehler'));
