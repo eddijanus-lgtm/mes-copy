@@ -8,6 +8,7 @@ import { OrderRouteStepEntity } from './order-route-step.entity';
 import { MachineEntity } from '../machines/machine.entity';
 import { ProductEntity } from '../products/product.entity';
 import { ProductRouteStepEntity } from '../products/product-route-step.entity';
+import { OrderProductionLogService } from './order-production-log.service';
 
 @Injectable()
 export class OrdersService {
@@ -24,6 +25,7 @@ export class OrdersService {
     private readonly productsRepo: Repository<ProductEntity>,
     @InjectRepository(ProductRouteStepEntity)
     private readonly productRouteStepsRepo: Repository<ProductRouteStepEntity>,
+    private readonly productionLogs: OrderProductionLogService,
   ) {}
 
   async create(dto: CreateOrderDto) {
@@ -92,13 +94,16 @@ export class OrdersService {
     }
     if (dto.status === 'completed' || dto.status === 'cancelled') order.end_time = new Date();
     Object.assign(order, dto);
-    return this.ordersRepo.save(order);
+    const savedOrder = await this.ordersRepo.save(order);
+    if (savedOrder.status === 'completed') await this.productionLogs.finalize(savedOrder.id);
+    return savedOrder;
   }
 
   async remove(id: string): Promise<void> {
     if (await this.carriersRepo.count({ where: { order_id: id } })) {
       throw new BadRequestException('Order with assigned carriers cannot be deleted');
     }
+    await this.productionLogs.remove(id);
     await this.routeStepsRepo.delete({ order_id: id });
     const result = await this.ordersRepo.delete(id);
     if (result.affected === 0) throw new NotFoundException('Order not found');
@@ -119,7 +124,9 @@ export class OrdersService {
       }
       await this.carriersRepo.save(carriers);
     }
-    return this.ordersRepo.save(order);
+    const savedOrder = await this.ordersRepo.save(order);
+    if (savedOrder.status === 'completed') await this.productionLogs.finalize(savedOrder.id);
+    return savedOrder;
   }
 
   async getPendingByLine(machineId: string): Promise<OrderEntity[]> {

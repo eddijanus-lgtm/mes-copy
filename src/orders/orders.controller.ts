@@ -6,12 +6,17 @@ import { Roles } from '../auth/roles.decorator';
 import { UserRoleEnum } from '../users/user.entity';
 import { ReplaceOrderRouteDto } from './routing.dto';
 import { RoutingService } from './routing.service';
+import { OrderProductionLogService } from './order-production-log.service';
 
 @Controller('orders')
 @ApiTags('Orders')
 @ApiBearerAuth('JWT-auth')
 export class OrdersController {
-  constructor(private readonly ordersService: OrdersService, private readonly routingService: RoutingService) {}
+  constructor(
+    private readonly ordersService: OrdersService,
+    private readonly routingService: RoutingService,
+    private readonly productionLogs: OrderProductionLogService,
+  ) {}
 
   @Post()
   @Roles(UserRoleEnum.ADMIN, UserRoleEnum.OPERATOR)
@@ -46,6 +51,12 @@ export class OrdersController {
     @Param('id', ParseUUIDPipe) id: string,
     @Param('completedQty', ParseIntPipe) completedQty: number,
   ) { return this.ordersService.updateProgress(id, completedQty); }
+
+  @Get(':id/production-log')
+  @Roles(UserRoleEnum.ADMIN, UserRoleEnum.OPERATOR, UserRoleEnum.VIEWER)
+  getProductionLog(@Param('id', ParseUUIDPipe) id: string) {
+    return this.productionLogs.findOrCreate(id);
+  }
 
   @Get(':id')
   @Roles(UserRoleEnum.ADMIN, UserRoleEnum.OPERATOR, UserRoleEnum.VIEWER)

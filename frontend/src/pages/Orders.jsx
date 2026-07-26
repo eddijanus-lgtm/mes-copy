@@ -14,6 +14,7 @@ export default function OrdersPage() {
   const [orderParameterDefinitions, setOrderParameterDefinitions] = useState([]);
   const [carriers, setCarriers] = useState([]);
   const [routes, setRoutes] = useState({});
+  const [productionLogs, setProductionLogs] = useState({});
   const [form, setForm] = useState(EMPTY_FORM);
   const [modalOpen, setModalOpen] = useState(false);
   const [search, setSearch] = useState("");
@@ -38,6 +39,9 @@ export default function OrdersPage() {
       setCarriers(Array.isArray(carrierData) ? carrierData : []);
       const routeEntries = await Promise.all(safeOrders.map((order) => api.get(`/orders/${order.id}/route`).then((route) => [order.id, route]).catch(() => [order.id, []])));
       setRoutes(Object.fromEntries(routeEntries));
+      const completedOrders = safeOrders.filter((order) => order.status === "completed");
+      const logEntries = await Promise.all(completedOrders.map((order) => api.get(`/orders/${order.id}/production-log`).then((log) => [order.id, log]).catch(() => [order.id, null])));
+      setProductionLogs(Object.fromEntries(logEntries));
     } catch (requestError) {
       setError(requestError.message);
     }
@@ -113,19 +117,18 @@ export default function OrdersPage() {
   });
 
   return (
-    <div className="min-h-screen bg-neutral-50 p-6 space-y-6">
-      <header className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+    <div className="mes-page min-h-screen bg-neutral-50 p-6 space-y-6">
+      <header className="mes-page-header">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-brand-primary">MES Flow</p>
           <h1 className="text-2xl font-bold text-neutral-900">Produktionsaufträge</h1>
-          <p className="mt-1 text-sm text-neutral-500">Ein Auftrag erzeugt Route, Carrier-Zuordnung und stMES-Freigaben fuer die Anlage.</p>
+          <p className="mt-1 text-sm text-neutral-500">Ein Auftrag erzeugt Route, Carrier-Zuordnung und stMES-Freigaben für die Anlage.</p>
         </div>
         {canManage && <button onClick={openCreate} disabled={machines.length === 0} className="rounded-lg bg-brand-primary px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-[var(--color-brand-primary-dark)] disabled:cursor-not-allowed disabled:opacity-50">+ Neuer Auftrag</button>}
       </header>
 
-        <ProcessHint />
+      <ProcessHint />
 
-      <div className="grid gap-3 sm:grid-cols-3">
+      <div className="mes-metric-strip grid sm:grid-cols-3">
         <OrderStat label="Alle Aufträge" value={orders.length} />
         <OrderStat label="In Arbeit" value={orders.filter((order) => order.status === "in_progress").length} accent="amber" />
         <OrderStat label="Abgeschlossen" value={orders.filter((order) => order.status === "completed").length} accent="green" />
@@ -134,7 +137,7 @@ export default function OrdersPage() {
       {machines.length === 0 && <p className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">Vor dem ersten Auftrag muss mindestens eine Station angelegt werden.</p>}
       {error && <p role="alert" className="rounded-lg bg-status-error-bg px-4 py-3 text-sm text-status-error">{error}</p>}
 
-      <div className="grid gap-3 rounded-xl border border-neutral-200 bg-white p-4 sm:grid-cols-[1fr_220px]">
+      <div className="mes-filter-panel grid gap-3 sm:grid-cols-[1fr_220px]">
         <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Auftrag oder Operation suchen..." className="rounded-lg border border-neutral-200 px-4 py-2.5 text-sm focus:border-brand-primary focus:outline-none focus:ring-2 focus:ring-brand-primary/20" />
         <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} className="rounded-lg border border-neutral-200 px-3 py-2.5 text-sm focus:border-brand-primary focus:outline-none">
           <option value="all">Alle Status</option>
@@ -142,8 +145,8 @@ export default function OrdersPage() {
         </select>
       </div>
 
-      <div className="grid gap-4">
-        {filtered.map((order) => <OrderCard key={order.id} order={order} route={routes[order.id] || []} carriers={carriersByOrder[order.id] || []} machineName={machineNames[order.machine_id]} productName={productNames[order.product_id]} resourceNames={resourceNames} canManage={canManage} canDelete={canDelete} onEdit={openEdit} onDelete={requestDelete} />)}
+      <div className="mes-card-list">
+        {filtered.map((order) => <OrderCard key={order.id} order={order} route={routes[order.id] || []} productionLog={productionLogs[order.id]} carriers={carriersByOrder[order.id] || []} machineName={machineNames[order.machine_id]} productName={productNames[order.product_id]} resourceNames={resourceNames} canManage={canManage} canDelete={canDelete} onEdit={openEdit} onDelete={requestDelete} />)}
         {filtered.length === 0 && <p className="rounded-xl border border-neutral-200 bg-white p-10 text-center text-sm text-neutral-400">Keine passenden Aufträge gefunden.</p>}
       </div>
 
@@ -157,8 +160,8 @@ function DeleteOrderDialog({ order, deleting, onCancel, onConfirm }) {
   return (
     <div onClick={() => !deleting && onCancel()} className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4">
       <div onClick={(event) => event.stopPropagation()} className="w-full max-w-md rounded-xl bg-white p-6 shadow-[0_20px_50px_rgba(0,0,0,0.12)]">
-        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-status-error">Auftrag loeschen</p>
-        <h2 className="mt-2 text-lg font-bold text-neutral-900">{order.name} wirklich loeschen?</h2>
+        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-status-error">Auftrag löschen</p>
+        <h2 className="mt-2 text-lg font-bold text-neutral-900">{order.name} wirklich löschen?</h2>
         <p className="mt-2 text-sm text-neutral-500">Der Auftrag und seine Route werden entfernt. Diese Abfrage bleibt im MES-UI und nutzt keinen Browser-Dialog.</p>
         <div className="mt-5 rounded-lg border border-neutral-200 bg-neutral-50 p-3 text-sm">
           <p><span className="font-medium text-neutral-600">Status:</span> {STATUS_LABELS[order.status] || order.status}</p>
@@ -174,7 +177,7 @@ function DeleteOrderDialog({ order, deleting, onCancel, onConfirm }) {
   );
 }
 
-function OrderCard({ order, route, carriers, machineName, productName, resourceNames, canManage, canDelete, onEdit, onDelete }) {
+function OrderCard({ order, route, productionLog, carriers, machineName, productName, resourceNames, canManage, canDelete, onEdit, onDelete }) {
   return (
     <article className="overflow-hidden rounded-xl border border-neutral-200 bg-white shadow-sm">
       <div className="grid gap-4 p-5 lg:grid-cols-[1.2fr_1fr]">
@@ -204,6 +207,8 @@ function OrderCard({ order, route, carriers, machineName, productName, resourceN
         </div>
       </div>
 
+      {order.status === "completed" && <ProductionLog log={productionLog} resourceNames={resourceNames} />}
+
       <div className="border-t border-neutral-100 bg-neutral-50 px-5 py-4">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <CarrierChips carriers={carriers} />
@@ -211,6 +216,47 @@ function OrderCard({ order, route, carriers, machineName, productName, resourceN
         </div>
       </div>
     </article>
+  );
+}
+
+function ProductionLog({ log, resourceNames }) {
+  if (!log?.snapshot) {
+    return <div className="border-t border-amber-200 bg-amber-50 px-5 py-3 text-sm text-amber-800">Der Produktionsabschluss ist vorhanden, das Auftragslog konnte aber noch nicht geladen werden.</div>;
+  }
+  const snapshot = log.snapshot;
+  const successfulSteps = snapshot.station_executions.filter((entry) => entry.result_code === 0).length;
+  return (
+    <details className="group border-t border-neutral-200 bg-white">
+      <summary className="flex cursor-pointer list-none items-center justify-between gap-4 px-5 py-4 text-sm font-semibold text-neutral-800 hover:bg-neutral-50">
+        <span>Auftragslog · {successfulSteps}/{snapshot.station_executions.length} Stationsschritte erfolgreich</span>
+        <span className="text-xs font-medium text-neutral-500 group-open:hidden">Anzeigen</span>
+        <span className="hidden text-xs font-medium text-neutral-500 group-open:inline">Schließen</span>
+      </summary>
+      <div className="border-t border-neutral-100 px-5 pb-5 pt-4">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <LogMetric label="Produktionsstart" value={formatDateTime(snapshot.order.started_at)} />
+          <LogMetric label="Produktionsende" value={formatDateTime(snapshot.order.completed_at)} />
+          <LogMetric label="Dauer" value={formatDuration(snapshot.order.duration_ms)} />
+          <LogMetric label="Carrier" value={snapshot.carriers.length ? snapshot.carriers.map((carrier) => `#${carrier}`).join(", ") : "–"} />
+        </div>
+        <div className="mt-4 overflow-hidden rounded-lg border border-neutral-200">
+          {snapshot.station_executions.map((entry, index) => {
+            const routeStep = snapshot.route.find((step) => step.resource_id === entry.resource_id);
+            return (
+              <div key={`${entry.resource_id}-${entry.carrier_number}-${entry.requested_at}`} className={`grid gap-3 px-4 py-3 text-sm lg:grid-cols-[60px_1fr_160px_120px] ${index ? "border-t border-neutral-100" : ""}`}>
+                <span className="font-semibold text-neutral-500">R{entry.resource_id}</span>
+                <span><strong className="text-neutral-800">{resourceNames[entry.resource_id] || routeStep?.operation || "Station"}</strong><span className="ml-2 text-neutral-500">Carrier {entry.carrier_number}</span></span>
+                <span className="text-neutral-500">{formatDateTime(entry.requested_at)}</span>
+                <span className={`font-semibold ${entry.result_code === 0 ? "text-emerald-700" : "text-red-700"}`}>{entry.result_code === 0 ? "Erfolgreich" : `Fehler ${entry.result_code ?? "–"}`}</span>
+              </div>
+            );
+          })}
+        </div>
+        <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          <strong>Qualitätsstatus: nicht bewertet.</strong> {snapshot.quality.note}
+        </div>
+      </div>
+    </details>
   );
 }
 
@@ -237,7 +283,7 @@ function OrderModal({ form, setForm, machines, products, orderParameterDefinitio
           {!form.id && parameterDefinitions.length === 0 && <p className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800 sm:col-span-2">Der Maschinenadapter liefert aktuell keine Auftragsparameter.</p>}
           {form.id && <Field label="Fertigmenge"><input required type="number" min="0" max={form.quantity} value={form.completed_quantity} onChange={(event) => setForm((current) => ({ ...current, completed_quantity: event.target.value }))} className="form-input" /></Field>}
           {form.id && <Field label="Status"><select value={form.status} onChange={(event) => setForm((current) => ({ ...current, status: event.target.value }))} className="form-input">{Object.entries(STATUS_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></Field>}
-          {!form.id && <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900 sm:col-span-2"><strong>Wird automatisch angelegt:</strong> Ein Arbeitsplan ab der gewaehlten Startstation ueber alle nachfolgenden Stationen der Linie und {form.quantity} von {availableCount} verfuegbaren Carriern.</div>}
+          {!form.id && <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900 sm:col-span-2"><strong>Wird automatisch angelegt:</strong> Ein Arbeitsplan ab der gewählten Startstation über alle nachfolgenden Stationen der Linie und {form.quantity} von {availableCount} verfügbaren Carriern.</div>}
           <div className="flex justify-end gap-2 border-t border-neutral-100 pt-4 sm:col-span-2"><button type="button" onClick={onClose} className="rounded-lg px-4 py-2 text-sm font-medium text-neutral-600 hover:bg-neutral-100">Abbrechen</button><button disabled={saving} type="submit" className="rounded-lg bg-brand-primary px-5 py-2 text-sm font-semibold text-white disabled:opacity-50">{saving ? "Speichert..." : "Speichern"}</button></div>
         </form>
       </div>
@@ -245,15 +291,18 @@ function OrderModal({ form, setForm, machines, products, orderParameterDefinitio
   );
 }
 
-function ProcessHint() { return <section className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-950"><strong>Ablauf:</strong> Beim Erstellen eines Auftrags werden Arbeitsplan, Carrier-Zuordnung und stMES-Freigaben fuer die angebundene Anlage vorbereitet.</section>; }
+function ProcessHint() { return <section className="mes-context-note"><strong>Ablauf:</strong> Beim Erstellen eines Auftrags werden Arbeitsplan, Carrier-Zuordnung und stMES-Freigaben für die angebundene Anlage vorbereitet.</section>; }
 function RouteStep({ step, stationName }) { return <div className="flex items-center justify-between rounded-lg bg-white px-3 py-2 text-sm"><span><strong>{step.step_no}. {step.operation}</strong><span className="ml-2 text-neutral-500">OP {step.operation_no}</span></span><span className="text-xs text-neutral-500">R{step.resource_id} · {stationName || "Station"}</span></div>; }
 function CarrierChips({ carriers }) { return <div className="flex flex-wrap items-center gap-2"><span className="text-xs font-semibold uppercase tracking-wider text-neutral-500">Werkstückträger</span>{carriers.length === 0 && <span className="text-sm text-neutral-400">noch nicht zugeordnet</span>}{carriers.map((carrier) => <span key={carrier.id} className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-neutral-700 shadow-sm">Carrier {carrier.carrier_number} · {carrierStatus(carrier.status)} · Schritt {carrier.current_step_no}</span>)}</div>; }
 function Field({ label, children }) { return <label className="space-y-1.5 text-sm font-medium text-neutral-700"><span>{label}</span>{children}</label>; }
 function MiniMetric({ label, value }) { return <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-3"><p className="text-[10px] uppercase tracking-wider text-neutral-500">{label}</p><p className="mt-1 text-lg font-bold text-neutral-900">{value}</p></div>; }
+function LogMetric({ label, value }) { return <div className="rounded-lg bg-neutral-50 p-3"><p className="text-[10px] uppercase tracking-wider text-neutral-500">{label}</p><p className="mt-1 text-sm font-semibold text-neutral-800">{value}</p></div>; }
 function OrderStat({ label, value, accent = "neutral" }) { const colors = accent === "green" ? "text-emerald-700" : accent === "amber" ? "text-amber-700" : "text-neutral-900"; return <div className="rounded-xl border border-neutral-200 bg-white p-4"><p className="text-xs uppercase tracking-wider text-neutral-500">{label}</p><p className={`mt-2 text-3xl font-bold ${colors}`}>{value}</p></div>; }
 function StatusBadge({ status }) { const color = status === "completed" ? "bg-emerald-50 text-emerald-700" : status === "in_progress" ? "bg-amber-50 text-amber-700" : status === "cancelled" ? "bg-red-50 text-red-700" : "bg-neutral-100 text-neutral-600"; return <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${color}`}>{STATUS_LABELS[status] || status}</span>; }
 function progress(order) { return order.quantity ? Math.min(100, Math.round((order.completed_quantity / order.quantity) * 100)) : 0; }
-function carrierStatus(status) { return ({ available: "verfuegbar", assigned: "zugeordnet", in_process: "in Arbeit", completed: "fertig", error: "Fehler" })[status] || status; }
+function formatDateTime(value) { return value ? new Intl.DateTimeFormat("de-DE", { dateStyle: "short", timeStyle: "medium" }).format(new Date(value)) : "–"; }
+function formatDuration(value) { if (!Number.isFinite(value)) return "–"; const seconds = Math.max(0, Math.round(value / 1000)); const minutes = Math.floor(seconds / 60); const rest = seconds % 60; return minutes ? `${minutes} min ${rest} s` : `${rest} s`; }
+function carrierStatus(status) { return ({ available: "verfügbar", assigned: "zugeordnet", in_process: "in Arbeit", completed: "fertig", error: "Fehler" })[status] || status; }
 function nextOrderName(orders) { return `ORDER-${String(orders.length + 1).padStart(3, "0")}`; }
 function productOperation(products, productId) { return products.find((product) => product.id === productId)?.name || ""; }
 function selectedProduct(products, productId) { return products.find((product) => product.id === productId); }

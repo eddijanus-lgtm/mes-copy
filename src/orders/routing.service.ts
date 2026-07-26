@@ -6,6 +6,7 @@ import { MachineEntity } from '../machines/machine.entity';
 import { OrderEntity } from './order.entity';
 import { OrderRouteStepEntity } from './order-route-step.entity';
 import { ReplaceOrderRouteDto } from './routing.dto';
+import { OrderProductionLogService } from './order-production-log.service';
 
 export enum DemoRoutingResultCode {
   OK = 0,
@@ -30,6 +31,7 @@ export class RoutingService {
   constructor(
     private readonly dataSource: DataSource,
     @InjectRepository(OrderRouteStepEntity) private readonly routeSteps: Repository<OrderRouteStepEntity>,
+    private readonly productionLogs: OrderProductionLogService,
   ) {}
 
   getRoute(orderId: string) {
@@ -173,7 +175,8 @@ export class RoutingService {
   }
 
   async completeStationStep(resourceId: number, carrierNumber: number, completedAt: Date) {
-    return this.dataSource.transaction(async (manager) => {
+    let finalizedOrderId: string | undefined;
+    const completed = await this.dataSource.transaction(async (manager) => {
       const carrier = await manager.findOne(CarrierEntity, {
         where: { carrier_number: carrierNumber },
         lock: { mode: 'pessimistic_write' },
@@ -212,6 +215,7 @@ export class RoutingService {
           if (order.completed_quantity >= order.quantity) {
             order.status = 'completed';
             order.end_time = completedAt;
+            finalizedOrderId = order.id;
             const orderCarriers = await manager.find(CarrierEntity, { where: { order_id: order.id } });
             for (const oc of orderCarriers) {
               oc.status = CarrierStatusEnum.AVAILABLE;
@@ -230,5 +234,7 @@ export class RoutingService {
       }
       return true;
     });
+    if (finalizedOrderId) await this.productionLogs.finalize(finalizedOrderId);
+    return completed;
   }
 }

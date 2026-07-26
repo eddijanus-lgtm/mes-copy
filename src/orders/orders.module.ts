@@ -9,11 +9,23 @@ import { RoutingService } from './routing.service';
 import { MachineEntity } from '../machines/machine.entity';
 import { ProductEntity } from '../products/product.entity';
 import { ProductRouteStepEntity } from '../products/product-route-step.entity';
+import { StMesHandshakeEntity } from '../opcua/stmes-handshake.entity';
+import { OrderProductionLogEntity } from './order-production-log.entity';
+import { OrderProductionLogService } from './order-production-log.service';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([OrderEntity, OrderRouteStepEntity, CarrierEntity, MachineEntity, ProductEntity, ProductRouteStepEntity])],
+  imports: [TypeOrmModule.forFeature([
+    OrderEntity,
+    OrderRouteStepEntity,
+    CarrierEntity,
+    MachineEntity,
+    ProductEntity,
+    ProductRouteStepEntity,
+    StMesHandshakeEntity,
+    OrderProductionLogEntity,
+  ])],
   controllers: [OrdersController],
-  providers: [OrdersService, RoutingService],
-  exports: [OrdersService, RoutingService],
+  providers: [OrdersService, RoutingService, OrderProductionLogService],
+  exports: [OrdersService, RoutingService, OrderProductionLogService],
 })
 export class OrdersModule {}

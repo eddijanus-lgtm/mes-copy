@@ -8,6 +8,7 @@ import { ProductEntity } from '../products/product.entity';
 import { OrderRouteStepEntity } from './order-route-step.entity';
 import { OrderEntity } from './order.entity';
 import { OrdersService } from './orders.service';
+import { OrderProductionLogService } from './order-production-log.service';
 
 describe('OrdersService', () => {
   let service: OrdersService;
@@ -34,6 +35,10 @@ describe('OrdersService', () => {
   };
   const productsRepo = { findOne: jest.fn() };
   const productRouteStepsRepo = { find: jest.fn() };
+  const productionLogs = {
+    finalize: jest.fn(),
+    remove: jest.fn(),
+  };
 
   beforeEach(async () => {
     jest.clearAllMocks();
@@ -75,6 +80,7 @@ describe('OrdersService', () => {
           provide: getRepositoryToken(ProductRouteStepEntity),
           useValue: productRouteStepsRepo,
         },
+        { provide: OrderProductionLogService, useValue: productionLogs },
       ],
     }).compile();
 
@@ -115,6 +121,7 @@ describe('OrdersService', () => {
 
     expect(result.status).toBe('completed');
     expect(result.end_time).toBeInstanceOf(Date);
+    expect(productionLogs.finalize).toHaveBeenCalledWith('o1');
   });
 
   it('prevents deleting orders with assigned carriers', async () => {
@@ -130,6 +137,7 @@ describe('OrdersService', () => {
     await expect(service.remove('o1')).resolves.toBeUndefined();
     expect(routeStepsRepo.delete).toHaveBeenCalledWith({ order_id: 'o1' });
     expect(ordersRepo.delete).toHaveBeenCalledWith('o1');
+    expect(productionLogs.remove).toHaveBeenCalledWith('o1');
   });
 
   it('updates progress and completes an order at target quantity', async () => {
@@ -140,6 +148,7 @@ describe('OrdersService', () => {
     expect(result.completed_quantity).toBe(10);
     expect(result.status).toBe('completed');
     expect(result.end_time).toBeInstanceOf(Date);
+    expect(productionLogs.finalize).toHaveBeenCalledWith('o1');
   });
 
   it('queries pending and active orders', async () => {
