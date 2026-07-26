@@ -8,24 +8,24 @@ Dieses Protokoll beschreibt einen kompletten Demoablauf vom Webshop-Auftrag bis 
 
 ## Beteiligte Systeme
 
-| System | Rolle | Adresse / Hinweis |
-| --- | --- | --- |
-| Frontend | Bedienoberflaeche und Live-Anzeige | `http://localhost:5173` |
-| Backend / MES API | Auftragsanlage, Routing und Carrier-Tracking | `http://localhost:3000/api` |
-| Shopfloor Gateway | OT/IT-Vermittlung fuer OPC-UA, MQTT und stMES-Handshakes | `http://localhost:3000/api/v1/shopfloor` |
-| PostgreSQL | Persistenz fuer Auftraege, Routen, Carrier und Stammdaten | Docker-Container `mes_db_dev`, Port `5433` |
-| MQTT Broker | Eingang der Webshop-Bestellungen | lokal `mqtt://localhost:1883` |
-| OPC-UA-Testanlage | Simulierte SPS-/Produktionslinie | `opc.tcp://localhost:4840/UA/WaraMesTest` |
+| System            | Rolle                                                     | Adresse / Hinweis                          |
+| ----------------- | --------------------------------------------------------- | ------------------------------------------ |
+| Frontend          | Bedienoberflaeche und Live-Anzeige                        | `http://localhost:5173`                    |
+| Backend / MES API | Auftragsanlage, Routing und Carrier-Tracking              | `http://localhost:3000/api`                |
+| Shopfloor Gateway | OT/IT-Vermittlung fuer OPC-UA, MQTT und stMES-Handshakes  | `http://localhost:3000/api/v1/shopfloor`   |
+| PostgreSQL        | Persistenz fuer Auftraege, Routen, Carrier und Stammdaten | Docker-Container `mes_db_dev`, Port `5433` |
+| MQTT Broker       | Eingang der Webshop-Bestellungen                          | lokal `mqtt://localhost:1883`              |
+| OPC-UA-Testanlage | Simulierte SPS-/Produktionslinie                          | `opc.tcp://localhost:4840/UA/WaraMesTest`  |
 
 ## Simulierte SPS-Stationen
 
 Es werden drei OPC-UA-/SPS-Stationen simuliert:
 
-| Schritt | Resource | Station | Operation | Zykluszeit |
-| --- | ---: | --- | --- | ---: |
-| 1 | 1 | `S01 Deckelzufuehrung` | `Deckelfarbe bereitstellen` | 90 s |
-| 2 | 2 | `S02 Kugeldosierung` | `Kugeln dosieren` | 120 s |
-| 3 | 3 | `Q01 Endkontrolle` | `Deckel und Kugeln pruefen` | 60 s |
+| Schritt | Resource | Station                | Operation                   | Zykluszeit |
+| ------- | -------: | ---------------------- | --------------------------- | ---------: |
+| 1       |        1 | `S01 Deckelzufuehrung` | `Deckelfarbe bereitstellen` |       90 s |
+| 2       |        2 | `S02 Kugeldosierung`   | `Kugeln dosieren`           |      120 s |
+| 3       |        3 | `Q01 Endkontrolle`     | `Deckel und Kugeln pruefen` |       60 s |
 
 Die Stationen werden durch `tools/opcua-test-server.js` bereitgestellt. Die Kommunikation erfolgt trotzdem ueber echte OPC-UA-Nodes und nicht nur ueber eine Frontend-Animation.
 
@@ -37,39 +37,57 @@ Der Webshop sendet eine MQTT-Nachricht auf das Topic:
 i4.0/production/orders
 ```
 
-Beispielpayload aus dem verifizierten Test:
+Die Broker-Adresse wird über `MQTT_BROKER_URL` konfiguriert. Für die lokale
+Demo gilt `mqtt://localhost:1883`; die Beispieladresse
+`mqtt://10.10.10.253:1883` in `.env.example` bezeichnet einen externen
+Zielbroker und nicht den isolierten lokalen Testbroker. Die lokale Demo nutzt
+keine Broker-Anmeldung oder TLS. Zugangsdaten, Zertifikate und ACLs für einen
+Produktivbroker sind derzeit nicht spezifiziert.
+
+Der Webshop-Payload und damit auch der Systemtest verwenden den dokumentierten
+verschachtelten Vertrag:
 
 ```json
 {
-  "bDeckelfarbe": 1,
-  "uiKugelRot": 1,
-  "uiKugelGruen": 2,
-  "uiKugelBlau": 4,
-  "xAuftragAusstehend": false,
-  "uiAnzahlAustehenderAuftraege": 0
+  "order_name": "#WEB-ORDER-123",
+  "params": {
+    "bDeckelfarbe": true,
+    "uiKugelRot": 1,
+    "uiKugelGruen": 2,
+    "uiKugelBlau": 4
+  }
 }
 ```
 
-Das Backend mappt die Webshop-Parameter auf Produktionsparameter:
+Die Nachricht wird im Systemtest mit QoS 1 und `retain=false` veröffentlicht.
+Der Backend-Subscriber verwendet aktuell QoS 0. Retained Webshop-Aufträge
+sollten nicht verwendet werden, da das System noch keine Message-ID-gestützte
+Idempotenz besitzt.
 
-| Webshop-Feld | MES-/SPS-Parameter | Bedeutung |
-| --- | --- | --- |
-| `bDeckelfarbe` | `iPar1` | Deckelfarbe |
-| `uiKugelRot` | `iPar2` | Anzahl rote Kugeln |
-| `uiKugelGruen` | `iPar3` | Anzahl gruene Kugeln |
-| `uiKugelBlau` | `iPar4` | Anzahl blaue Kugeln |
+Ein MQTT-Übersetzer übernimmt `order_name` als MES-Auftragsname, liest die
+Werte aus `params` und mappt sie auf die Produktionsparameter:
+
+| Webshop-Feld          | MES-/SPS-Parameter | Bedeutung                             |
+| --------------------- | ------------------ | ------------------------------------- |
+| `params.bDeckelfarbe` | `iPar1`            | Deckelfarbe (`true → 1`, `false → 0`) |
+| `params.uiKugelRot`   | `iPar2`            | Anzahl rote Kugeln                    |
+| `params.uiKugelGruen` | `iPar3`            | Anzahl gruene Kugeln                  |
+| `params.uiKugelBlau`  | `iPar4`            | Anzahl blaue Kugeln                   |
 
 Im Test wurde daraus folgender Auftrag erzeugt:
 
 ```text
-WEBSHOP-20260723081021
+#WEB-ORDER-123
 ```
 
 ## Ablauf Schritt Fuer Schritt
 
 ### 1. MQTT-Nachricht wird empfangen
 
-Der lokale MQTT-Broker nimmt die Webshop-Nachricht entgegen. Das Backend ist auf das Topic `i4.0/production/orders` subscribed und verarbeitet die Nachricht automatisch.
+Der lokale MQTT-Broker nimmt im Systemtest eine Nachricht im identischen
+Webshop-Format entgegen. Das Backend ist auf das Topic
+`i4.0/production/orders` subscribed, übersetzt die Nachricht und verarbeitet
+sie automatisch.
 
 Ergebnis:
 
@@ -224,12 +242,12 @@ Finaler DB-Zustand:
 
 Der Carrier wird dauerhaft in PostgreSQL getrackt. Entscheidend sind diese Felder:
 
-| Feld | Bedeutung |
-| --- | --- |
-| `carrier_number` | Physische bzw. simulierte Carrier-ID, z. B. `128` |
-| `order_id` | Zugeordneter MES-Auftrag |
-| `status` | `assigned`, `in_process` oder `completed` |
-| `current_step_no` | Aktueller Routenschritt |
+| Feld                  | Bedeutung                                                |
+| --------------------- | -------------------------------------------------------- |
+| `carrier_number`      | Physische bzw. simulierte Carrier-ID, z. B. `128`        |
+| `order_id`            | Zugeordneter MES-Auftrag                                 |
+| `status`              | `assigned`, `in_process` oder `completed`                |
+| `current_step_no`     | Aktueller Routenschritt                                  |
 | `current_resource_id` | Aktuelle Station, solange der Carrier in Bearbeitung ist |
 
 Typische Statusfolge:
