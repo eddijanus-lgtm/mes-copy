@@ -4,9 +4,12 @@ import { fileURLToPath } from 'node:url';
 
 const frontendRoot = fileURLToPath(new URL('.', import.meta.url));
 
-export default defineConfig({
+export default defineConfig(({ mode }) => ({
   root: frontendRoot,
   plugins: [react()],
+  define: {
+    'process.env.NODE_ENV': JSON.stringify(mode),
+  },
   server: {
     host: true,
     port: 5173,
@@ -19,4 +22,4 @@ export default defineConfig({
       },
     },
   },
-});
+}));
