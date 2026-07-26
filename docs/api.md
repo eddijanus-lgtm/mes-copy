@@ -157,9 +157,14 @@ POST   /api/v1/orders
 GET    /api/v1/orders/:id
 PATCH  /api/v1/orders/:id
 DELETE /api/v1/orders/:id
+GET    /api/v1/orders/:id/production-log
+GET    /api/v1/orders/:id/production-log.csv
+GET    /api/v1/orders/production-logs.csv
 ```
 
 Viewer dürfen Aufträge lesen, Operatoren und Admins dürfen sie anlegen und bearbeiten, nur Admins dürfen löschen. `PATCH` unterstützt Stammdaten, Planung, Status und Fertigmenge. Aufträge mit zugeordneten Carriern können nicht gelöscht werden.
+
+Die CSV-Endpunkte stehen für abgeschlossene Aufträge allen drei Rollen zur Verfügung. Der Bulk-Endpunkt kombiniert alle abgeschlossenen Produktionsläufe in einer Datei. Beide liefern einen RFC-4180-konformen UTF-8-Export mit ISA-95-orientierten Auftrags-, Carrier-, Ressourcen-, Stationszeit- und Ergebnisfeldern. Das genaue Schema und seine Abgrenzung beschreibt `docs/guides/13-production-run-csv.md`.
 
 ## Carrier und Routing (Demo-Grundmodell)
 

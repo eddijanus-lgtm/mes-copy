@@ -64,10 +64,42 @@ async function request(endpoint, options = {}) {
   }
 }
 
+async function download(endpoint) {
+  const token = localStorage.getItem('jwt_token');
+  const headers = token ? { Authorization: `Bearer ${token}` } : {};
+  const res = await fetch(`${API_BASE}${endpoint}`, { method: 'GET', headers });
+
+  if (res.status === 401) {
+    localStorage.removeItem('jwt_token');
+    window.dispatchEvent(new Event('auth:unauthorized'));
+  }
+  if (!res.ok) {
+    const responseText = await res.text();
+    let detail = responseText;
+    try {
+      const payload = JSON.parse(responseText);
+      detail = Array.isArray(payload.message) ? payload.message.join(' ') : payload.message || payload.error || responseText;
+    } catch {
+      // Text responses can be used directly.
+    }
+    const errorMessage = detail ? `Download fehlgeschlagen (${res.status}): ${detail}` : `Download fehlgeschlagen (${res.status})`;
+    dispatchToast('error', errorMessage);
+    throw new Error(errorMessage);
+  }
+
+  const disposition = res.headers.get('content-disposition') || '';
+  const filenameMatch = disposition.match(/filename="?([^";]+)"?/i);
+  return {
+    blob: await res.blob(),
+    filename: filenameMatch?.[1] || 'production-run.csv',
+  };
+}
+
 export const api = {
   get: (endpoint) => request(endpoint, { method: 'GET' }),
   getSilent: (endpoint) => request(endpoint, { method: 'GET', silent: true }),
   post: (endpoint, body) => request(endpoint, { method: 'POST', body }),
   patch: (endpoint, body) => request(endpoint, { method: 'PATCH', body }),
   del: (endpoint) => request(endpoint, { method: 'DELETE' }),
+  download,
 };
