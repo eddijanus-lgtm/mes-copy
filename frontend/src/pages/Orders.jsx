@@ -1,7 +1,19 @@
 import { useEffect, useState } from "react";
+import { CaretLeftIcon } from "@phosphor-icons/react/CaretLeft";
+import { CaretRightIcon } from "@phosphor-icons/react/CaretRight";
+import { CheckCircleIcon } from "@phosphor-icons/react/CheckCircle";
+import { CircleIcon } from "@phosphor-icons/react/Circle";
+import { CopyIcon } from "@phosphor-icons/react/Copy";
+import { DownloadSimpleIcon } from "@phosphor-icons/react/DownloadSimple";
+import { DotsThreeIcon } from "@phosphor-icons/react/DotsThree";
+import { FunnelSimpleIcon } from "@phosphor-icons/react/FunnelSimple";
+import { MagnifyingGlassIcon } from "@phosphor-icons/react/MagnifyingGlass";
+import { PencilSimpleIcon } from "@phosphor-icons/react/PencilSimple";
+import { XIcon } from "@phosphor-icons/react/X";
 import { api } from "../api/client.js";
 import { useAuth } from "../providers/AuthProvider.jsx";
 import { canDeleteOrders, canManageOrders } from "../utils/roles.js";
+import "../orders.css";
 
 const EMPTY_FORM = { id: null, name: "", priority: 1, machine_id: "", product_id: "", operation: "Produktion", quantity: 1, completed_quantity: 0, status: "pending", production_parameters: {} };
 const STATUS_LABELS = { pending: "Ausstehend", in_progress: "In Arbeit", completed: "Abgeschlossen", cancelled: "Abgebrochen", on_hold: "Pausiert" };
@@ -19,14 +31,25 @@ export default function OrdersPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [carrierFilter, setCarrierFilter] = useState("all");
+  const [filterMenuOpen, setFilterMenuOpen] = useState(false);
+  const [selectedOrderId, setSelectedOrderId] = useState(null);
+  const [inspectorTab, setInspectorTab] = useState("overview");
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
   const [deleteCandidate, setDeleteCandidate] = useState(null);
   const [deleting, setDeleting] = useState(false);
+  const [downloadingOrderId, setDownloadingOrderId] = useState(null);
+  const [downloadingAll, setDownloadingAll] = useState(false);
   const canManage = canManageOrders(user);
   const canDelete = canDeleteOrders(user);
 
   useEffect(() => { void refresh(); }, []);
+  useEffect(() => {
+    if (selectedOrderId && !orders.some((order) => order.id === selectedOrderId)) {
+      setSelectedOrderId(null);
+    }
+  }, [orders, selectedOrderId]);
 
   async function refresh() {
     try {
@@ -104,6 +127,30 @@ export default function OrdersPage() {
     }
   }
 
+  async function downloadProductionCsv(order) {
+    setError("");
+    setDownloadingOrderId(order.id);
+    try {
+      triggerBrowserDownload(await api.download(`/orders/${order.id}/production-log.csv`));
+    } catch (requestError) {
+      setError(requestError.message);
+    } finally {
+      setDownloadingOrderId(null);
+    }
+  }
+
+  async function downloadAllProductionCsv() {
+    setError("");
+    setDownloadingAll(true);
+    try {
+      triggerBrowserDownload(await api.download("/orders/production-logs.csv"));
+    } catch (requestError) {
+      setError(requestError.message);
+    } finally {
+      setDownloadingAll(false);
+    }
+  }
+
   const machineNames = Object.fromEntries(machines.map((machine) => [machine.id, machine.name]));
   const productNames = Object.fromEntries(products.map((product) => [product.id, product.name]));
   const resourceNames = Object.fromEntries(machines.map((machine) => [machine.resource_id, machine.name]));
@@ -113,42 +160,183 @@ export default function OrdersPage() {
   }, {});
   const filtered = orders.filter((order) => {
     const matchesText = !search || `${order.name} ${order.operation}`.toLowerCase().includes(search.toLowerCase());
-    return matchesText && (statusFilter === "all" || order.status === statusFilter);
+    const orderCarriers = carriersByOrder[order.id] || [];
+    const matchesCarrier = carrierFilter === "all" || orderCarriers.some((carrier) => carrier.id === carrierFilter);
+    return matchesText && matchesCarrier && (statusFilter === "all" || order.status === statusFilter);
   });
+  const selectedOrder = orders.find((order) => order.id === selectedOrderId) || null;
+  const selectedCarriers = selectedOrder ? carriersByOrder[selectedOrder.id] || [] : [];
+  const selectedRoute = selectedOrder ? routes[selectedOrder.id] || [] : [];
+  const activeCount = orders.filter((order) => order.status === "in_progress").length;
+  const completedCount = orders.filter((order) => order.status === "completed").length;
+
+  function toggleInspector(order) {
+    const nextId = selectedOrderId === order.id ? null : order.id;
+    setSelectedOrderId(nextId);
+    setInspectorTab("overview");
+  }
 
   return (
-    <div className="mes-page min-h-screen bg-neutral-50 p-6 space-y-6">
+    <div className="mes-page orders-page min-h-screen bg-neutral-50">
       <header className="mes-page-header">
         <div>
-          <h1 className="text-2xl font-bold text-neutral-900">Produktionsaufträge</h1>
-          <p className="mt-1 text-sm text-neutral-500">Ein Auftrag erzeugt Route, Carrier-Zuordnung und stMES-Freigaben für die Anlage.</p>
+          <h1>Produktionsaufträge</h1>
+          <p>Ein Auftrag erzeugt Route, Carrier-Zuordnung und stMES-Freigaben für die Anlage.</p>
         </div>
-        {canManage && <button onClick={openCreate} disabled={machines.length === 0} className="rounded-lg bg-brand-primary px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-[var(--color-brand-primary-dark)] disabled:cursor-not-allowed disabled:opacity-50">+ Neuer Auftrag</button>}
+        <div className="orders-page-actions">
+          {completedCount > 0 && (
+            <button
+              type="button"
+              className="orders-secondary-action"
+              disabled={downloadingAll}
+              onClick={downloadAllProductionCsv}
+            >
+              <DownloadSimpleIcon aria-hidden="true" size={16} />
+              {downloadingAll ? "Sammel-CSV wird erstellt..." : `Alle Produktionsläufe CSV (${completedCount})`}
+            </button>
+          )}
+          {canManage && (
+            <button
+              type="button"
+              onClick={openCreate}
+              disabled={machines.length === 0}
+              className="orders-primary-action bg-brand-primary"
+            >
+              + Neuer Auftrag
+            </button>
+          )}
+        </div>
       </header>
 
-      <ProcessHint />
+      {machines.length === 0 && <p className="orders-warning">Vor dem ersten Auftrag muss mindestens eine Station angelegt werden.</p>}
+      {error && <p role="alert" className="orders-error">{error}</p>}
 
-      <div className="mes-metric-strip grid sm:grid-cols-3">
-        <OrderStat label="Alle Aufträge" value={orders.length} />
-        <OrderStat label="In Arbeit" value={orders.filter((order) => order.status === "in_progress").length} accent="amber" />
-        <OrderStat label="Abgeschlossen" value={orders.filter((order) => order.status === "completed").length} accent="green" />
-      </div>
+      <section className={`orders-workspace${selectedOrder ? " orders-workspace--open" : ""}`}>
+        <div className="orders-list-pane">
+          <div className="orders-toolbar">
+            <div className="orders-status-tabs" role="tablist" aria-label="Aufträge nach Status filtern">
+              <StatusTab label="Alle" count={orders.length} active={statusFilter === "all"} onClick={() => setStatusFilter("all")} />
+              <StatusTab label="In Arbeit" count={activeCount} active={statusFilter === "in_progress"} onClick={() => setStatusFilter("in_progress")} />
+              <StatusTab label="Abgeschlossen" count={completedCount} active={statusFilter === "completed"} onClick={() => setStatusFilter("completed")} />
+            </div>
 
-      {machines.length === 0 && <p className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">Vor dem ersten Auftrag muss mindestens eine Station angelegt werden.</p>}
-      {error && <p role="alert" className="rounded-lg bg-status-error-bg px-4 py-3 text-sm text-status-error">{error}</p>}
+            <div className="orders-toolbar__actions">
+              <label className="orders-search">
+                <MagnifyingGlassIcon aria-hidden="true" size={16} />
+                <span className="sr-only">Auftrag suchen</span>
+                <input
+                  value={search}
+                  onChange={(event) => setSearch(event.target.value)}
+                  placeholder="Auftrag oder Produkt suchen..."
+                />
+              </label>
+              <button
+                type="button"
+                className={`orders-filter-button${filterMenuOpen ? " is-active" : ""}`}
+                aria-expanded={filterMenuOpen}
+                onClick={() => setFilterMenuOpen((open) => !open)}
+              >
+                <FunnelSimpleIcon aria-hidden="true" size={16} />
+                Filter
+              </button>
+            </div>
+          </div>
 
-      <div className="mes-filter-panel grid gap-3 sm:grid-cols-[1fr_220px]">
-        <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Auftrag oder Operation suchen..." className="rounded-lg border border-neutral-200 px-4 py-2.5 text-sm focus:border-brand-primary focus:outline-none focus:ring-2 focus:ring-brand-primary/20" />
-        <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} className="rounded-lg border border-neutral-200 px-3 py-2.5 text-sm focus:border-brand-primary focus:outline-none">
-          <option value="all">Alle Status</option>
-          {Object.entries(STATUS_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-        </select>
-      </div>
+          {filterMenuOpen && (
+            <div className="orders-filter-bar">
+              <label>
+                <span>Status</span>
+                <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
+                  <option value="all">Alle Status</option>
+                  {Object.entries(STATUS_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                </select>
+              </label>
+              <label>
+                <span>Carrier</span>
+                <select value={carrierFilter} onChange={(event) => setCarrierFilter(event.target.value)}>
+                  <option value="all">Alle Carrier</option>
+                  {carriers.filter((carrier) => carrier.order_id).map((carrier) => (
+                    <option key={carrier.id} value={carrier.id}>{formatCarrier(carrier)}</option>
+                  ))}
+                </select>
+              </label>
+              <button
+                type="button"
+                onClick={() => {
+                  setStatusFilter("all");
+                  setCarrierFilter("all");
+                  setSearch("");
+                }}
+              >
+                Filter zurücksetzen
+              </button>
+            </div>
+          )}
 
-      <div className="mes-card-list">
-        {filtered.map((order) => <OrderCard key={order.id} order={order} route={routes[order.id] || []} productionLog={productionLogs[order.id]} carriers={carriersByOrder[order.id] || []} machineName={machineNames[order.machine_id]} productName={productNames[order.product_id]} resourceNames={resourceNames} canManage={canManage} canDelete={canDelete} onEdit={openEdit} onDelete={requestDelete} />)}
-        {filtered.length === 0 && <p className="rounded-xl border border-neutral-200 bg-white p-10 text-center text-sm text-neutral-400">Keine passenden Aufträge gefunden.</p>}
-      </div>
+          <div className="orders-table-region">
+            <table className="orders-table">
+              <thead>
+                <tr>
+                  <th>Auftrag</th>
+                  <th className="orders-col-product">Produkt / Start</th>
+                  <th>Status</th>
+                  <th className="orders-col-quantity">Menge</th>
+                  <th>Fortschritt</th>
+                  <th className="orders-col-carrier">Carrier</th>
+                  <th><span className="sr-only">Details</span></th>
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map((order) => (
+                  <OrderRow
+                    key={order.id}
+                    order={order}
+                    selected={selectedOrderId === order.id}
+                    carriers={carriersByOrder[order.id] || []}
+                    machineName={machineNames[order.machine_id]}
+                    productName={productNames[order.product_id]}
+                    onToggle={() => toggleInspector(order)}
+                  />
+                ))}
+              </tbody>
+            </table>
+            {filtered.length === 0 && <p className="orders-empty">Keine passenden Aufträge gefunden.</p>}
+          </div>
+
+          <footer className="orders-pagination">
+            <span>{filtered.length} Ergebnisse</span>
+            <div aria-label="Seitennavigation">
+              <button type="button" disabled aria-label="Vorherige Seite"><CaretLeftIcon aria-hidden="true" size={15} /></button>
+              <span>1</span>
+              <button type="button" disabled aria-label="Nächste Seite"><CaretRightIcon aria-hidden="true" size={15} /></button>
+            </div>
+          </footer>
+        </div>
+
+        {selectedOrder && (
+          <>
+            <button className="orders-inspector-backdrop" type="button" aria-label="Detailansicht schließen" onClick={() => setSelectedOrderId(null)} />
+            <OrderInspector
+              order={selectedOrder}
+              route={selectedRoute}
+              productionLog={productionLogs[selectedOrder.id]}
+              carriers={selectedCarriers}
+              machineName={machineNames[selectedOrder.machine_id]}
+              productName={productNames[selectedOrder.product_id]}
+              resourceNames={resourceNames}
+              activeTab={inspectorTab}
+              onTabChange={setInspectorTab}
+              canManage={canManage}
+              canDelete={canDelete}
+              downloading={downloadingOrderId === selectedOrder.id}
+              onEdit={() => openEdit(selectedOrder)}
+              onDelete={() => requestDelete(selectedOrder)}
+              onDownload={() => downloadProductionCsv(selectedOrder)}
+              onClose={() => setSelectedOrderId(null)}
+            />
+          </>
+        )}
+      </section>
 
       {modalOpen && <OrderModal form={form} setForm={setForm} machines={machines} products={products} orderParameterDefinitions={orderParameterDefinitions} carriers={carriers} saving={saving} onSubmit={submit} onClose={() => { setModalOpen(false); setForm(EMPTY_FORM); }} />}
       {deleteCandidate && <DeleteOrderDialog order={deleteCandidate} deleting={deleting} onCancel={() => setDeleteCandidate(null)} onConfirm={remove} />}
@@ -177,86 +365,298 @@ function DeleteOrderDialog({ order, deleting, onCancel, onConfirm }) {
   );
 }
 
-function OrderCard({ order, route, productionLog, carriers, machineName, productName, resourceNames, canManage, canDelete, onEdit, onDelete }) {
+function StatusTab({ label, count, active, onClick }) {
   return (
-    <article className="overflow-hidden rounded-xl border border-neutral-200 bg-white shadow-sm">
-      <div className="grid gap-4 p-5 lg:grid-cols-[1.2fr_1fr]">
-        <div>
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <p className="font-semibold text-neutral-900">{order.name}</p>
-              <p className="mt-1 text-sm text-neutral-500">{productName || order.operation} · Startstation: {machineName || "Unbekannt"}</p>
-              <p className="mt-1 font-mono text-[10px] text-neutral-400">{order.id}</p>
-            </div>
-            <StatusBadge status={order.status} />
-          </div>
-          <div className="mt-4 grid gap-3 sm:grid-cols-3">
-            <MiniMetric label="Priorität" value={`P${order.priority}`} />
-            <MiniMetric label="Menge" value={`${order.completed_quantity}/${order.quantity}`} />
-            <MiniMetric label="Fortschritt" value={`${progress(order)}%`} />
-          </div>
-          <div className="mt-4 h-2 overflow-hidden rounded-full bg-neutral-100"><div className="h-full rounded-full bg-brand-primary" style={{ width: `${progress(order)}%` }} /></div>
-        </div>
-
-        <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-4">
-          <p className="text-xs font-semibold uppercase tracking-wider text-neutral-500">Arbeitsplan / Route</p>
-          <div className="mt-3 grid gap-2">
-            {route.length === 0 && <p className="text-sm text-neutral-400">Noch keine Route hinterlegt.</p>}
-            {route.map((step) => <RouteStep key={step.id || step.step_no} step={step} stationName={resourceNames[step.resource_id]} />)}
-          </div>
-        </div>
-      </div>
-
-      {order.status === "completed" && <ProductionLog log={productionLog} resourceNames={resourceNames} />}
-
-      <div className="border-t border-neutral-100 bg-neutral-50 px-5 py-4">
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-          <CarrierChips carriers={carriers} />
-          {canManage && <div className="flex justify-end gap-2"><button onClick={() => onEdit(order)} className="rounded-md border border-neutral-200 bg-white px-3 py-1.5 text-xs font-medium text-neutral-700 hover:border-brand-primary hover:text-brand-primary">Bearbeiten</button>{canDelete && <button onClick={() => onDelete(order)} className="rounded-md bg-red-50 px-3 py-1.5 text-xs font-medium text-red-700 hover:bg-red-100">Löschen</button>}</div>}
-        </div>
-      </div>
-    </article>
+    <button type="button" role="tab" aria-selected={active} className={active ? "is-active" : ""} onClick={onClick}>
+      <span>{label}</span>
+      <strong>{count}</strong>
+    </button>
   );
 }
 
-function ProductionLog({ log, resourceNames }) {
-  if (!log?.snapshot) {
-    return <div className="border-t border-amber-200 bg-amber-50 px-5 py-3 text-sm text-amber-800">Der Produktionsabschluss ist vorhanden, das Auftragslog konnte aber noch nicht geladen werden.</div>;
-  }
-  const snapshot = log.snapshot;
-  const successfulSteps = snapshot.station_executions.filter((entry) => entry.result_code === 0).length;
+function OrderRow({ order, selected, carriers, machineName, productName, onToggle }) {
+  const orderProgress = progress(order);
+  const primaryCarrier = carriers[0];
   return (
-    <details className="group border-t border-neutral-200 bg-white">
-      <summary className="flex cursor-pointer list-none items-center justify-between gap-4 px-5 py-4 text-sm font-semibold text-neutral-800 hover:bg-neutral-50">
-        <span>Auftragslog · {successfulSteps}/{snapshot.station_executions.length} Stationsschritte erfolgreich</span>
-        <span className="text-xs font-medium text-neutral-500 group-open:hidden">Anzeigen</span>
-        <span className="hidden text-xs font-medium text-neutral-500 group-open:inline">Schließen</span>
-      </summary>
-      <div className="border-t border-neutral-100 px-5 pb-5 pt-4">
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <LogMetric label="Produktionsstart" value={formatDateTime(snapshot.order.started_at)} />
-          <LogMetric label="Produktionsende" value={formatDateTime(snapshot.order.completed_at)} />
-          <LogMetric label="Dauer" value={formatDuration(snapshot.order.duration_ms)} />
-          <LogMetric label="Carrier" value={snapshot.carriers.length ? snapshot.carriers.map((carrier) => `#${carrier}`).join(", ") : "–"} />
+    <tr className={selected ? "is-selected" : ""}>
+      <td>
+        <strong className="orders-row__name">{order.name}</strong>
+        <span className="orders-row__mobile-product">{productName || order.operation}<br />{machineName || "Startstation unbekannt"}</span>
+      </td>
+      <td className="orders-col-product">
+        <strong>{productName || order.operation}</strong>
+        <span>{machineName || "Startstation unbekannt"}</span>
+      </td>
+      <td><OrderStatus status={order.status} /></td>
+      <td className="orders-col-quantity">{order.completed_quantity} / {order.quantity}</td>
+      <td>
+        <div className="orders-progress" aria-label={`${orderProgress} Prozent abgeschlossen`}>
+          <span>{orderProgress}%</span>
+          <div><i style={{ width: `${orderProgress}%` }} /></div>
         </div>
-        <div className="mt-4 overflow-hidden rounded-lg border border-neutral-200">
-          {snapshot.station_executions.map((entry, index) => {
-            const routeStep = snapshot.route.find((step) => step.resource_id === entry.resource_id);
-            return (
-              <div key={`${entry.resource_id}-${entry.carrier_number}-${entry.requested_at}`} className={`grid gap-3 px-4 py-3 text-sm lg:grid-cols-[60px_1fr_160px_120px] ${index ? "border-t border-neutral-100" : ""}`}>
-                <span className="font-semibold text-neutral-500">R{entry.resource_id}</span>
-                <span><strong className="text-neutral-800">{resourceNames[entry.resource_id] || routeStep?.operation || "Station"}</strong><span className="ml-2 text-neutral-500">Carrier {entry.carrier_number}</span></span>
-                <span className="text-neutral-500">{formatDateTime(entry.requested_at)}</span>
-                <span className={`font-semibold ${entry.result_code === 0 ? "text-emerald-700" : "text-red-700"}`}>{entry.result_code === 0 ? "Erfolgreich" : `Fehler ${entry.result_code ?? "–"}`}</span>
-              </div>
-            );
-          })}
+      </td>
+      <td className="orders-col-carrier">{primaryCarrier ? formatCarrier(primaryCarrier) : "–"}</td>
+      <td className="orders-row__toggle">
+        <button
+          type="button"
+          aria-expanded={selected}
+          aria-label={`${order.name} ${selected ? "schließen" : "öffnen"}`}
+          onClick={onToggle}
+        >
+          <CaretRightIcon aria-hidden="true" size={18} weight="bold" />
+        </button>
+      </td>
+    </tr>
+  );
+}
+
+function OrderInspector({ order, route, productionLog, carriers, machineName, productName, resourceNames, activeTab, onTabChange, canManage, canDelete, downloading, onEdit, onDelete, onDownload, onClose }) {
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const primaryCarrier = carriers[0];
+  const orderProgress = progress(order);
+
+  async function copyOrderId() {
+    try {
+      await navigator.clipboard.writeText(order.id);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1600);
+    } catch {
+      setCopied(false);
+    }
+  }
+
+  return (
+    <aside className="orders-inspector" aria-label={`Details für ${order.name}`}>
+      <div className="orders-inspector__header">
+        <div>
+          <h2>{order.name}</h2>
+          <OrderStatus status={order.status} />
         </div>
-        <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-          <strong>Qualitätsstatus: nicht bewertet.</strong> {snapshot.quality.note}
-        </div>
+        <button type="button" className="orders-icon-button" onClick={onClose} aria-label="Detailansicht schließen">
+          <XIcon aria-hidden="true" size={20} />
+        </button>
       </div>
-    </details>
+
+      <div className="orders-inspector__summary">
+        <div className="orders-inspector__progress">
+          <span>{orderProgress}%</span>
+          <div><i style={{ width: `${orderProgress}%` }} /></div>
+        </div>
+        <span>{order.completed_quantity} / {order.quantity}</span>
+        <span>{primaryCarrier ? formatCarrier(primaryCarrier) : "Kein Carrier"}</span>
+        {(order.status === "completed" || canManage) && (
+          <div className="orders-inspector__actions">
+            {order.status === "completed" && (
+              <button type="button" className="orders-download-button" disabled={downloading} onClick={onDownload}>
+                <DownloadSimpleIcon aria-hidden="true" size={16} />
+                {downloading ? "CSV wird erstellt..." : "Produktionslauf CSV"}
+              </button>
+            )}
+            {canManage && (
+              <>
+                <button type="button" onClick={onEdit}>
+                  <PencilSimpleIcon aria-hidden="true" size={15} />
+                  Bearbeiten
+                </button>
+                <div className="orders-overflow">
+                  <button type="button" className="orders-icon-button" aria-label="Weitere Aktionen" aria-expanded={menuOpen} onClick={() => setMenuOpen((open) => !open)}>
+                    <DotsThreeIcon aria-hidden="true" size={20} weight="bold" />
+                  </button>
+                  {menuOpen && (
+                    <div className="orders-overflow__menu">
+                      {canDelete ? <button type="button" onClick={onDelete}>Auftrag löschen</button> : <span>Keine weiteren Aktionen</span>}
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
+          </div>
+        )}
+      </div>
+
+      <div className="orders-inspector__tabs" role="tablist" aria-label="Auftragsdetails">
+        <InspectorTab id="overview" label="Übersicht" active={activeTab === "overview"} onClick={onTabChange} />
+        <InspectorTab id="route" label="Route & Carrier" active={activeTab === "route"} onClick={onTabChange} />
+        <InspectorTab id="history" label="Verlauf" active={activeTab === "history"} onClick={onTabChange} />
+      </div>
+
+      <div className="orders-inspector__content">
+        {activeTab === "overview" && (
+          <InspectorOverview
+            order={order}
+            route={route}
+            carriers={carriers}
+            machineName={machineName}
+            productName={productName}
+            resourceNames={resourceNames}
+            copied={copied}
+            onCopy={copyOrderId}
+          />
+        )}
+        {activeTab === "route" && <InspectorRoute order={order} route={route} carriers={carriers} resourceNames={resourceNames} />}
+        {activeTab === "history" && <InspectorHistory order={order} log={productionLog} resourceNames={resourceNames} />}
+      </div>
+    </aside>
+  );
+}
+
+function InspectorTab({ id, label, active, onClick }) {
+  return <button type="button" role="tab" aria-selected={active} className={active ? "is-active" : ""} onClick={() => onClick(id)}>{label}</button>;
+}
+
+function InspectorOverview({ order, route, carriers, machineName, productName, resourceNames, copied, onCopy }) {
+  const primaryCarrier = carriers[0];
+  return (
+    <>
+      <section className="orders-inspector__section">
+        <h3>Auftragsdetails</h3>
+        <dl className="orders-facts">
+          <OrderFact label="Produkt" value={productName || order.operation} />
+          <OrderFact label="Priorität" value={`P${order.priority}`} />
+          <OrderFact label="Startstation" value={machineName || "Unbekannt"} />
+          <div>
+            <dt>UUID</dt>
+            <dd className="orders-copy-value">
+              <span title={order.id}>{order.id}</span>
+              <button type="button" onClick={onCopy} aria-label="UUID kopieren"><CopyIcon aria-hidden="true" size={15} /></button>
+            </dd>
+          </div>
+          <OrderFact label="Erstellt am" value={formatDateTime(order.created_at)} />
+        </dl>
+        {copied && <p className="orders-copy-feedback" role="status">UUID kopiert</p>}
+      </section>
+
+      <section className="orders-inspector__section">
+        <h3>Arbeitsplan / Route</h3>
+        <RouteTimeline order={order} route={route} carriers={carriers} resourceNames={resourceNames} />
+      </section>
+
+      <section className="orders-inspector__section">
+        <h3>Carrier-Zuordnung</h3>
+        {carriers.length === 0 ? (
+          <p className="orders-inspector__empty">Noch kein Carrier zugeordnet.</p>
+        ) : (
+          <dl className="orders-facts">
+            <OrderFact label="Carrier" value={formatCarrier(primaryCarrier)} />
+            <OrderFact label="Status" value={carrierStatus(primaryCarrier.status)} tone="success" />
+            <OrderFact label="Aktueller Schritt" value={primaryCarrier.current_step_no ?? "–"} />
+          </dl>
+        )}
+      </section>
+
+      <section className="orders-inspector__section">
+        <h3>Notizen</h3>
+        <p className="orders-inspector__empty">Keine Notizen vorhanden.</p>
+      </section>
+    </>
+  );
+}
+
+function InspectorRoute({ order, route, carriers, resourceNames }) {
+  return (
+    <>
+      <section className="orders-inspector__section">
+        <h3>Route</h3>
+        <RouteTimeline order={order} route={route} carriers={carriers} resourceNames={resourceNames} />
+      </section>
+      <section className="orders-inspector__section">
+        <h3>Technische Routendaten</h3>
+        {route.length === 0 && <p className="orders-inspector__empty">Noch keine Route hinterlegt.</p>}
+        <div className="orders-route-list">
+          {route.map((step) => (
+            <div key={step.id || step.step_no}>
+              <strong>{step.step_no}. {step.operation}</strong>
+              <span>OP {step.operation_no} · R{step.resource_id} · {resourceNames[step.resource_id] || "Station"}</span>
+            </div>
+          ))}
+        </div>
+      </section>
+      <section className="orders-inspector__section">
+        <h3>Zugeordnete Carrier</h3>
+        {carriers.length === 0 && <p className="orders-inspector__empty">Noch kein Carrier zugeordnet.</p>}
+        <div className="orders-carrier-list">
+          {carriers.map((carrier) => (
+            <div key={carrier.id}>
+              <strong>{formatCarrier(carrier)}</strong>
+              <span>{carrierStatus(carrier.status)} · Schritt {carrier.current_step_no}</span>
+            </div>
+          ))}
+        </div>
+      </section>
+    </>
+  );
+}
+
+function InspectorHistory({ order, log, resourceNames }) {
+  const snapshot = log?.snapshot;
+  if (!snapshot) {
+    return (
+      <section className="orders-inspector__section">
+        <h3>Produktionsverlauf</h3>
+        <p className="orders-inspector__empty">
+          {order.status === "completed" ? "Das Auftragslog konnte noch nicht geladen werden." : "Der Produktionsverlauf wird nach Stationsmeldungen ergänzt."}
+        </p>
+      </section>
+    );
+  }
+  return (
+    <>
+      <section className="orders-inspector__section">
+        <h3>Zusammenfassung</h3>
+        <dl className="orders-facts">
+          <OrderFact label="Produktionsstart" value={formatDateTime(snapshot.order.started_at)} />
+          <OrderFact label="Produktionsende" value={formatDateTime(snapshot.order.completed_at)} />
+          <OrderFact label="Dauer" value={formatDuration(snapshot.order.duration_ms)} />
+        </dl>
+      </section>
+      <section className="orders-inspector__section">
+        <h3>Stationsereignisse</h3>
+        <div className="orders-history-list">
+          {snapshot.station_executions.map((entry) => (
+            <div key={`${entry.resource_id}-${entry.carrier_number}-${entry.requested_at}`}>
+              <span className={entry.result_code === 0 ? "is-success" : "is-error"} />
+              <div>
+                <strong>{resourceNames[entry.resource_id] || `Station ${entry.resource_id}`}</strong>
+                <small>{formatDateTime(entry.requested_at)} · Carrier {entry.carrier_number}</small>
+              </div>
+              <em>{entry.result_code === 0 ? "Erfolgreich" : `Fehler ${entry.result_code ?? "–"}`}</em>
+            </div>
+          ))}
+        </div>
+      </section>
+    </>
+  );
+}
+
+function OrderFact({ label, value, tone }) {
+  return <div><dt>{label}</dt><dd className={tone ? `is-${tone}` : ""}>{value || "–"}</dd></div>;
+}
+
+function OrderStatus({ status }) {
+  return <span className={`orders-status orders-status--${status}`}><i />{STATUS_LABELS[status] || status}</span>;
+}
+
+function RouteTimeline({ order, route, carriers, resourceNames }) {
+  if (route.length === 0) return <p className="orders-inspector__empty">Noch keine Route hinterlegt.</p>;
+  const sortedRoute = [...route].sort((a, b) => a.step_no - b.step_no);
+  return (
+    <ol className="orders-route-timeline">
+      {sortedRoute.map((step) => {
+        const state = getRouteStepState(order, step, carriers, sortedRoute);
+        return (
+          <li key={step.id || step.step_no} className={`is-${state}`}>
+            <span className="orders-route-timeline__marker">
+              {state === "complete" ? <CheckCircleIcon aria-hidden="true" size={18} weight="fill" /> : <CircleIcon aria-hidden="true" size={18} weight={state === "current" ? "duotone" : "regular"} />}
+            </span>
+            <div>
+              <strong>{step.step_no === 1 ? resourceNames[step.resource_id] || step.operation : resourceNames[step.resource_id] || step.operation}</strong>
+              <small>{state === "complete" ? "Abgeschlossen" : state === "current" ? "In Arbeit" : "Ausstehend"}</small>
+            </div>
+          </li>
+        );
+      })}
+    </ol>
   );
 }
 
@@ -291,15 +691,21 @@ function OrderModal({ form, setForm, machines, products, orderParameterDefinitio
   );
 }
 
-function ProcessHint() { return <section className="mes-context-note"><strong>Ablauf:</strong> Beim Erstellen eines Auftrags werden Arbeitsplan, Carrier-Zuordnung und stMES-Freigaben für die angebundene Anlage vorbereitet.</section>; }
-function RouteStep({ step, stationName }) { return <div className="flex items-center justify-between rounded-lg bg-white px-3 py-2 text-sm"><span><strong>{step.step_no}. {step.operation}</strong><span className="ml-2 text-neutral-500">OP {step.operation_no}</span></span><span className="text-xs text-neutral-500">R{step.resource_id} · {stationName || "Station"}</span></div>; }
-function CarrierChips({ carriers }) { return <div className="flex flex-wrap items-center gap-2"><span className="text-xs font-semibold uppercase tracking-wider text-neutral-500">Werkstückträger</span>{carriers.length === 0 && <span className="text-sm text-neutral-400">noch nicht zugeordnet</span>}{carriers.map((carrier) => <span key={carrier.id} className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-neutral-700 shadow-sm">Carrier {carrier.carrier_number} · {carrierStatus(carrier.status)} · Schritt {carrier.current_step_no}</span>)}</div>; }
 function Field({ label, children }) { return <label className="space-y-1.5 text-sm font-medium text-neutral-700"><span>{label}</span>{children}</label>; }
-function MiniMetric({ label, value }) { return <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-3"><p className="text-[10px] uppercase tracking-wider text-neutral-500">{label}</p><p className="mt-1 text-lg font-bold text-neutral-900">{value}</p></div>; }
-function LogMetric({ label, value }) { return <div className="rounded-lg bg-neutral-50 p-3"><p className="text-[10px] uppercase tracking-wider text-neutral-500">{label}</p><p className="mt-1 text-sm font-semibold text-neutral-800">{value}</p></div>; }
-function OrderStat({ label, value, accent = "neutral" }) { const colors = accent === "green" ? "text-emerald-700" : accent === "amber" ? "text-amber-700" : "text-neutral-900"; return <div className="rounded-xl border border-neutral-200 bg-white p-4"><p className="text-xs uppercase tracking-wider text-neutral-500">{label}</p><p className={`mt-2 text-3xl font-bold ${colors}`}>{value}</p></div>; }
-function StatusBadge({ status }) { const color = status === "completed" ? "bg-emerald-50 text-emerald-700" : status === "in_progress" ? "bg-amber-50 text-amber-700" : status === "cancelled" ? "bg-red-50 text-red-700" : "bg-neutral-100 text-neutral-600"; return <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${color}`}>{STATUS_LABELS[status] || status}</span>; }
 function progress(order) { return order.quantity ? Math.min(100, Math.round((order.completed_quantity / order.quantity) * 100)) : 0; }
+function formatCarrier(carrier) { return carrier ? `C-${String(carrier.carrier_number).padStart(4, "0")}` : "–"; }
+function getRouteStepState(order, step, carriers, route) {
+  if (order.status === "completed") return "complete";
+  const carrierSteps = carriers.map((carrier) => Number(carrier.current_step_no)).filter(Number.isFinite);
+  const currentStep = carrierSteps.length
+    ? Math.max(...carrierSteps)
+    : order.status === "in_progress"
+      ? Number(route[0]?.step_no)
+      : 0;
+  if (Number(step.step_no) < currentStep) return "complete";
+  if (order.status === "in_progress" && Number(step.step_no) === currentStep) return "current";
+  return "pending";
+}
 function formatDateTime(value) { return value ? new Intl.DateTimeFormat("de-DE", { dateStyle: "short", timeStyle: "medium" }).format(new Date(value)) : "–"; }
 function formatDuration(value) { if (!Number.isFinite(value)) return "–"; const seconds = Math.max(0, Math.round(value / 1000)); const minutes = Math.floor(seconds / 60); const rest = seconds % 60; return minutes ? `${minutes} min ${rest} s` : `${rest} s`; }
 function carrierStatus(status) { return ({ available: "verfügbar", assigned: "zugeordnet", in_process: "in Arbeit", completed: "fertig", error: "Fehler" })[status] || status; }
@@ -310,6 +716,16 @@ function sortMachines(machines) { return [...machines].sort((a, b) => (a.resourc
 function startMachineForProduct(machines, product) { const resourceId = product?.route_steps?.[0]?.resource_id; return machines.find((machine) => machine.resource_id === resourceId); }
 function defaultParameters(definitions) { return Object.fromEntries((definitions || []).map((definition) => [definition.key, definition.default_value ?? 0])); }
 function normalizeParameters(definitions, values) { return Object.fromEntries((definitions || []).map((definition) => [definition.key, Number(values[definition.key] ?? definition.default_value ?? 0)])); }
+function triggerBrowserDownload({ blob, filename }) {
+  const objectUrl = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = objectUrl;
+  anchor.download = filename;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
+}
 function ParameterField({ definition, value, onChange }) {
   const stockLabel = definition.available_quantity !== undefined ? ` · Bestand: ${definition.available_quantity}${definition.unit ? ` ${definition.unit}` : ""}` : "";
   if (definition.type === "select") {
