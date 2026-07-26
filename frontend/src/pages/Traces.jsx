@@ -55,14 +55,16 @@ export default function TracesPage() {
   const categories = ["all", "process_data", "quality", "material", "energy", "op_input"];
 
   return (
-    <div className="min-h-screen bg-neutral-50">
+    <div className="mes-page min-h-screen bg-neutral-50">
       <main className="p-6 space-y-6">
-        <div>
-          <h1 className="text-2xl font-bold text-neutral-900">Process Traces</h1>
-          <p className="text-sm text-neutral-500 mt-0.5">Erfassungsdaten aller Stationen</p>
+        <div className="mes-page-header">
+          <div>
+          <h1 className="text-2xl font-bold text-neutral-900">Prozessdaten</h1>
+          <p className="text-sm text-neutral-500 mt-0.5">Zeitlich nachvollziehbare Erfassungsdaten aller Stationen.</p>
+          </div>
         </div>
 
-        <div className="flex gap-2 flex-wrap items-end bg-white p-4 rounded-lg border border-neutral-200 shadow-sm">
+        <div className="mes-filter-panel flex gap-2 flex-wrap items-end">
           <div>
             <label className="block text-xs font-semibold text-neutral-500 uppercase tracking-wider mb-1">Key Data Point</label>
             <input
@@ -114,7 +116,7 @@ export default function TracesPage() {
         {!loading && filtered.length === 0 && <p className="text-center text-neutral-400 py-12 text-sm">Keine Traces</p>}
 
         {filtered.length > 0 && (
-          <div className="bg-white rounded-lg shadow-card border border-neutral-200 overflow-hidden">
+          <div className="mes-panel">
             <table className="w-full">
               <thead>
                 <tr className="border-b border-neutral-200">

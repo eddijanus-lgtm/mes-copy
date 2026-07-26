@@ -34,35 +34,42 @@ export default function SystemStatus() {
     return () => clearInterval(interval);
   }, []);
 
-  const status = backendOnline === 'online' ? '🟢 Online' :
-                  backendOnline === 'error' ? '🟠 Error' : '⚫ Offline';
+  const status = backendOnline === 'online' ? 'Online' :
+                  backendOnline === 'error' ? 'Fehler' : 'Offline';
 
-  const dbStatus = dbOnline === 'online' ? '🟢 Connected' :
-                   dbOnline === 'error' ? '🟠 Error' : '⚫ Unknown';
-  const tokenStatus = token ? '🟢 Authenticated' : '⚪ Not logged in';
+  const dbStatus = dbOnline === 'online' ? 'Verbunden' :
+                   dbOnline === 'error' ? 'Fehler' : 'Unbekannt';
+  const tokenStatus = token ? 'Angemeldet' : 'Nicht angemeldet';
+  const backendClass = backendOnline === 'online' ? 'is-online' :
+    backendOnline === 'error' ? 'is-warning' : 'is-offline';
+  const databaseClass = dbOnline === 'online' ? 'is-online' :
+    dbOnline === 'error' ? 'is-warning' : 'is-offline';
+  const sessionClass = token ? 'is-online' : 'is-offline';
 
   return (
-    <div style={{
-      position: 'fixed',
-      bottom: 16,
-      right: 16,
-      backgroundColor: '#ffffff',
-      color: '#171717',
-      padding: '10px 14px',
-      borderRadius: 8,
-      fontSize: 12,
-      fontFamily: 'monospace',
-      boxShadow: '0 10px 30px rgba(15, 23, 42, 0.12)',
-      border: '1px solid #e5e5e5',
-      zIndex: 9999,
-      minWidth: 200,
-    }}>
-      <div style={{ fontWeight: 'bold', marginBottom: 4, borderBottom: '1px solid #e5e5e5', paddingBottom: 4 }}>
-        System Status
+    <details className="system-status">
+      <summary>
+        Systemstatus
+        <span className="system-status__summary-dots" aria-hidden="true">
+          <span className={backendClass} />
+          <span className={databaseClass} />
+          <span className={sessionClass} />
+        </span>
+      </summary>
+      <div className="system-status__body">
+        <div className="system-status__row">
+          <span>Backend</span>
+          <strong className={`system-status__value ${backendClass}`}>{status}</strong>
+        </div>
+        <div className="system-status__row">
+          <span>Datenbank</span>
+          <strong className={`system-status__value ${databaseClass}`}>{dbStatus}</strong>
+        </div>
+        <div className="system-status__row">
+          <span>Sitzung</span>
+          <strong className={`system-status__value ${sessionClass}`}>{tokenStatus}</strong>
+        </div>
       </div>
-      <div>Backend: {status}</div>
-      <div>Database: {dbStatus}</div>
-      <div>Session: {tokenStatus}</div>
-    </div>
+    </details>
   );
 }

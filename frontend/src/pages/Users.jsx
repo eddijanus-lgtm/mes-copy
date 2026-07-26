@@ -32,16 +32,18 @@ export default function UsersPage() {
   }
 
   return (
-    <div className="min-h-screen bg-neutral-50">
+    <div className="mes-page min-h-screen bg-neutral-50">
       <main className="p-6 space-y-6">
-        <div>
+        <div className="mes-page-header">
+          <div>
           <h1 className="text-2xl font-bold text-neutral-900">Benutzerverwaltung</h1>
           <p className="text-sm text-neutral-500 mt-0.5">Neuen MES-Benutzer mit passender Rolle anlegen</p>
+          </div>
         </div>
 
-        <section className="max-w-2xl bg-white rounded-lg shadow-card border border-neutral-200 p-6">
+        <section className="mes-panel max-w-2xl p-6">
           <h2 className="text-sm font-semibold text-neutral-700 mb-5">Benutzer erstellen</h2>
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form onSubmit={handleSubmit} className="mes-form-grid">
             <label className="block">
               <span className="block text-sm font-medium text-neutral-700 mb-1.5">Benutzername</span>
               <input
@@ -82,7 +84,7 @@ export default function UsersPage() {
             {error && <p role="alert" className="rounded-lg bg-status-error-bg px-4 py-3 text-sm text-status-error">{error}</p>}
             {success && <p role="status" className="rounded-lg bg-status-success-bg px-4 py-3 text-sm text-status-success">{success}</p>}
 
-            <div className="flex justify-end pt-2">
+            <div className="mes-form-actions">
               <button
                 type="submit"
                 disabled={submitting}

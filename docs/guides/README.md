@@ -18,6 +18,7 @@ _Dieser Ordner enthält Erklärungen, Konzepte und technische Hintergründe für
 | [08-orders-crud.md](08-orders-crud.md) | Vollständige Auftragsverwaltung im Frontend | verified |
 | [10-real-machine-commissioning.md](10-real-machine-commissioning.md) | Lesende OPC-UA-Erfassung und Profilprüfung für die echte Anlage | prepared |
 | [11-api-lifecycle.md](11-api-lifecycle.md) | API-Versionierung, Breaking Changes und Deprecation Policy | verified |
+| [12-frontend-styleguide.md](12-frontend-styleguide.md) | Verbindliches WARA-Designsystem für Seiten, Komponenten und responsive Bedienung | verified |
 
 ---
 

@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { api } from "../api/client.js";
 import { useAuth } from "../providers/AuthProvider.jsx";
+import Modal from "../components/Modal.jsx";
 
 export default function NotificationsPage() {
   const { user } = useAuth();
@@ -10,6 +11,7 @@ export default function NotificationsPage() {
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
+  const [deleteCandidate, setDeleteCandidate] = useState(null);
   const [channelForm, setChannelForm] = useState({ channel: "email", enabled: true });
   const [channels, setChannels] = useState([]);
   const [newRule, setNewRule] = useState({ name: "", severity: "warning", condition: "", message_template: "{machine_id}: {value}", channels: "mqtt,websocket", machine_id: "" });
@@ -45,8 +47,11 @@ export default function NotificationsPage() {
   }
   
   async function deleteRule(id) {
-    if (!confirm("Regel wirklich loeschen?")) return;
-    try { await api.del(`/notifications/rules/${id}`); loadRules(); } catch {}
+    try {
+      await api.del(`/notifications/rules/${id}`);
+      setDeleteCandidate(null);
+      loadRules();
+    } catch {}
   }
 
   async function createRule(e) {
@@ -63,10 +68,15 @@ export default function NotificationsPage() {
   const severityColors = { info: "#6b7280", warning: "#f59e0b", error: "#ef4444", critical: "#dc2626" };
 
   return (
-    <div className="p-6 max-w-7xl mx-auto">
-      <h1 className="text-2xl font-bold mb-4">Benachrichtigungen</h1>
+    <div className="mes-page p-6 max-w-7xl mx-auto">
+      <div className="mes-page-header mb-6">
+        <div>
+        <h1 className="text-2xl font-bold">Benachrichtigungen</h1>
+        <p>Alert-Regeln, Auslieferungsverlauf und angebundene Kanäle.</p>
+        </div>
+      </div>
       {stats && (
-        <div className="grid grid-cols-3 gap-4 mb-6">
+        <div className="mes-metric-strip mb-6 grid grid-cols-3">
           <div className="bg-white rounded-lg p-4 shadow-sm border">
             <div className="text-sm text-gray-500">Regeln gesamt</div>
             <div className="text-2xl font-bold">{stats.total}</div>
@@ -82,9 +92,9 @@ export default function NotificationsPage() {
         </div>
       )}
 
-      <div className="flex gap-2 mb-4 border-b">
-        {[["rules", "Alert-Regeln"], ["history", "Verlauf"], ["channels", "Kanale"]].map(([key, label]) => (
-          <button key={key} onClick={() => setActiveTab(key)} className={`px-4 py-2 font-medium ${activeTab === key ? "border-b-2 border-blue-500" : "text-gray-500"}`}>{label}</button>
+      <div className="mes-tabs">
+        {[["rules", "Alert-Regeln"], ["history", "Verlauf"], ["channels", "Kanäle"]].map(([key, label]) => (
+          <button key={key} onClick={() => setActiveTab(key)} className={activeTab === key ? "is-active" : ""}>{label}</button>
         ))}
       </div>
 
@@ -92,21 +102,39 @@ export default function NotificationsPage() {
 
       {activeTab === "rules" && !loading && (
         <div>
-          <button onClick={() => setShowForm(!showForm)} className="mb-4 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">+ Neue Regel</button>
+          <button onClick={() => setShowForm(!showForm)} className="mes-primary-button mb-4">+ Neue Regel</button>
 
           {showForm && (
-            <form onSubmit={createRule} className="mb-4 p-4 bg-white shadow-sm border rounded-lg space-y-3">
-              <input type="text" placeholder="Name" value={newRule.name} onChange={e => setNewRule({ ...newRule, name: e.target.value })} className="border px-2 py-1 rounded w-full" />
-              <select value={newRule.severity} onChange={e => setNewRule({ ...newRule, severity: e.target.value })} className="border px-2 py-1 rounded w-full">
-                {["info", "warning", "error", "critical"].map(s => <option key={s} value={s}>{s}</option>)}
-              </select>
-              <input type="text" placeholder="Bedingung (z.B. temperature >= 80)" value={newRule.condition} onChange={e => setNewRule({ ...newRule, condition: e.target.value })} className="border px-2 py-1 rounded w-full" />
-              <input type="text" placeholder="Maschine UUID" value={newRule.machine_id} onChange={e => setNewRule({ ...newRule, machine_id: e.target.value })} className="border px-2 py-1 rounded w-full" />
-              <input type="text" placeholder="Nachrichten-Vorlage (Platzhalter: {machine_id}, {value})" value={newRule.message_template} onChange={e => setNewRule({ ...newRule, message_template: e.target.value })} className="border px-2 py-1 rounded w-full" />
-              <input type="text" placeholder="Kanale (kommagetrennt, z.B. mqtt,websocket)" value={newRule.channels} onChange={e => setNewRule({ ...newRule, channels: e.target.value })} className="border px-2 py-1 rounded w-full" />
-              <div className="flex gap-2">
-                <button type="submit" className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700">Erstellen</button>
-                <button type="button" onClick={() => setShowForm(false)} className="px-4 py-2 text-gray-500">Abbrechen</button>
+            <form onSubmit={createRule} className="mes-panel mes-form-panel mes-form-grid mb-4">
+              <label>
+                <span>Regelname</span>
+                <input type="text" placeholder="z. B. Temperaturgrenze" value={newRule.name} onChange={e => setNewRule({ ...newRule, name: e.target.value })} />
+              </label>
+              <label>
+                <span>Schweregrad</span>
+                <select value={newRule.severity} onChange={e => setNewRule({ ...newRule, severity: e.target.value })}>
+                  {["info", "warning", "error", "critical"].map(s => <option key={s} value={s}>{s}</option>)}
+                </select>
+              </label>
+              <label>
+                <span>Bedingung</span>
+                <input type="text" placeholder="temperature >= 80" value={newRule.condition} onChange={e => setNewRule({ ...newRule, condition: e.target.value })} />
+              </label>
+              <label>
+                <span>Maschinen-UUID</span>
+                <input type="text" placeholder="Optional" value={newRule.machine_id} onChange={e => setNewRule({ ...newRule, machine_id: e.target.value })} />
+              </label>
+              <label>
+                <span>Nachrichten-Vorlage</span>
+                <input type="text" placeholder="{machine_id}: {value}" value={newRule.message_template} onChange={e => setNewRule({ ...newRule, message_template: e.target.value })} />
+              </label>
+              <label>
+                <span>Kanäle</span>
+                <input type="text" placeholder="mqtt, websocket" value={newRule.channels} onChange={e => setNewRule({ ...newRule, channels: e.target.value })} />
+              </label>
+              <div className="mes-form-actions gap-2">
+                <button type="submit" className="mes-primary-button">Erstellen</button>
+                <button type="button" onClick={() => setShowForm(false)} className="mes-secondary-button">Abbrechen</button>
               </div>
             </form>
           )}
@@ -123,7 +151,7 @@ export default function NotificationsPage() {
                     <td className="px-4 py-2 font-mono text-xs">{r.condition}</td>
                     <td className="px-4 py-2 flex gap-1">
                       <button onClick={() => toggleRule(r.id)} className="text-sm px-2 py-1 bg-blue-50 rounded hover:bg-blue-100">{r.is_active ? "Stopp" : "Start"}</button>
-                      <button onClick={() => deleteRule(r.id)} className="text-sm px-2 py-1 bg-red-50 rounded hover:bg-red-100 text-red-600">Loeschen</button>
+                      <button onClick={() => setDeleteCandidate(r)} className="text-sm px-2 py-1 bg-red-50 rounded hover:bg-red-100 text-red-600">Löschen</button>
                     </td>
                   </tr>
                 ))}
@@ -151,16 +179,21 @@ export default function NotificationsPage() {
 
       {activeTab === "channels" && !loading && (
         <div>
-          <form onSubmit={createChannel} className="mb-4 p-4 bg-white shadow-sm border rounded-lg space-y-3">
-            <h3 className="font-medium mb-2">Neuen Kanal hinzufuegen</h3>
-            <select value={channelForm.channel} onChange={e => setChannelForm({ ...channelForm, channel: e.target.value })} className="border px-2 py-1 rounded w-full">
-              {["email", "push", "mqtt", "websocket"].map(c => <option key={c} value={c}>{c}</option>)}
-            </select>
-            <label><input type="checkbox" checked={channelForm.enabled} onChange={e => setChannelForm({ ...channelForm, enabled: e.target.checked })} className="mr-2"/> Aktiviert</label>
-            <button type="submit" className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">Erstellen</button>
+          <form onSubmit={createChannel} className="mes-panel mes-form-panel mes-form-grid mb-4">
+            <h3 className="font-medium mb-2">Neuen Kanal hinzufügen</h3>
+            <label>
+              <span>Kanaltyp</span>
+              <select value={channelForm.channel} onChange={e => setChannelForm({ ...channelForm, channel: e.target.value })}>
+                {["email", "push", "mqtt", "websocket"].map(c => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </label>
+            <label className="mes-checkbox-field"><input type="checkbox" checked={channelForm.enabled} onChange={e => setChannelForm({ ...channelForm, enabled: e.target.checked })} /> Aktiviert</label>
+            <div className="mes-form-actions">
+              <button type="submit" className="mes-primary-button">Kanal erstellen</button>
+            </div>
           </form>
 
-          {channels.length === 0 ? <p className="text-gray-400">Keine Kanale konfiguriert.</p> : (
+          {channels.length === 0 ? <p className="text-gray-400">Keine Kanäle konfiguriert.</p> : (
             <table className="w-full text-sm bg-white shadow-sm border rounded-lg overflow-hidden">
               <thead className="bg-gray-50 border-b"><tr><th className="px-4 py-2 text-left">Kanal</th><th className="px-4 py-2 text-left">Status</th></tr></thead>
               <tbody>
@@ -175,6 +208,20 @@ export default function NotificationsPage() {
           )}
         </div>
       )}
+
+      <Modal
+        isOpen={Boolean(deleteCandidate)}
+        onClose={() => setDeleteCandidate(null)}
+        title="Alert-Regel löschen"
+      >
+        <p className="text-sm leading-6 text-neutral-500">
+          Die Regel <strong className="text-neutral-800">{deleteCandidate?.name}</strong> wird dauerhaft entfernt.
+        </p>
+        <div className="mt-6 flex justify-end gap-2">
+          <button type="button" className="mes-secondary-button" onClick={() => setDeleteCandidate(null)}>Abbrechen</button>
+          <button type="button" className="mes-danger-button" onClick={() => deleteRule(deleteCandidate.id)}>Regel löschen</button>
+        </div>
+      </Modal>
     </div>
   );
 }

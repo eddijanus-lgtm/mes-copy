@@ -141,13 +141,13 @@ export default function AlarmsPage() {
   const canBulkDelete = selCount > 0;
 
   return (
-    <div className="min-h-screen bg-neutral-50">
+    <div className="mes-page min-h-screen bg-neutral-50">
       <main className="p-6 space-y-6">
-        <div className="flex items-center justify-between">
+        <div className="mes-page-header">
           <div>
             <h1 className="text-2xl font-bold text-neutral-900">Alarme</h1>
             <p className="text-sm text-neutral-500 mt-0.5">
-              Ubersicht aller Alarme {activeCount > 0 && <span>({activeCount} offen)</span>}
+              Übersicht aller Alarme {activeCount > 0 && <span>({activeCount} offen)</span>}
             </p>
           </div>
           <button
@@ -158,32 +158,34 @@ export default function AlarmsPage() {
           </button>
         </div>
 
-        <div className="flex gap-1.5 flex-wrap" role="group">
-          {["all", "info", "warning", "error", "critical"].map((s) => (
-            <button
-              key={s}
-              onClick={() => setFilter(s)}
-              className={`px-3.5 py-2 rounded-lg text-xs font-semibold uppercase tracking-wider transition-colors ${filter === s ? "bg-brand-primary text-white" : "bg-white text-neutral-600 border border-neutral-200 hover:bg-neutral-50"}`}
-            >
-              {s}
-            </button>
-          ))}
-        </div>
+        <div className="mes-filter-panel space-y-3">
+          <div className="flex gap-1.5 flex-wrap" role="group" aria-label="Schweregrad filtern">
+            {["all", "info", "warning", "error", "critical"].map((s) => (
+              <button
+                key={s}
+                onClick={() => setFilter(s)}
+                className={`px-3.5 py-2 rounded-lg text-xs font-semibold uppercase tracking-wider transition-colors ${filter === s ? "bg-brand-primary text-white" : "bg-white text-neutral-600 border border-neutral-200 hover:bg-neutral-50"}`}
+              >
+                {s}
+              </button>
+            ))}
+          </div>
 
-        <div className="flex gap-1.5 flex-wrap" role="group">
-          {[
-            { key: "all", label: "Alle" },
-            { key: "open", label: "Offen" },
-            { key: "acknowledged", label: "Bestatigt" },
-          ].map((s) => (
-            <button
-              key={s.key}
-              onClick={() => setAckFilter(s.key)}
-              className={`px-3.5 py-2 rounded-lg text-xs font-semibold uppercase tracking-wider transition-colors ${ackFilter === s.key ? "bg-brand-primary text-white" : "bg-white text-neutral-600 border border-neutral-200 hover:bg-neutral-50"}`}
-            >
-              {s.label}
-            </button>
-          ))}
+          <div className="flex gap-1.5 flex-wrap" role="group" aria-label="Bestätigungsstatus filtern">
+            {[
+              { key: "all", label: "Alle" },
+              { key: "open", label: "Offen" },
+              { key: "acknowledged", label: "Bestätigt" },
+            ].map((s) => (
+              <button
+                key={s.key}
+                onClick={() => setAckFilter(s.key)}
+                className={`px-3.5 py-2 rounded-lg text-xs font-semibold uppercase tracking-wider transition-colors ${ackFilter === s.key ? "bg-brand-primary text-white" : "bg-white text-neutral-600 border border-neutral-200 hover:bg-neutral-50"}`}
+              >
+                {s.label}
+              </button>
+            ))}
+          </div>
         </div>
 
         {canBulkAck && (
@@ -193,7 +195,7 @@ export default function AlarmsPage() {
               disabled={bulkLoading}
               className="px-4 py-2 bg-green-600 text-white rounded-lg text-xs font-semibold hover:bg-green-700 transition-colors disabled:opacity-50"
             >
-              {bulkLoading ? "..." : `Bestatigen (${selCount})`}
+              {bulkLoading ? "..." : `Bestätigen (${selCount})`}
             </button>
           </div>
         )}
@@ -205,7 +207,7 @@ export default function AlarmsPage() {
               disabled={bulkLoading}
               className="px-4 py-2 bg-red-600 text-white rounded-lg text-xs font-semibold hover:bg-red-700 transition-colors disabled:opacity-50"
             >
-              {bulkLoading ? "..." : `Loschen (${selCount})`}
+              {bulkLoading ? "..." : `Löschen (${selCount})`}
             </button>
           </div>
         )}
@@ -215,7 +217,7 @@ export default function AlarmsPage() {
         {!loading && filtered.length === 0 && <p className="text-center text-neutral-400 py-12 text-sm">Keine Alarme</p>}
 
         {filtered.length > 0 && (
-          <div className="bg-white rounded-lg shadow-card border border-neutral-200 overflow-hidden">
+          <div className="mes-panel">
             <table className="w-full">
               <thead>
                 <tr className="border-b border-neutral-200">
@@ -231,7 +233,7 @@ export default function AlarmsPage() {
                   <th className="px-5 py-3 text-left text-xs font-semibold text-neutral-500 uppercase tracking-wider">Machine</th>
                   <th className="px-5 py-3 text-left text-xs font-semibold text-neutral-500 uppercase tracking-wider">Nachricht</th>
                   <th className="px-5 py-3 text-left text-xs font-semibold text-neutral-500 uppercase tracking-wider">Schweregrad</th>
-                  <th className="px-5 py-3 text-left text-xs font-semibold text-neutral-500 uppercase tracking-wider">Bestatigt am</th>
+                  <th className="px-5 py-3 text-left text-xs font-semibold text-neutral-500 uppercase tracking-wider">Bestätigt am</th>
                   <th className="px-5 py-3 text-right text-xs font-semibold text-neutral-500 uppercase tracking-wider">Aktion</th>
                 </tr>
               </thead>
@@ -261,7 +263,7 @@ export default function AlarmsPage() {
                           onClick={() => handleAcknowledge(a.id)}
                           className="px-3 py-1.5 bg-brand-primary/10 text-brand-primary rounded-md text-xs font-semibold hover:bg-brand-primary/20 transition-colors"
                         >
-                          Bestatigen
+                          Bestätigen
                         </button>
                       )}
                     </td>

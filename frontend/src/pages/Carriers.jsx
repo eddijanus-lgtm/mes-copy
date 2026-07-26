@@ -42,22 +42,21 @@ export default function CarriersPage() {
   const orderById = Object.fromEntries(orders.map((order) => [order.id, order]));
 
   return (
-    <div className="min-h-screen bg-neutral-50 p-6 space-y-6">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+    <div className="mes-page min-h-screen bg-neutral-50 p-6 space-y-6">
+      <div className="mes-page-header">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-brand-primary">Materialfluss</p>
           <h1 className="text-2xl font-bold text-neutral-900">Werkstückträger</h1>
           <p className="mt-1 text-sm text-neutral-500">Carrier-Position, Auftragszuordnung und aktueller Arbeitsschritt der angebundenen Anlage.</p>
         </div>
         <button onClick={load} className="w-fit rounded-lg border border-neutral-200 bg-white px-4 py-2 text-sm font-medium text-neutral-700 hover:border-brand-primary hover:text-brand-primary">Aktualisieren</button>
       </div>
 
-      <section className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-950">
+      <section className="mes-context-note">
         <strong>Ablauf:</strong> Das MES entscheidet je Carrier anhand Auftrag und Route, welche Station den nächsten Arbeitsschritt ausführen darf.
       </section>
 
       {canManage && (
-        <form onSubmit={createCarrier} className="flex max-w-lg gap-3 rounded-lg border border-neutral-200 bg-white p-4 shadow-card">
+        <form onSubmit={createCarrier} className="mes-filter-panel flex max-w-lg gap-3">
           <input type="number" min="1" required value={carrierNumber} onChange={(event) => setCarrierNumber(event.target.value)} placeholder="Carrier-Nummer" className="flex-1 rounded-lg border border-neutral-200 px-3 py-2 text-sm" />
           <button className="rounded-lg bg-brand-primary px-4 py-2 text-sm font-medium text-white">Anlegen</button>
         </form>
@@ -65,7 +64,7 @@ export default function CarriersPage() {
 
       {error && <p className="rounded-lg bg-status-error-bg p-3 text-sm text-status-error">{error}</p>}
 
-      <div className="grid gap-4 xl:grid-cols-2">
+      <div className="mes-card-list grid xl:grid-cols-2">
         {carriers.map((carrier) => <CarrierCard key={carrier.id} carrier={carrier} order={orderById[carrier.order_id]} />)}
         {carriers.length === 0 && <p className="rounded-xl border border-neutral-200 bg-white p-8 text-sm text-neutral-400">Noch keine Werkstückträger vorhanden.</p>}
       </div>

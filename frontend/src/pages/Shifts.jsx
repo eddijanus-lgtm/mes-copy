@@ -48,12 +48,17 @@ export default function ShiftsPage() {
   }
 
   return (
-    <div className="p-6 max-w-7xl mx-auto">
-      <h1 className="text-2xl font-bold mb-4">Schichtmanagement</h1>
+    <div className="mes-page p-6 max-w-7xl mx-auto">
+      <div className="mes-page-header mb-6">
+        <div>
+        <h1 className="text-2xl font-bold">Schichtmanagement</h1>
+        <p>Schichten planen, abschließen und nachvollziehbar auswerten.</p>
+        </div>
+      </div>
 
-      <div className="flex gap-2 mb-4 border-b">
+      <div className="mes-tabs">
         {[["shifts", "Schichten"], ["reports", "Berichte"]].map(([key, label]) => (
-          <button key={key} onClick={() => setActiveTab(key)} className={`px-4 py-2 font-medium ${activeTab === key ? "border-b-2 border-blue-500" : "text-gray-500"}`}>{label}</button>
+          <button key={key} onClick={() => setActiveTab(key)} className={activeTab === key ? "is-active" : ""}>{label}</button>
         ))}
       </div>
 
@@ -61,16 +66,39 @@ export default function ShiftsPage() {
 
       {activeTab === "shifts" && !loading && (
         <div>
-          <form onSubmit={createShift} className="mb-6 p-4 bg-white shadow-sm border rounded-lg space-y-3">
+          <form onSubmit={createShift} className="mes-panel mes-form-panel mes-form-grid mb-6">
             <h3 className="font-medium mb-2">Neue Schicht anlegen</h3>
-            <input type="text" placeholder="Schichtname" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} className="border px-2 py-1 rounded w-full" />
-            <select value={form.type} onChange={e => setForm({ ...form, type: e.target.value })} className="border px-2 py-1 rounded w-full">
-              {["day", "night", "swing"].map(t => <option key={t} value={t}>{t}</option>)}
-            </select>
-            <input type="date" value={form.date} onChange={e => setForm({ ...form, date: e.target.value })} className="border px-2 py-1 rounded w-full" />
-            <input type="text" placeholder="Uhrzeit Start (hh:mm)" value={form.start_time} onChange={e => setForm({ ...form, start_time: e.target.value })} className="border px-2 py-1 rounded w-full" />
-            <input type="text" placeholder="Uhrzeit Ende (hh:mm)" value={form.end_time} onChange={e => setForm({ ...form, end_time: e.target.value })} className="border px-2 py-1 rounded w-full" />
-            <button type="submit" className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">Erstellen</button>
+            <label>
+              <span>Schichtname</span>
+              <input type="text" placeholder="z. B. Frühschicht" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} />
+            </label>
+            <label>
+              <span>Schichttyp</span>
+              <select value={form.type} onChange={e => setForm({ ...form, type: e.target.value })}>
+                <option value="day">Tagschicht</option>
+                <option value="night">Nachtschicht</option>
+                <option value="swing">Wechselschicht</option>
+              </select>
+            </label>
+            <label>
+              <span>Datum</span>
+              <input type="date" value={form.date} onChange={e => setForm({ ...form, date: e.target.value })} />
+            </label>
+            <label>
+              <span>Schichtleitung</span>
+              <input type="text" placeholder="Name" value={form.manager_name} onChange={e => setForm({ ...form, manager_name: e.target.value })} />
+            </label>
+            <label>
+              <span>Beginn</span>
+              <input type="time" value={form.start_time} onChange={e => setForm({ ...form, start_time: e.target.value })} />
+            </label>
+            <label>
+              <span>Ende</span>
+              <input type="time" value={form.end_time} onChange={e => setForm({ ...form, end_time: e.target.value })} />
+            </label>
+            <div className="mes-form-actions">
+              <button type="submit" className="mes-primary-button">Schicht anlegen</button>
+            </div>
           </form>
 
           {shifts.length === 0 ? <p className="text-gray-400">Keine Schichten angelegt.</p> : (
@@ -114,7 +142,7 @@ export default function ShiftsPage() {
 
               <div className="grid grid-cols-4 gap-3 mb-3">
                 <div className="text-center p-2 bg-gray-50 rounded">
-                  <div className="text-xs text-gray-500">Auftraege</div>
+                  <div className="text-xs text-gray-500">Aufträge</div>
                   <div className="font-bold">{r.total_orders}</div>
                 </div>
                 <div className="text-center p-2 bg-gray-50 rounded">

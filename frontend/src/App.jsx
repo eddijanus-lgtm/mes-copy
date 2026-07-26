@@ -31,7 +31,7 @@ function ProtectedApp() {
   return (
     <div className="h-screen w-screen flex overflow-hidden bg-neutral-50">
       <Sidebar />
-      <main className="relative min-h-0 min-w-0 flex-1 overflow-y-auto">
+      <main className="app-content relative min-h-0 min-w-0 flex-1 overflow-y-auto">
         <Routes>
           <Route path="/" element={<Dashboard />} />
           <Route path="machines/*" element={<MachinesPage />} />

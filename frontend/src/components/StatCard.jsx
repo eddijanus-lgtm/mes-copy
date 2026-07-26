@@ -1,11 +1,11 @@
 export default function StatCard({ label, value = "", icon }) {
   return (
-    <div className="bg-white rounded-lg shadow-card border border-neutral-200 p-5 transition-all duration-200 hover:shadow-hover">
-      <p className="text-xs font-medium text-neutral-500 uppercase tracking-wider">{label}</p>
+    <div className="rounded-lg border border-neutral-200 bg-white p-5 shadow-card">
+      <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-neutral-500">{label}</p>
       {value && (
-        <div className="mt-2 flex items-center gap-3">
-          <span className="text-3xl font-bold text-neutral-900">{value}</span>
-          {icon && <span className="text-xl opacity-60 leading-none">{icon}</span>}
+        <div className="mt-3 flex items-center justify-between gap-3">
+          <span className="text-3xl font-medium tracking-tight text-neutral-900">{value}</span>
+          {icon ? <span className="text-base leading-none text-neutral-400">{icon}</span> : null}
         </div>
       )}
     </div>

@@ -2,23 +2,23 @@
 
 @theme {
   /* Brand */
-  --color-brand-primary:  #f58b00;  /* Wara Orange als Primary */
+  --color-brand-primary:  #ff5a00;
   --color-brand-magenta:  #e8147a;
-  --color-brand-orange:   #f58b00;
+  --color-brand-orange:   #ff5a00;
   --color-brand-cyan:     #00b4d8;
   --color-brand-lilac:    #9b72cf;
 
   /* Neutrals — nie #000 oder #1a1a1a */
-  --color-neutral-50:     #fafafa;
-  --color-neutral-100:    #f4f4f5;
-  --color-neutral-200:    #e4e4e7;
-  --color-neutral-300:    #d4d4d8;
-  --color-neutral-400:    #a1a1aa;
-  --color-neutral-500:    #71717a;
-  --color-neutral-600:    #52525b;
-  --color-neutral-700:    #3f3f46;
-  --color-neutral-800:    #27272a;
-  --color-neutral-900:    #18181b;
+  --color-neutral-50:     #f8f9fa;
+  --color-neutral-100:    #eef1f4;
+  --color-neutral-200:    #dfe3e7;
+  --color-neutral-300:    #cbd1d8;
+  --color-neutral-400:    #969da6;
+  --color-neutral-500:    #68717d;
+  --color-neutral-600:    #505863;
+  --color-neutral-700:    #3c434c;
+  --color-neutral-800:    #252b32;
+  --color-neutral-900:    #15191e;
 
   /* Status */
   --color-status-success:   #16a34a;
@@ -29,9 +29,13 @@
   --color-status-error-bg:   #fef2f2;
   --color-status-info:      #2563eb;
   --color-status-info-bg:    #eff6ff;
+  --color-status-bg-success: #f0fdf4;
+  --color-status-bg-warning: #fefce8;
+  --color-status-bg-error:   #fef2f2;
+  --color-status-bg-info:    #eff6ff;
    --color-accent-pink:      #fdf2f8;
    --color-accent-lilac-bg:  #faf5ff;
-   --color-brand-primary-dark: #d97706;  /* Orange-Dunkel für hover */
+   --color-brand-primary-dark: #d94d00;
    --color-status-error-dark:  #b91c1c;
 }
 
@@ -54,4 +58,285 @@
 .form-input:focus {
   border-color: var(--color-brand-primary);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-brand-primary) 20%, transparent);
+}
+
+.app-sidebar {
+  display: flex;
+  position: sticky;
+  top: 0;
+  width: 14.25rem;
+  height: 100vh;
+  flex: 0 0 14.25rem;
+  flex-direction: column;
+  border-right: 1px solid #e1e4e8;
+  color: #252a31;
+  background: #fff;
+}
+
+.app-sidebar__brand {
+  display: flex;
+  min-height: 5.25rem;
+  align-items: center;
+  gap: 0.85rem;
+  border-bottom: 1px solid #eceef1;
+  padding: 0 1.15rem;
+}
+
+.app-sidebar__wordmark {
+  color: #15191e;
+  font-size: 1.42rem;
+  font-weight: 850;
+  letter-spacing: -0.08em;
+}
+
+.app-sidebar__wordmark span span {
+  position: relative;
+}
+
+.app-sidebar__wordmark span span::after {
+  position: absolute;
+  right: 0.18em;
+  bottom: 0.18em;
+  width: 0.18em;
+  height: 0.18em;
+  border-radius: 50%;
+  background: #ff5a00;
+  content: "";
+}
+
+.app-sidebar__wordmark-short {
+  display: none;
+}
+
+.app-sidebar__product {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+  padding-left: 0.8rem;
+  border-left: 1px solid #d9dde2;
+}
+
+.app-sidebar__product strong {
+  overflow: hidden;
+  font-size: 0.72rem;
+  font-weight: 670;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-sidebar__product span {
+  overflow: hidden;
+  color: #8a919b;
+  font-size: 0.56rem;
+  letter-spacing: 0.03em;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.app-sidebar__nav {
+  min-height: 0;
+  flex: 1;
+  overflow-y: auto;
+  padding: 1.05rem 0.75rem;
+}
+
+.app-sidebar__group + .app-sidebar__group {
+  margin-top: 1.1rem;
+}
+
+.app-sidebar__group h2 {
+  margin: 0 0 0.35rem;
+  padding: 0 0.7rem;
+  color: #9aa1aa;
+  font-size: 0.57rem;
+  font-weight: 720;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+}
+
+.app-sidebar__group > div {
+  display: grid;
+  gap: 0.15rem;
+}
+
+.app-sidebar__group a {
+  display: flex;
+  min-height: 2.45rem;
+  align-items: center;
+  gap: 0.72rem;
+  border-radius: 0.45rem;
+  padding: 0 0.7rem;
+  color: #5d6570;
+  font-size: 0.77rem;
+  font-weight: 560;
+}
+
+.app-sidebar__group a:hover {
+  color: #1f242a;
+  background: #f5f6f7;
+}
+
+.app-sidebar__group a.is-active {
+  color: #d94d00;
+  background: #fff2eb;
+}
+
+.app-sidebar__nav-icon {
+  display: grid;
+  width: 1.3rem;
+  flex: 0 0 1.3rem;
+  place-items: center;
+}
+
+.app-sidebar__footer {
+  display: grid;
+  gap: 0.75rem;
+  border-top: 1px solid #eceef1;
+  padding: 0.9rem 0.75rem 1rem;
+}
+
+.app-sidebar__languages {
+  display: flex;
+  gap: 0.25rem;
+  padding-left: 0.2rem;
+}
+
+.app-sidebar__languages button {
+  min-width: 2rem;
+  height: 1.65rem;
+  border: 0;
+  border-radius: 0.35rem;
+  color: #858d97;
+  background: transparent;
+  font-size: 0.61rem;
+  font-weight: 680;
+}
+
+.app-sidebar__languages button.is-active {
+  color: #d94d00;
+  background: #fff2eb;
+}
+
+.app-sidebar__account {
+  display: grid;
+  grid-template-columns: 2rem minmax(0, 1fr) 2rem;
+  align-items: center;
+  gap: 0.55rem;
+  border: 1px solid #e3e6e9;
+  border-radius: 0.55rem;
+  padding: 0.55rem;
+}
+
+.app-sidebar__avatar {
+  display: grid;
+  width: 2rem;
+  height: 2rem;
+  place-items: center;
+  border-radius: 0.42rem;
+  color: #fff;
+  background: #20252b;
+  font-size: 0.72rem;
+  font-weight: 720;
+}
+
+.app-sidebar__user {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.app-sidebar__user strong {
+  overflow: hidden;
+  font-size: 0.69rem;
+  font-weight: 680;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-sidebar__user small {
+  display: flex;
+  align-items: center;
+  gap: 0.32rem;
+  color: #848c96;
+  font-size: 0.56rem;
+  white-space: nowrap;
+}
+
+.app-sidebar__user i {
+  width: 0.38rem;
+  height: 0.38rem;
+  border-radius: 50%;
+  background: #11a43b;
+}
+
+.app-sidebar__account > button {
+  display: grid;
+  width: 2rem;
+  height: 2rem;
+  place-items: center;
+  border: 0;
+  border-radius: 0.4rem;
+  color: #747c87;
+  background: transparent;
+}
+
+.app-sidebar__account > button:hover {
+  color: #bd2d21;
+  background: #fff0ef;
+}
+
+@media (max-width: 720px) {
+  .app-sidebar {
+    width: 4.5rem;
+    flex-basis: 4.5rem;
+  }
+
+  .app-sidebar__brand {
+    justify-content: center;
+    padding: 0;
+  }
+
+  .app-sidebar__wordmark-full,
+  .app-sidebar__product,
+  .app-sidebar__group h2,
+  .app-sidebar__nav-label,
+  .app-sidebar__user,
+  .app-sidebar__languages {
+    display: none;
+  }
+
+  .app-sidebar__wordmark-short {
+    display: inline;
+  }
+
+  .app-sidebar__nav {
+    padding-inline: 0.55rem;
+  }
+
+  .app-sidebar__group + .app-sidebar__group {
+    margin-top: 0.55rem;
+    padding-top: 0.55rem;
+    border-top: 1px solid #eceef1;
+  }
+
+  .app-sidebar__group a {
+    justify-content: center;
+    padding: 0;
+  }
+
+  .app-sidebar__footer {
+    padding-inline: 0.55rem;
+  }
+
+  .app-sidebar__account {
+    display: flex;
+    justify-content: center;
+    border: 0;
+    padding: 0;
+  }
+
+  .app-sidebar__avatar {
+    display: none;
+  }
 }

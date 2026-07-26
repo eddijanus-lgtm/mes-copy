@@ -64,9 +64,9 @@ export default function ShopfloorPage() {
   const trackedCarriers = activeShopfloorOrder ? carriers.filter((carrier) => carrier.order_id === activeShopfloorOrder.id) : [];
 
   return (
-    <div className="min-h-screen bg-neutral-50">
+    <div className="mes-page min-h-screen bg-neutral-50">
       <main className="p-6 space-y-6">
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+        <div className="mes-page-header">
           <div>
             <h1 className="text-2xl font-bold text-neutral-900">Shopfloor Gateway</h1>
             <p className="text-sm text-neutral-500 mt-0.5">OT/IT-Vermittlung: OPC-UA-Handshake, MQTT-Eingang und Live-Telemetrie</p>
@@ -190,7 +190,7 @@ function GatewayRolePanel({ health }) {
       </div>
       <div className="grid gap-3 sm:grid-cols-2">
         <GatewayAdapter title="OPC UA Adapter" active={protocols.opcua?.connected} detail={protocols.opcua?.purpose || "SPS stMES Handshake und DB151 Prozessdaten"} />
-        <GatewayAdapter title="MQTT Adapter" active={protocols.mqtt?.connected} detail={protocols.mqtt?.purpose || "Webshop-Auftraege und Broker-Telemetrie"} />
+        <GatewayAdapter title="MQTT Adapter" active={protocols.mqtt?.connected} detail={protocols.mqtt?.purpose || "Webshop-Aufträge und Broker-Telemetrie"} />
       </div>
     </section>
   );

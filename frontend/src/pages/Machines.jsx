@@ -1,4 +1,7 @@
 import { useState, useEffect } from "react";
+import { CheckCircleIcon } from "@phosphor-icons/react/CheckCircle";
+import { StackIcon } from "@phosphor-icons/react/Stack";
+import { WarningCircleIcon } from "@phosphor-icons/react/WarningCircle";
 import StatCard from "../components/StatCard";
 import { api } from "../api/client.js";
 import { useAuth } from "../providers/AuthProvider.jsx";
@@ -95,23 +98,25 @@ export default function MachinesPage() {
   const onlineCount = machines.filter((m) => ["online", "running"].includes(m.status)).length;
 
   return (
-    <div className="min-h-screen bg-neutral-50">
+    <div className="mes-page min-h-screen bg-neutral-50">
       <main className="p-6 space-y-6">
 
-        <div>
-          <h1 className="text-2xl font-bold text-neutral-900">Machine Status</h1>
-          <p className="text-sm text-neutral-500 mt-0.5">Verwaltung aller Stationen</p>
+        <div className="mes-page-header">
+          <div>
+          <h1 className="text-2xl font-bold text-neutral-900">Stationen</h1>
+          <p className="text-sm text-neutral-500 mt-0.5">Status, Konfiguration und Anbindung aller Produktionsstationen.</p>
+          </div>
         </div>
 
         {/* Status-Karten */}
-        <div className="grid grid-cols-3 gap-4">
-          <StatCard label="Alle" value={String(machines.length)} icon="" />
-          <StatCard label="Online" value={String(onlineCount)} icon="✅" />
-          <StatCard label="Offline" value={String(machines.length - onlineCount)} icon="⚠️" />
+        <div className="mes-metric-strip grid grid-cols-3">
+          <StatCard label="Alle" value={String(machines.length)} icon={<StackIcon size={24} weight="thin" />} />
+          <StatCard label="Online" value={String(onlineCount)} icon={<CheckCircleIcon size={24} weight="thin" />} />
+          <StatCard label="Offline" value={String(machines.length - onlineCount)} icon={<WarningCircleIcon size={24} weight="thin" />} />
         </div>
 
         {/* Toolbar */}
-        <div className="flex justify-end gap-2">
+        <div className="mes-toolbar">
           {canManage && (
             <button onClick={downloadTemplate} className="bg-white border border-neutral-200 text-neutral-700 font-medium px-4 py-2.5 rounded-lg text-sm hover:bg-neutral-50 transition-colors">
               CSV Template herunterladen
@@ -142,7 +147,7 @@ export default function MachinesPage() {
 
         {/* Tabelle */}
         {machines.filter((m) => !search || (m.name||"").toLowerCase().includes(search.toLowerCase())).length > 0 ? (
-          <div className="bg-white rounded-lg shadow-card border border-neutral-200 overflow-hidden">
+          <div className="mes-panel">
             <table className="w-full">
               <thead>
                 <tr className="border-b border-neutral-200">
@@ -239,8 +244,8 @@ export default function MachinesPage() {
         {deleteCandidate && (
           <div onClick={() => !deleting && setDeleteCandidate(null)} className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4">
             <div onClick={(e) => e.stopPropagation()} className="w-full max-w-md rounded-xl bg-white p-6 shadow-[0_20px_50px_rgba(0,0,0,0.12)]">
-              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-status-error">Station loeschen</p>
-              <h2 className="mt-2 text-lg font-bold text-neutral-900">{deleteCandidate.name || "Station"} wirklich loeschen?</h2>
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-status-error">Station löschen</p>
+              <h2 className="mt-2 text-lg font-bold text-neutral-900">{deleteCandidate.name || "Station"} wirklich löschen?</h2>
               <p className="mt-2 text-sm text-neutral-500">Diese Aktion entfernt die Station aus der MES-Konfiguration. Laufende HTTP- oder Browser-Dialoge werden dabei nicht verwendet.</p>
               <div className="mt-5 rounded-lg border border-neutral-200 bg-neutral-50 p-3 text-sm">
                 <p><span className="font-medium text-neutral-600">Typ:</span> {deleteCandidate.type || "-"}</p>

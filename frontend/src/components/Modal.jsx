@@ -4,11 +4,11 @@ export default function Modal({ isOpen, onClose, title, children }) {
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={onClose}>
-      <div className="bg-white rounded-xl shadow-2xl p6 w-full max-w-lg mx4" onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-center justify-between mb4">
-          <h2 className="text-xl font-bold">{title}</h2>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text2xl leading-none">&times;</button>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-neutral-950/40 p-4" onClick={onClose}>
+      <div className="w-full max-w-lg rounded-lg border border-neutral-200 bg-white p-6 shadow-2xl" role="dialog" aria-modal="true" aria-label={title} onClick={(event) => event.stopPropagation()}>
+        <div className="mb-5 flex items-center justify-between gap-4">
+          <h2 className="text-lg font-semibold text-neutral-900">{title}</h2>
+          <button type="button" onClick={onClose} className="grid h-8 w-8 place-items-center rounded-md text-xl leading-none text-neutral-400 hover:bg-neutral-100 hover:text-neutral-700" aria-label="Dialog schließen">&times;</button>
         </div>
         {children}
       </div>
