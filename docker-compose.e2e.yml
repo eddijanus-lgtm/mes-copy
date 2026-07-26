@@ -1,0 +1,44 @@
+services:
+  postgres:
+    image: timescale/timescaledb@sha256:61f891691050da6032023c01ea885730eeeba06b7c17b403e7d0b9c49c37dfe9
+    restart: 'no'
+    environment:
+      POSTGRES_USER: mes_e2e
+      POSTGRES_PASSWORD: mes_e2e_password
+      POSTGRES_DB: mes_e2e
+    ports:
+      - '127.0.0.1:${E2E_DB_PORT:-55432}:5432'
+    tmpfs:
+      - /var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U mes_e2e -d mes_e2e']
+      interval: 1s
+      timeout: 3s
+      retries: 30
+      start_period: 5s
+
+  mqtt:
+    image: eclipse-mosquitto@sha256:6f8d8a947c506f8a2290ec65cd4bd2bc7cb4d43fb5f6271f861cb013e2ef9797
+    restart: 'no'
+    ports:
+      - '127.0.0.1:${E2E_MQTT_PORT:-51883}:1883'
+    volumes:
+      - ./test/mosquitto.e2e.conf:/mosquitto/config/mosquitto.conf:ro
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'mosquitto_pub',
+          '-h',
+          '127.0.0.1',
+          '-t',
+          'e2e/health',
+          '-m',
+          'ok',
+          '-q',
+          '1',
+        ]
+      interval: 1s
+      timeout: 4s
+      retries: 30
+      start_period: 2s
