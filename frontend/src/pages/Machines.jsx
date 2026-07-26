@@ -64,7 +64,7 @@ export default function MachinesPage() {
   }
 
   function downloadTemplate() {
-    window.open('/api/machines/template/csv', '_blank');
+    window.open('/api/v1/machines/template/csv', '_blank');
   }
 
   async function handleImport(e) {

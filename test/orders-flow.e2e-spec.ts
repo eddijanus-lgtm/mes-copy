@@ -1,5 +1,6 @@
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
+import { configureApiVersioning } from '../src/api-versioning';
 import request from 'supertest';
 import { App } from 'supertest/types';
 import { OrdersController } from '../src/orders/orders.controller';
@@ -38,7 +39,7 @@ describe('Orders production flow (e2e)', () => {
     }).compile();
 
     app = moduleFixture.createNestApplication();
-    app.setGlobalPrefix('api');
+    configureApiVersioning(app);
     app.useGlobalPipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }));
     await app.init();
   });
@@ -49,7 +50,7 @@ describe('Orders production flow (e2e)', () => {
 
   it('creates a demo production order and releases routing/carriers', async () => {
     const response = await request(app.getHttpServer())
-      .post('/api/orders/demo-production')
+      .post('/api/v1/orders/demo-production')
       .send({ name: 'E2E Order', machine_id: machineId, priority: 1, operation: 'assemble', quantity: 2 })
       .expect(201);
 
@@ -59,10 +60,10 @@ describe('Orders production flow (e2e)', () => {
   });
 
   it('returns route steps and completes order progress', async () => {
-    await request(app.getHttpServer()).get(`/api/orders/${orderId}/route`).expect(200).expect(({ body }) => expect(body).toHaveLength(3));
+    await request(app.getHttpServer()).get(`/api/v1/orders/${orderId}/route`).expect(200).expect(({ body }) => expect(body).toHaveLength(3));
 
     await request(app.getHttpServer())
-      .patch(`/api/orders/${orderId}/progress/2`)
+      .patch(`/api/v1/orders/${orderId}/progress/2`)
       .expect(200)
       .expect(({ body }) => expect(body).toMatchObject({ completed_quantity: 2, status: 'completed' }));
   });

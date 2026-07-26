@@ -7,6 +7,7 @@ import { RegisterDto } from './dto/register.dto';
 import { Roles } from './roles.decorator';
 import { UserRoleEnum } from '../users/user.entity';
 import { Throttle } from '@nestjs/throttler';
+import { AccessTokenDto, UserCreatedDto } from './dto/auth-response.dto';
 
 @Controller('auth')
 @ApiTags('Authentication')
@@ -17,7 +18,10 @@ export class AuthController {
   @Public()
   @Throttle({ default: { limit: 5, ttl: 60_000 } })
   @ApiOperation({ summary: 'Mit Benutzername und Passwort anmelden' })
-  @ApiOkResponse({ description: 'Anmeldung erfolgreich; gibt ein JWT zurück.' })
+  @ApiOkResponse({
+    type: AccessTokenDto,
+    description: 'Anmeldung erfolgreich; gibt ein JWT zurück.',
+  })
   @ApiUnauthorizedResponse({ description: 'Benutzername oder Passwort ist ungültig.' })
   async login(@Body() body: LoginDto) {
     const user = await this.authService.validateUser(body.username, body.password);
@@ -31,7 +35,10 @@ export class AuthController {
   @Roles(UserRoleEnum.ADMIN)
   @ApiBearerAuth('JWT-auth')
   @ApiOperation({ summary: 'Neuen Benutzer registrieren' })
-  @ApiCreatedResponse({ description: 'Benutzer wurde angelegt.' })
+  @ApiCreatedResponse({
+    type: UserCreatedDto,
+    description: 'Benutzer wurde angelegt.',
+  })
   async register(@Body() body: RegisterDto) {
     return this.authService.register(body);
   }

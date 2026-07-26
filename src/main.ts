@@ -9,6 +9,7 @@ import { WsAdapter } from '@nestjs/platform-ws';
 import * as correlationId from 'crypto';
 import { createDocument } from './swagger';
 import { ApiExceptionFilter } from './common/api-exception.filter';
+import { configureApiVersioning } from './api-versioning';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -21,7 +22,7 @@ async function bootstrap() {
   app.enableCors({ origin: corsOrigins, credentials: true });
   app.useWebSocketAdapter(new WsAdapter(app));
   app.enableShutdownHooks(['SIGINT', 'SIGTERM']);
-  app.setGlobalPrefix('api');
+  configureApiVersioning(app);
 
   app.use((req, res, next) => {
     const requestId = correlationId.randomUUID();

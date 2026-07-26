@@ -1,6 +1,6 @@
 require('dotenv').config();
 
-const baseUrl = process.env.MES_BASE_URL || 'http://localhost:3000/api';
+const baseUrl = process.env.MES_BASE_URL || 'http://localhost:3000/api/v1';
 const username = process.env.DEMO_ADMIN_USERNAME;
 const password = process.env.DEMO_ADMIN_PASSWORD;
 

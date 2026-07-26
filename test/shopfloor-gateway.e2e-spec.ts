@@ -9,6 +9,7 @@ import { MqttGatewayService } from '../src/opcua/mqtt-gateway.service';
 import { StMesHandshakeService } from '../src/opcua/stmes-handshake.service';
 import { WebshopOrdersService } from '../src/opcua/webshop-orders.service';
 import { ShopfloorGatewayController } from '../src/opcua/shopfloor-gateway.controller';
+import { configureApiVersioning } from '../src/api-versioning';
 
 describe('ShopfloorGatewayController (e2e)', () => {
   let app: INestApplication<App>;
@@ -54,7 +55,7 @@ describe('ShopfloorGatewayController (e2e)', () => {
     }).compile();
 
     app = moduleFixture.createNestApplication();
-    app.setGlobalPrefix('api');
+    configureApiVersioning(app);
     app.useGlobalPipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }));
     await app.init();
   });
@@ -64,7 +65,7 @@ describe('ShopfloorGatewayController (e2e)', () => {
   });
 
   it('reports combined shopfloor health for OPC UA and MQTT', async () => {
-    const response = await request(app.getHttpServer()).get('/api/shopfloor/health').expect(200);
+    const response = await request(app.getHttpServer()).get('/api/v1/shopfloor/health').expect(200);
 
     expect(response.body.ok).toBe(true);
     expect(response.body.protocols.opcua.connected).toBe(true);
@@ -73,7 +74,7 @@ describe('ShopfloorGatewayController (e2e)', () => {
 
   it('reads OPC UA nodes through the gateway contract', async () => {
     const response = await request(app.getHttpServer())
-      .post('/api/shopfloor/opcua/read')
+      .post('/api/v1/shopfloor/opcua/read')
       .send({ nodeId: 'ns=1;s=Station1.stMES.Query.uiCarrierId' })
       .expect(201);
 
@@ -83,7 +84,7 @@ describe('ShopfloorGatewayController (e2e)', () => {
 
   it('maps machine control commands to OPC UA control nodes', async () => {
     await request(app.getHttpServer())
-      .post('/api/shopfloor/machine/control')
+      .post('/api/v1/shopfloor/machine/control')
       .send({ resourceId: 2, command: 'pause' })
       .expect(201)
       .expect(({ body }) => expect(body).toMatchObject({ success: true, command: 'pause', resourceId: 2 }));
@@ -93,7 +94,7 @@ describe('ShopfloorGatewayController (e2e)', () => {
 
   it('publishes MQTT messages through the gateway contract', async () => {
     await request(app.getHttpServer())
-      .post('/api/shopfloor/mqtt/publish')
+      .post('/api/v1/shopfloor/mqtt/publish')
       .send({ topic: 'mes/test', payload: { hello: 'world' } })
       .expect(201)
       .expect(({ body }) => expect(body).toEqual({ published: true, topic: 'mes/test' }));
@@ -103,7 +104,7 @@ describe('ShopfloorGatewayController (e2e)', () => {
 
   it('writes multiple OPC UA nodes through the gateway contract', async () => {
     await request(app.getHttpServer())
-      .post('/api/shopfloor/opcua/write')
+      .post('/api/v1/shopfloor/opcua/write')
       .send({
         writes: [
           { address: 'ns=1;s=Station1.stMES.Control.xCmdStart', dataType: 'Boolean', value: true },
@@ -120,14 +121,14 @@ describe('ShopfloorGatewayController (e2e)', () => {
 
   it('rejects OPC UA write with invalid payload', async () => {
     await request(app.getHttpServer())
-      .post('/api/shopfloor/opcua/write')
+      .post('/api/v1/shopfloor/opcua/write')
       .send({ writes: [] })
       .expect(400);
   });
 
   it('rejects OPC UA write with missing address', async () => {
     await request(app.getHttpServer())
-      .post('/api/shopfloor/opcua/write')
+      .post('/api/v1/shopfloor/opcua/write')
       .send({ writes: [{ dataType: 'Boolean', value: true }] })
       .expect(400);
   });

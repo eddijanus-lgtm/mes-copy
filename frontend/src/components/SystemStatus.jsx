@@ -7,7 +7,7 @@ export default function SystemStatus() {
 
   useEffect(() => {
     setToken(Boolean(localStorage.getItem('jwt_token')));
-    fetch('/api/health')
+    fetch('/api/v1/health')
       .then(res => res.json())
       .then(health => {
         setBackendOnline(health.status === 'ok' ? 'online' : 'error');
@@ -19,7 +19,7 @@ export default function SystemStatus() {
       });
 
     const interval = setInterval(() => {
-      fetch('/api/health')
+      fetch('/api/v1/health')
         .then(res => res.json())
         .then(health => {
           setBackendOnline(health.status === 'ok' ? 'online' : 'error');

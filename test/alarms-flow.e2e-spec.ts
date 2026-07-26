@@ -1,5 +1,6 @@
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
+import { configureApiVersioning } from '../src/api-versioning';
 import request from 'supertest';
 import { App } from 'supertest/types';
 import { AlarmsController } from '../src/alarms/alarms.controller';
@@ -31,7 +32,7 @@ describe('Alarms lifecycle (e2e)', () => {
     }).compile();
 
     app = moduleFixture.createNestApplication();
-    app.setGlobalPrefix('api');
+    configureApiVersioning(app);
     app.useGlobalPipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }));
     await app.init();
   });
@@ -42,18 +43,18 @@ describe('Alarms lifecycle (e2e)', () => {
 
   it('creates, filters and acknowledges an alarm', async () => {
     await request(app.getHttpServer())
-      .post('/api/alarms')
+      .post('/api/v1/alarms')
       .send({ severity: 'warning', machine_id: machineId, message: 'Pressure high' })
       .expect(201)
       .expect(({ body }) => expect(body).toMatchObject({ id: alarmId, acknowledged: false }));
 
-    await request(app.getHttpServer()).get('/api/alarms?acknowledged=false&severity=warning').expect(200).expect(({ body }) => expect(body).toHaveLength(1));
-    await request(app.getHttpServer()).post(`/api/alarms/${alarmId}/acknowledge`).expect(200).expect(({ body }) => expect(body.acknowledged).toBe(true));
+    await request(app.getHttpServer()).get('/api/v1/alarms?acknowledged=false&severity=warning').expect(200).expect(({ body }) => expect(body).toHaveLength(1));
+    await request(app.getHttpServer()).post(`/api/v1/alarms/${alarmId}/acknowledge`).expect(200).expect(({ body }) => expect(body.acknowledged).toBe(true));
   });
 
   it('exports CSV and executes bulk lifecycle endpoints', async () => {
-    await request(app.getHttpServer()).get('/api/alarms/export/csv').expect(200).expect(({ text }) => expect(text).toContain('Pressure high'));
-    await request(app.getHttpServer()).post('/api/alarms/bulk/acknowledge').send([alarmId]).expect(200).expect(({ body }) => expect(body.acknowledged).toBe(1));
-    await request(app.getHttpServer()).delete('/api/alarms/bulk').send([alarmId]).expect(200).expect(({ body }) => expect(body.removed).toBe(1));
+    await request(app.getHttpServer()).get('/api/v1/alarms/export/csv').expect(200).expect(({ text }) => expect(text).toContain('Pressure high'));
+    await request(app.getHttpServer()).post('/api/v1/alarms/bulk/acknowledge').send([alarmId]).expect(200).expect(({ body }) => expect(body.acknowledged).toBe(1));
+    await request(app.getHttpServer()).delete('/api/v1/alarms/bulk').send([alarmId]).expect(200).expect(({ body }) => expect(body.removed).toBe(1));
   });
 });

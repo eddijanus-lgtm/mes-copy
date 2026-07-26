@@ -4,6 +4,7 @@ import { HealthCheckService, TypeOrmHealthIndicator } from '@nestjs/terminus';
 import request from 'supertest';
 import { App } from 'supertest/types';
 import { HealthController } from '../src/health/health.controller';
+import { configureApiVersioning } from '../src/api-versioning';
 
 describe('HealthController (e2e)', () => {
   let app: INestApplication<App>;
@@ -25,7 +26,7 @@ describe('HealthController (e2e)', () => {
       .compile();
 
     app = moduleFixture.createNestApplication();
-    app.setGlobalPrefix('api');
+    configureApiVersioning(app);
     await app.init();
   });
 
@@ -33,8 +34,8 @@ describe('HealthController (e2e)', () => {
     if (app) await app.close();
   });
 
-  it('/api/health/combined (GET) returns operational metadata', async () => {
-    const response = await request(app.getHttpServer()).get('/api/health/combined').expect(200);
+  it('/api/v1/health/combined (GET) returns operational metadata', async () => {
+    const response = await request(app.getHttpServer()).get('/api/v1/health/combined').expect(200);
 
     expect(response.body).toHaveProperty('timestamp');
     expect(response.body).toHaveProperty('database');

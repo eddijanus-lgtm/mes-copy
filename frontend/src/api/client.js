@@ -1,4 +1,4 @@
-const API_BASE = '/api';
+const API_BASE = '/api/v1';
 
 function dispatchToast(type, message) {
   window.dispatchEvent(new CustomEvent('mes-toast', {

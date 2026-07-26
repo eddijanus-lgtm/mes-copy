@@ -15,7 +15,7 @@ export class ApiErrorDto {
   })
   message: string | string[];
 
-  @ApiProperty({ example: '/api/orders' })
+  @ApiProperty({ example: '/api/v1/orders' })
   path: string;
 
   @ApiProperty({ format: 'date-time', example: '2026-07-26T14:00:00.000Z' })

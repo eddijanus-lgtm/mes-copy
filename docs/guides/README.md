@@ -17,6 +17,7 @@ _Dieser Ordner enthält Erklärungen, Konzepte und technische Hintergründe für
 | [07-stmes-demo-contract.md](07-stmes-demo-contract.md) | Erfundenes Mehrstations-stMES-Protokoll für lokale Demos | demo only |
 | [08-orders-crud.md](08-orders-crud.md) | Vollständige Auftragsverwaltung im Frontend | verified |
 | [10-real-machine-commissioning.md](10-real-machine-commissioning.md) | Lesende OPC-UA-Erfassung und Profilprüfung für die echte Anlage | prepared |
+| [11-api-lifecycle.md](11-api-lifecycle.md) | API-Versionierung, Breaking Changes und Deprecation Policy | verified |
 
 ---
 

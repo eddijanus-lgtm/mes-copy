@@ -37,7 +37,7 @@ const stationConfigs = [
 ];
 const stations = stationConfigs.map(createStationState);
 
-const mesApiUrl = process.env.MES_API_URL || 'http://localhost:3000/api';
+const mesApiUrl = process.env.MES_API_URL || 'http://localhost:3000/api/v1';
 const mesApiUser = process.env.MES_API_USER || 'admin';
 const mesApiPass = process.env.MES_API_PASS || 'admin123!';
 const transferMs = 2000;

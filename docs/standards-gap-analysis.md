@@ -64,8 +64,8 @@ Bewertungsstatus:
 | MES-05 | Nachvollziehbarkeit und Genealogie | Teilweise | Trace-, Data-Collection- und Handshake-Daten werden gespeichert | Aufbewahrung, Unveränderbarkeit, Korrekturverfahren, Zeitqualität und lückenlose Produktgenealogie sind nicht nachgewiesen. |
 | MES-06 | Level-3/Level-4-Nachrichtenverträge | Teilweise | Webshop-Aufträge über MQTT und REST-Verträge | Kanonisches Nachrichtenmodell, Schema-Versionierung, Message-ID, Idempotenz, Dublettenbehandlung und fachliche Bestätigungen fehlen. |
 | MES-07 | Verlässliche Produktionskennzahlen | Offen | Schichtbericht-Endpunkte und DTOs | `src/shifts/shifts.service.ts` erzeugt OEE-, Durchsatz- und Stillstandswerte teilweise per `Math.random()`. Vor Produktivbetrieb durch berechnete, rückverfolgbare Werte ersetzen. |
-| API-01 | Maschinenlesbare API-Dokumentation | Teilweise | OpenAPI/Swagger-Konfiguration in `src/swagger.ts`; Tags, DTOs und standardisierte Fehlerantworten | Vollständige Response-DTOs, Beispiele, Security-Schemes je Operation und Contract-Tests vervollständigen. |
-| API-02 | Stabiler API-Lebenszyklus | Offen | Zentraler `/api`-Präfix | Versionierung, Kompatibilitätsregeln, Deprecation Policy und Änderungsprotokoll fehlen. |
+| API-01 | Maschinenlesbare API-Dokumentation | Teilweise | OpenAPI/Swagger-Konfiguration in `src/swagger.ts`; Tags, standardisierte Erfolgs- und Fehlerverträge, Beispiele, Security-Scheme und OpenAPI-Vertragstest | Für komplexe fachliche Antworten sollten schrittweise noch spezifische Response-DTOs anstelle des generischen Fallback-Schemas ergänzt werden. |
+| API-02 | Stabiler API-Lebenszyklus | Erfüllt | Versionierter `/api/v1`-Vertrag, vorübergehender unversionierter Kompatibilitätspfad und `docs/guides/11-api-lifecycle.md` | Abschaltung des Kompatibilitätspfads erst nach dokumentierter Clientprüfung durchführen. |
 | API-03 | Robuste Schreiboperationen | Teilweise | Validierung, Transaktionen und Konfliktbehandlung in Teilen der Anwendung | Idempotency Keys, einheitliche Concurrency-Kontrolle und Wiederholungssemantik für alle kritischen Befehle fehlen. |
 
 ### 4.2 OT-, Kommunikations- und Anwendungssicherheit
@@ -130,7 +130,7 @@ Bewertungsstatus:
 2. Manipulationsgeschützten Audit-Trail für Benutzer-, Konfigurations- und Maschinenaktionen implementieren.
 3. Den grünen Teststand erhalten und CI-Gates für Build, Test, Coverage, Lint, SAST und Dependency Audit einführen.
 4. IEC-62264-Mapping, Statusautomaten, Master-Data-Verantwortung und Level-3/Level-4-Verträge dokumentieren.
-5. API-Versionierung, Idempotenz, vollständige OpenAPI-Verträge und Contract-Tests ergänzen.
+5. Idempotenz für kritische Schreiboperationen ergänzen und fachliche Response-DTOs schrittweise weiter präzisieren.
 6. Browser-Sitzungsmodell härten, CSP aktivieren und produktiven Swagger-Zugriff beschränken.
 
 ### P2 – Audit- und Betriebsreife

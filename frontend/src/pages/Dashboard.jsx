@@ -160,7 +160,7 @@ export default function Dashboard() {
           <div className="bg-white rounded-lg shadow-card border border-neutral-200 p-5">
             <h3 className="text-sm font-semibold text-neutral-700 mb-4">System</h3>
             <pre className="text-xs bg-neutral-50 rounded-md px-4 py-3 font-mono text-neutral-500 leading-relaxed max-h-[160px] overflow-auto whitespace-pre-wrap">
-              {JSON.stringify({ version: "MES Shopfloor Gateway v1.0", port: 3000, endpoints: ["/api/machines", "/api/alarms", "/api/traces", "/api/shopfloor"] }, null, 2)}
+              {JSON.stringify({ version: "MES Shopfloor Gateway v1.0", port: 3000, endpoints: ["/api/v1/machines", "/api/v1/alarms", "/api/v1/traces", "/api/v1/shopfloor"] }, null, 2)}
             </pre>
           </div>
 
