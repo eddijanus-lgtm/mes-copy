@@ -123,6 +123,24 @@ export interface MachineStationProfile {
   readonly metadata?: Readonly<Record<string, string>>;
 }
 
+export interface MachineOrderParameterOptionProfile {
+  readonly label: string;
+  readonly value: number;
+  readonly available_quantity?: number;
+}
+
+export interface MachineOrderParameterDefinitionProfile {
+  readonly key: string;
+  readonly label: string;
+  readonly type: 'number' | 'select';
+  readonly default_value?: number;
+  readonly min_value?: number;
+  readonly max_value?: number;
+  readonly unit?: string;
+  readonly available_quantity?: number;
+  readonly options?: readonly MachineOrderParameterOptionProfile[];
+}
+
 export interface MachineConnectionProfile {
   readonly endpointUrl: string;
   readonly applicationName: string;
@@ -142,6 +160,7 @@ export interface MachineProfile {
   readonly operatingMode: MachineProfileOperatingMode;
   readonly connection: MachineConnectionProfile;
   readonly namespaces: readonly MachineNamespaceProfile[];
+  readonly orderParameterDefinitions?: readonly MachineOrderParameterDefinitionProfile[];
   readonly stations: readonly MachineStationProfile[];
   readonly metadata?: Readonly<Record<string, string>>;
 }

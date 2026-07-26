@@ -17,7 +17,7 @@ export class CarrierEntity {
   carrier_number: number;
 
   @Column({ type: 'uuid', nullable: true })
-  order_id?: string;
+  order_id?: string | null;
 
   @Column({ type: 'int', default: 1 })
   current_step_no: number;

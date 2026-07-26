@@ -3,17 +3,6 @@ import { api } from "../api/client.js";
 import { useAuth } from "../providers/AuthProvider.jsx";
 import { hasRole, ROLES } from "../utils/roles.js";
 
-const ROUTE_LABELS = {
-  1: "S01 Deckelzufuehrung",
-  2: "S02 Kugeldosierung",
-  3: "Q01 Endkontrolle",
-};
-const STEP_LABELS = {
-  1: "Deckelfarbe bereitstellen",
-  2: "Kugeln dosieren",
-  3: "Deckel und Kugeln pruefen",
-};
-
 export default function CarriersPage() {
   const { user } = useAuth();
   const canManage = hasRole(user, ROLES.ADMIN, ROLES.OPERATOR);
@@ -58,13 +47,13 @@ export default function CarriersPage() {
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-brand-primary">Materialfluss</p>
           <h1 className="text-2xl font-bold text-neutral-900">Werkstückträger</h1>
-          <p className="mt-1 text-sm text-neutral-500">Carrier-Position, Auftragszuordnung und aktueller Arbeitsschritt der Demo-Anlage.</p>
+          <p className="mt-1 text-sm text-neutral-500">Carrier-Position, Auftragszuordnung und aktueller Arbeitsschritt der angebundenen Anlage.</p>
         </div>
         <button onClick={load} className="w-fit rounded-lg border border-neutral-200 bg-white px-4 py-2 text-sm font-medium text-neutral-700 hover:border-brand-primary hover:text-brand-primary">Aktualisieren</button>
       </div>
 
       <section className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-950">
-        <strong>Realistischer Ablauf:</strong> Carrier 128 und 129 werden vom OPC-UA-Testserver zyklisch am Wareneingang freigegeben. Das MES entscheidet je Carrier anhand Webshop-Auftrag und Route, ob Deckelzufuehrung, Kugeldosierung oder Endkontrolle arbeiten darf.
+        <strong>Ablauf:</strong> Das MES entscheidet je Carrier anhand Auftrag und Route, welche Station den nächsten Arbeitsschritt ausführen darf.
       </section>
 
       {canManage && (
@@ -98,8 +87,8 @@ function CarrierCard({ carrier, order }) {
 
       <div className="mt-4 grid gap-3 sm:grid-cols-3">
         <MiniMetric label="Auftrag" value={order?.name || "nicht zugeordnet"} />
-        <MiniMetric label="Aktueller Schritt" value={carrier.status === "completed" ? "Fertig" : STEP_LABELS[carrier.current_step_no] || `Schritt ${carrier.current_step_no}`} />
-        <MiniMetric label="Resource" value={carrier.current_resource_id ? ROUTE_LABELS[carrier.current_resource_id] || `R${carrier.current_resource_id}` : "Transport / Wartet"} />
+        <MiniMetric label="Aktueller Schritt" value={carrier.status === "completed" ? "Fertig" : `Schritt ${carrier.current_step_no}`} />
+        <MiniMetric label="Resource" value={carrier.current_resource_id ? `R${carrier.current_resource_id}` : "Transport / Wartet"} />
       </div>
 
       <div className="mt-5">
@@ -109,7 +98,7 @@ function CarrierCard({ carrier, order }) {
           {[1, 2, 3, 4].map((step) => (
             <div key={step} className="relative z-10 flex flex-col items-center gap-2">
               <span className={`h-4 w-4 rounded-full border-2 ${step < activeStep ? "border-emerald-500 bg-emerald-500" : step === activeStep ? "border-amber-400 bg-amber-400 ring-4 ring-amber-200" : "border-neutral-300 bg-white"}`} />
-              <span className={step === activeStep ? "font-semibold text-neutral-900" : "text-neutral-500"}>{step === 1 ? "Deckel" : step === 2 ? "Dosieren" : step === 3 ? "Pruefen" : "Fertig"}</span>
+              <span className={step === activeStep ? "font-semibold text-neutral-900" : "text-neutral-500"}>{step === 4 ? "Fertig" : `Schritt ${step}`}</span>
             </div>
           ))}
         </div>

@@ -42,37 +42,70 @@ const mesApiUser = process.env.MES_API_USER || 'admin';
 const mesApiPass = process.env.MES_API_PASS || 'admin123!';
 const transferMs = 2000;
 const releaseEveryMs = 30000;
+let mesApiToken = null;
+
+async function getMesApiToken() {
+  if (mesApiToken) return mesApiToken;
+  const loginRes = await fetch(`${mesApiUrl}/auth/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username: mesApiUser, password: mesApiPass }),
+  });
+  if (!loginRes.ok) throw new Error(`Login failed: ${loginRes.status}`);
+  const { access_token } = await loginRes.json();
+  mesApiToken = access_token;
+  return mesApiToken;
+}
 
 async function fetchCarriersFromMes() {
   try {
-    const loginRes = await fetch(`${mesApiUrl}/auth/login`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username: mesApiUser, password: mesApiPass }),
-    });
-    if (!loginRes.ok) throw new Error(`Login failed: ${loginRes.status}`);
-    const { access_token } = await loginRes.json();
+    const access_token = await getMesApiToken();
     const carriersRes = await fetch(`${mesApiUrl}/carriers`, {
       headers: { Authorization: `Bearer ${access_token}` },
     });
+    if (carriersRes.status === 401) {
+      mesApiToken = null;
+      return fetchCarriersFromMes();
+    }
     if (!carriersRes.ok) throw new Error(`Fetch carriers failed: ${carriersRes.status}`);
     const carriers = await carriersRes.json();
-    return carriers
-      .filter((c) => c.order_id && (c.status === 'assigned' || c.status === 'in_process'))
+    const activeCarriers = carriers.filter((c) => c.order_id && (c.status === 'assigned' || c.status === 'in_process'));
+    const routesByOrder = new Map();
+    for (const carrier of activeCarriers) {
+      if (routesByOrder.has(carrier.order_id)) continue;
+      const routeRes = await fetch(`${mesApiUrl}/orders/${carrier.order_id}/route`, {
+        headers: { Authorization: `Bearer ${access_token}` },
+      });
+      if (!routeRes.ok) throw new Error(`Fetch route failed: ${routeRes.status}`);
+      routesByOrder.set(carrier.order_id, await routeRes.json());
+    }
+    return activeCarriers
       .map((c, i) => ({
         carrierId: c.carrier_number,
         partNo: 'WEBSHOP-PRODUCT-DEMO',
+        targetResourceId: currentTargetResourceId(c, routesByOrder.get(c.order_id) || []),
         releaseDelay: (i + 1) * 2000,
       }));
   } catch (err) {
+    const configuredIds = process.env.DEMO_CARRIER_IDS;
+    if (!configuredIds) {
+      console.warn(`MES API nicht erreichbar (${err.message}), keine Carrier-Freigabe ohne DEMO_CARRIER_IDS`);
+      return [];
+    }
     console.warn(`MES API nicht erreichbar (${err.message}), fallback auf DEMO_CARRIER_IDS`);
-    const ids = (process.env.DEMO_CARRIER_IDS || '128,129').split(',').map(Number);
+    const ids = configuredIds.split(',').map(Number);
     return ids.map((id, i) => ({
       carrierId: id,
       partNo: 'WEBSHOP-PRODUCT-DEMO',
       releaseDelay: (i + 1) * 2000,
     }));
   }
+}
+
+function currentTargetResourceId(carrier, route) {
+  if (carrier.current_resource_id) return carrier.current_resource_id;
+  const step = route.find((entry) => entry.step_no === carrier.current_step_no);
+  return step?.resource_id || 1;
 }
 
 const server = new OPCUAServer({
@@ -377,7 +410,8 @@ function simulatePlc(station) {
 function releaseCarrier(carrier) {
   if (deactivatedCarrierIds.has(carrier.carrierId)) return;
   console.log(`Wareneingang: carrier ${carrier.carrierId} (${carrier.partNo}) in die Linie freigegeben`);
-  requestMesData(stations[0], carrier);
+  const targetStation = stations.find((station) => station.resourceId === carrier.targetResourceId) || stations[0];
+  requestMesData(targetStation, carrier);
 }
 
 function lidColorName(value) {
@@ -393,14 +427,17 @@ function scheduleCarrierReleases(carrier) {
 
 const knownCarrierIds = new Set();
 const deactivatedCarrierIds = new Set();
+const knownCarrierPlans = new Map();
 
 function scheduleNewCarrier(carrierPlan) {
   if (knownCarrierIds.has(carrierPlan.carrierId)) {
+    Object.assign(knownCarrierPlans.get(carrierPlan.carrierId), carrierPlan);
     deactivatedCarrierIds.delete(carrierPlan.carrierId);
     return;
   }
   knownCarrierIds.add(carrierPlan.carrierId);
-  scheduleCarrierReleases(carrierPlan);
+  knownCarrierPlans.set(carrierPlan.carrierId, carrierPlan);
+  scheduleCarrierReleases(knownCarrierPlans.get(carrierPlan.carrierId));
   console.log(`Neuer Carrier ${carrierPlan.carrierId} automatisch aufgenommen`);
 }
 

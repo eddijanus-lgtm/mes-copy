@@ -31,6 +31,22 @@
       "uri": "urn:wara:simulator"
     }
   ],
+  "orderParameterDefinitions": [
+    {
+      "key": "iPar1",
+      "label": "Deckelfarbe",
+      "type": "select",
+      "default_value": 1,
+      "options": [
+        { "label": "Rot", "value": 1, "available_quantity": 80 },
+        { "label": "Gruen", "value": 2, "available_quantity": 65 },
+        { "label": "Blau", "value": 4, "available_quantity": 40 }
+      ]
+    },
+    { "key": "iPar2", "label": "Rote Kugeln", "type": "number", "default_value": 3, "min_value": 0, "max_value": 99, "unit": "Stk", "available_quantity": 200 },
+    { "key": "iPar3", "label": "Gruene Kugeln", "type": "number", "default_value": 5, "min_value": 0, "max_value": 99, "unit": "Stk", "available_quantity": 150 },
+    { "key": "iPar4", "label": "Blaue Kugeln", "type": "number", "default_value": 7, "min_value": 0, "max_value": 99, "unit": "Stk", "available_quantity": 90 }
+  ],
   "stations": [
     {
       "stationId": "station-a",

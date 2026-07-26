@@ -44,6 +44,12 @@
       },
       "minItems": 1
     },
+    "orderParameterDefinitions": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/orderParameterDefinition"
+      }
+    },
     "metadata": {
       "type": "object",
       "additionalProperties": {
@@ -229,6 +235,35 @@
         "enabled",
         "signals"
       ],
+      "additionalProperties": false
+    },
+    "orderParameterDefinition": {
+      "type": "object",
+      "properties": {
+        "key": { "type": "string", "minLength": 1 },
+        "label": { "type": "string", "minLength": 1 },
+        "type": { "type": "string", "enum": ["number", "select"] },
+        "default_value": { "type": "number" },
+        "min_value": { "type": "number" },
+        "max_value": { "type": "number" },
+        "unit": { "type": "string" },
+        "available_quantity": { "type": "number" },
+        "options": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/orderParameterOption" }
+        }
+      },
+      "required": ["key", "label", "type"],
+      "additionalProperties": false
+    },
+    "orderParameterOption": {
+      "type": "object",
+      "properties": {
+        "label": { "type": "string", "minLength": 1 },
+        "value": { "type": "number" },
+        "available_quantity": { "type": "number" }
+      },
+      "required": ["label", "value"],
       "additionalProperties": false
     },
     "signal": {

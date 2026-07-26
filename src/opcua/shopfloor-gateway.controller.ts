@@ -63,6 +63,12 @@ export class ShopfloorGatewayController {
     };
   }
 
+  @Get('machine/order-parameters')
+  @Roles(UserRoleEnum.ADMIN, UserRoleEnum.OPERATOR, UserRoleEnum.VIEWER)
+  getOrderParameterDefinitions() {
+    return { source: 'machine-adapter', parameters: this.machine.getOrderParameterDefinitions() };
+  }
+
   @Get('stmes/handshakes')
   @Roles(UserRoleEnum.ADMIN, UserRoleEnum.OPERATOR, UserRoleEnum.VIEWER)
   getRecentHandshakes() {

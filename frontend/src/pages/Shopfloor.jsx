@@ -10,12 +10,6 @@ const RESULT_TEXT = {
   4: "Bereits abgeschlossen",
   9: "Interner Fehler",
 };
-const STATION_LABELS = {
-  1: "S01 Deckelzufuehrung",
-  2: "S02 Kugeldosierung",
-  3: "Q01 Endkontrolle",
-};
-
 export default function ShopfloorPage() {
   const [health, setHealth] = useState(null);
   const [carriers, setCarriers] = useState([]);
@@ -66,8 +60,8 @@ export default function ShopfloorPage() {
   const controlStations = stations.length > 0
     ? stations.map((msg) => ({ resourceId: msg.payload.resourceId, state: msg.payload.state }))
     : [1, 2, 3].map((resourceId) => ({ resourceId, state: null }));
-  const activeShopfloorOrder = orders.find((order) => order.status === "in_progress") || orders.find((order) => order.status === "completed");
-  const trackedCarriers = activeShopfloorOrder ? carriers.filter((carrier) => carrier.order_id === activeShopfloorOrder.id) : carriers;
+  const activeShopfloorOrder = orders.find((order) => order.status === "in_progress");
+  const trackedCarriers = activeShopfloorOrder ? carriers.filter((carrier) => carrier.order_id === activeShopfloorOrder.id) : [];
 
   return (
     <div className="min-h-screen bg-neutral-50">
@@ -119,7 +113,7 @@ export default function ShopfloorPage() {
               <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
                 <div>
                   <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-neutral-400">Resource {resourceId}</p>
-                  <h2 className="font-mono text-sm font-semibold text-neutral-800">{STATION_LABELS[resourceId] || `Station ${resourceId}`} · dbProcessData [DB151]</h2>
+                  <h2 className="font-mono text-sm font-semibold text-neutral-800">Station {resourceId} · dbProcessData [DB151]</h2>
                 </div>
                 <HandshakeStatus snapshot={payload.handshake} lastEvent={handshakeByResource[resourceId]} />
               </div>
@@ -128,10 +122,10 @@ export default function ShopfloorPage() {
                 <MetricCard label="Werkstückträger" value={payload.iCarrierID ?? "–"} technical="iCarrierID" changed={isRecent(changedAt.iCarrierID, now)} />
                 <MetricCard label="Workplan-Schritt" value={payload.iStepNo ?? "–"} technical="iStepNo" changed={isRecent(changedAt.iStepNo, now)} />
                 <MetricCard label="Nächste Station" value={payload.iResourceID ?? "–"} technical="iResourceID" changed={isRecent(changedAt.iResourceID, now)} />
-                <MetricCard label="Deckelfarbe" value={formatLidColor(payload.iPar1)} technical="iPar1" changed={isRecent(changedAt.iPar1, now)} />
-                <MetricCard label="Rote Kugeln" value={payload.iPar2 ?? "–"} technical="iPar2" changed={isRecent(changedAt.iPar2, now)} />
-                <MetricCard label="Grüne Kugeln" value={payload.iPar3 ?? "–"} technical="iPar3" changed={isRecent(changedAt.iPar3, now)} />
-                <MetricCard label="Blaue Kugeln" value={payload.iPar4 ?? "–"} technical="iPar4" changed={isRecent(changedAt.iPar4, now)} />
+                <MetricCard label="Parameter 1" value={payload.iPar1 ?? "–"} technical="iPar1" changed={isRecent(changedAt.iPar1, now)} />
+                <MetricCard label="Parameter 2" value={payload.iPar2 ?? "–"} technical="iPar2" changed={isRecent(changedAt.iPar2, now)} />
+                <MetricCard label="Parameter 3" value={payload.iPar3 ?? "–"} technical="iPar3" changed={isRecent(changedAt.iPar3, now)} />
+                <MetricCard label="Parameter 4" value={payload.iPar4 ?? "–"} technical="iPar4" changed={isRecent(changedAt.iPar4, now)} />
                 <MetricCard label="Prozessabschluss" value={formatTimestamp(payload.ldtTimeStamp)} technical="ldtTimeStamp" changed={isRecent(changedAt.ldtTimeStamp, now)} />
               </div>
 
@@ -170,10 +164,10 @@ function WebshopOrdersPanel({ orders }) {
                 <time className="shrink-0 text-[10px] text-neutral-400">{formatTimestamp(order.timestamp)}</time>
               </div>
               <div className="mt-3 grid grid-cols-2 gap-2 text-sm">
-                <MiniPayload label="Deckelfarbe" value={formatLidColor(order.payload?.bDeckelfarbe)} />
-                <MiniPayload label="Rot" value={order.payload?.uiKugelRot} />
-                <MiniPayload label="Gruen" value={order.payload?.uiKugelGruen} />
-                <MiniPayload label="Blau" value={order.payload?.uiKugelBlau} />
+                <MiniPayload label="Parameter 1" value={order.payload?.bDeckelfarbe} />
+                <MiniPayload label="Parameter 2" value={order.payload?.uiKugelRot} />
+                <MiniPayload label="Parameter 3" value={order.payload?.uiKugelGruen} />
+                <MiniPayload label="Parameter 4" value={order.payload?.uiKugelBlau} />
               </div>
             </article>
           ))}
@@ -265,12 +259,12 @@ function CarrierFlow({ order, carriers }) {
       <div className="flex flex-col gap-1 border-b border-neutral-100 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-emerald-700">Produktionsfluss</p>
-          <h2 className="font-semibold text-neutral-900">{order?.name || "Aktive Carrier"}</h2>
+          <h2 className="font-semibold text-neutral-900">{order?.name || "Kein aktiver Auftrag"}</h2>
         </div>
         {order && <span className="text-sm text-neutral-500">Fortschritt {order.completed_quantity}/{order.quantity}</span>}
       </div>
       <div className="grid gap-3 p-4 md:grid-cols-2">
-        {carriers.length === 0 && <p className="text-sm text-neutral-400">Keine zugeordneten Carrier gefunden.</p>}
+        {carriers.length === 0 && <p className="text-sm text-neutral-400">Keine aktiven Carrier im Produktionsfluss.</p>}
         {carriers.map((carrier) => <CarrierRoute key={carrier.id} carrier={carrier} />)}
       </div>
     </section>
@@ -279,7 +273,7 @@ function CarrierFlow({ order, carriers }) {
 
 function CarrierRoute({ carrier }) {
   const position = carrier.status === "completed" ? 3 : Math.max(0, Math.min(2, carrier.current_step_no - 1));
-  const stages = ["S01 Deckel", "S02 Kugeln", "Q01 Kontrolle", "Fertig"];
+  const stages = ["Schritt 1", "Schritt 2", "Schritt 3", "Fertig"];
   return (
     <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-4">
       <div className="mb-4 flex items-center justify-between">
@@ -371,10 +365,6 @@ function MetricCard({ label, value, technical, changed }) {
       <p className="mt-1 font-mono text-[11px] text-neutral-400">{technical}</p>
     </div>
   );
-}
-
-function formatLidColor(value) {
-  return ({ 0: "Keine Dose", 1: "Rot", 2: "Blau", 3: "Grün" })[value] || "–";
 }
 
 function formatTimestamp(value) {

@@ -180,6 +180,28 @@ function isMachineStationProfile(value: unknown): value is MachineStationProfile
   return true;
 }
 
+function isMachineOrderParameterOptionProfile(value: unknown): boolean {
+  if (!isRecord(value)) return false;
+  if (!isString(value.label)) return false;
+  if (!isNumber(value.value)) return false;
+  if (value.available_quantity !== undefined && !isNumber(value.available_quantity)) return false;
+  return true;
+}
+
+function isMachineOrderParameterDefinitionProfile(value: unknown): boolean {
+  if (!isRecord(value)) return false;
+  if (!isString(value.key)) return false;
+  if (!isString(value.label)) return false;
+  if (!isInAllowedValues(value.type, ['number', 'select'])) return false;
+  if (value.default_value !== undefined && !isNumber(value.default_value)) return false;
+  if (value.min_value !== undefined && !isNumber(value.min_value)) return false;
+  if (value.max_value !== undefined && !isNumber(value.max_value)) return false;
+  if (value.unit !== undefined && !isString(value.unit)) return false;
+  if (value.available_quantity !== undefined && !isNumber(value.available_quantity)) return false;
+  if (value.options !== undefined && (!Array.isArray(value.options) || !value.options.every(isMachineOrderParameterOptionProfile))) return false;
+  return true;
+}
+
 function isMachineConnectionProfile(value: unknown): value is MachineConnectionProfile {
   if (!isRecord(value)) return false;
   if (!isString(value.endpointUrl)) return false;
@@ -203,6 +225,7 @@ function isMachineProfile(value: unknown): value is MachineProfile {
   if (!isMachineConnectionProfile(value.connection)) return false;
   if (!Array.isArray(value.namespaces)) return false;
   if (!value.namespaces.every((ns: unknown) => isMachineNamespaceProfile(ns))) return false;
+  if (value.orderParameterDefinitions !== undefined && (!Array.isArray(value.orderParameterDefinitions) || !value.orderParameterDefinitions.every(isMachineOrderParameterDefinitionProfile))) return false;
   if (!Array.isArray(value.stations)) return false;
   if (!value.stations.every((st: unknown) => isMachineStationProfile(st))) return false;
   if (value.metadata !== undefined && !isStringRecord(value.metadata)) return false;

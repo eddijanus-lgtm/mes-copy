@@ -60,6 +60,8 @@ export class ConnectionRecoveryService implements OnModuleInit {
   }
 
   private async recoverFromStartup() {
+    await this.releaseCarriersWithoutActiveOrder();
+
     const activeOrders = await this.ordersRepo.count({ where: { status: 'in_progress' } });
     if (activeOrders === 0) return;
 
@@ -75,6 +77,8 @@ export class ConnectionRecoveryService implements OnModuleInit {
   }
 
   private async recoverStations() {
+    await this.releaseCarriersWithoutActiveOrder();
+
     const resourceIds = this.machine
       .getStations()
       .filter((station: MachineStationDescriptor) => station.enabled)
@@ -141,7 +145,7 @@ export class ConnectionRecoveryService implements OnModuleInit {
             `Carrier ${carrier.carrier_number} hängt (${carrier.status}) ohne aktiven Auftrag, setze auf available`,
           );
           carrier.status = CarrierStatusEnum.AVAILABLE;
-          carrier.order_id = undefined;
+          carrier.order_id = null;
           carrier.current_step_no = 1;
           carrier.current_resource_id = null;
           await this.carriersRepo.save(carrier);
@@ -163,5 +167,33 @@ export class ConnectionRecoveryService implements OnModuleInit {
       message: `Recovery abgeschlossen: ${stuckCarriers.length} Carrier geprüft, ${stationCarriers.length} aktiv an Stationen`,
       source: 'ConnectionRecoveryService',
     });
+  }
+
+  private async releaseCarriersWithoutActiveOrder() {
+    const assignedCarriers = await this.carriersRepo.find({
+      where: [
+        { status: CarrierStatusEnum.IN_PROCESS },
+        { status: CarrierStatusEnum.ASSIGNED },
+        { status: CarrierStatusEnum.COMPLETED },
+      ],
+    });
+
+    for (const carrier of assignedCarriers) {
+      if (!carrier.order_id) continue;
+
+      const activeOrder = await this.ordersRepo.findOne({
+        where: { id: carrier.order_id, status: 'in_progress' },
+      });
+      if (activeOrder) continue;
+
+      this.logger.log(
+        `Carrier ${carrier.carrier_number} gehört zu keinem aktiven Auftrag mehr, setze auf available`,
+      );
+      carrier.status = CarrierStatusEnum.AVAILABLE;
+      carrier.order_id = null;
+      carrier.current_step_no = 1;
+      carrier.current_resource_id = null;
+      await this.carriersRepo.save(carrier);
+    }
   }
 }

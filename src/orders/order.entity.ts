@@ -14,6 +14,9 @@ export class OrderEntity {
   @Column()
   machine_id: string;
 
+  @Column({ type: 'uuid', nullable: true })
+  product_id?: string | null;
+
   @Column()
   operation: string;
 

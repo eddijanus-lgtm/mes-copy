@@ -79,17 +79,43 @@ async function seed() {
     stationIds[resourceId] = station.id;
   }
 
+  const products = await request('/products', {}, token);
+  const productRoute = [
+    { step_no: 1, resource_id: 1, operation_no: 10, operation: 'Deckelfarbe bereitstellen', parameters: { iPar1: 1, iPar2: 3, iPar3: 5, iPar4: 7 } },
+    { step_no: 2, resource_id: 2, operation_no: 20, operation: 'Kugeln dosieren', parameters: { iPar1: 1, iPar2: 3, iPar3: 5, iPar4: 7 } },
+    { step_no: 3, resource_id: 3, operation_no: 30, operation: 'Deckel und Kugeln pruefen', parameters: { iPar1: 1, iPar2: 3, iPar3: 5, iPar4: 7 } },
+  ];
+  const productBody = {
+    part_no: 'WEBSHOP-PRODUCT',
+    name: 'Webshop-Produkt',
+    description: 'Deckelfarbe plus rote/gruene/blaue Kugeln',
+    is_active: true,
+    parameter_definitions: [
+      { key: 'iPar1', label: 'Deckelfarbe', type: 'select', default_value: 1, options: [{ label: 'Rot', value: 1 }, { label: 'Gruen', value: 2 }, { label: 'Blau', value: 4 }] },
+      { key: 'iPar2', label: 'Rote Kugeln', type: 'number', default_value: 3, min_value: 0, max_value: 99, unit: 'Stk' },
+      { key: 'iPar3', label: 'Gruene Kugeln', type: 'number', default_value: 5, min_value: 0, max_value: 99, unit: 'Stk' },
+      { key: 'iPar4', label: 'Blaue Kugeln', type: 'number', default_value: 7, min_value: 0, max_value: 99, unit: 'Stk' },
+    ],
+    route_steps: productRoute,
+  };
+  let product = products.find((entry) => entry.part_no === productBody.part_no);
+  if (!product) {
+    product = await request('/products', { method: 'POST', body: productBody }, token);
+  } else {
+    product = await request(`/products/${product.id}`, { method: 'PATCH', body: productBody }, token);
+  }
+
   const orders = await request('/orders', {}, token);
   let order = orders.find((entry) => entry.name === 'DEMO-ORDER-001');
   if (!order) {
     order = await request('/orders', {
       method: 'POST',
-      body: { name: 'DEMO-ORDER-001', priority: 1, machine_id: stationIds[1], operation: 'Webshop-Produkt konfigurieren', quantity: 2 },
+        body: { name: 'DEMO-ORDER-001', priority: 1, machine_id: stationIds[1], product_id: product.id, operation: 'Webshop-Produkt konfigurieren', quantity: 2 },
     }, token);
   }
   await request(`/orders/${order.id}`, {
     method: 'PATCH',
-    body: { name: 'DEMO-ORDER-001', priority: 1, machine_id: stationIds[1], operation: 'Webshop-Produkt konfigurieren', quantity: 2 },
+    body: { name: 'DEMO-ORDER-001', priority: 1, machine_id: stationIds[1], product_id: product.id, operation: 'Webshop-Produkt konfigurieren', quantity: 2 },
   }, token);
   await request(`/orders/${order.id}`, {
     method: 'PATCH',

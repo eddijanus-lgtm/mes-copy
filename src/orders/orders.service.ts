@@ -5,6 +5,9 @@ import { OrderEntity } from './order.entity';
 import type { CreateOrderDto, UpdateOrderDto } from './order.dto';
 import { CarrierEntity, CarrierStatusEnum } from '../carriers/carrier.entity';
 import { OrderRouteStepEntity } from './order-route-step.entity';
+import { MachineEntity } from '../machines/machine.entity';
+import { ProductEntity } from '../products/product.entity';
+import { ProductRouteStepEntity } from '../products/product-route-step.entity';
 
 @Injectable()
 export class OrdersService {
@@ -15,6 +18,12 @@ export class OrdersService {
     private readonly carriersRepo: Repository<CarrierEntity>,
     @InjectRepository(OrderRouteStepEntity)
     private readonly routeStepsRepo: Repository<OrderRouteStepEntity>,
+    @InjectRepository(MachineEntity)
+    private readonly machinesRepo: Repository<MachineEntity>,
+    @InjectRepository(ProductEntity)
+    private readonly productsRepo: Repository<ProductEntity>,
+    @InjectRepository(ProductRouteStepEntity)
+    private readonly productRouteStepsRepo: Repository<ProductRouteStepEntity>,
   ) {}
 
   async create(dto: CreateOrderDto) {
@@ -33,6 +42,7 @@ export class OrdersService {
       name: dto.name,
       priority: dto.priority,
       machine_id: dto.machine_id,
+      product_id: dto.product_id || null,
       operation: dto.operation,
       quantity: dto.quantity,
       status: 'in_progress',
@@ -42,14 +52,13 @@ export class OrdersService {
     });
     const savedOrder = await this.ordersRepo.save(order);
 
-    const routeStepsData = [
-      { step_no: 1, resource_id: 1, operation_no: 10, operation: 'Deckelfarbe bereitstellen', parameters: { iPar1: 1, iPar2: 3, iPar3: 5, iPar4: 7 } },
-      { step_no: 2, resource_id: 2, operation_no: 20, operation: 'Kugeln dosieren', parameters: { iPar1: 1, iPar2: 3, iPar3: 5, iPar4: 7 } },
-      { step_no: 3, resource_id: 3, operation_no: 30, operation: 'Deckel und Kugeln pruefen', parameters: { iPar1: 1, iPar2: 3, iPar3: 5, iPar4: 7 } },
-    ];
-    const route = await this.routeStepsRepo.save(
-      routeStepsData.map(step => this.routeStepsRepo.create({ ...step, order_id: savedOrder.id })),
-    );
+    const routeStepsData = dto.route_steps?.length ? dto.route_steps : await this.defaultRouteSteps(dto.machine_id, dto.product_id, dto.production_parameters);
+    const routeEntities = this.routeStepsRepo.create(routeStepsData.map(step => ({
+      ...step,
+      order_id: savedOrder.id,
+      parameters: { ...(step.parameters || {}), ...(dto.production_parameters || {}) },
+    })));
+    const route = await this.routeStepsRepo.save(routeEntities);
 
     const carriersToAssign = availableCarriers.slice(0, dto.quantity);
     for (const carrier of carriersToAssign) {
@@ -104,7 +113,7 @@ export class OrdersService {
       const carriers = await this.carriersRepo.find({ where: { order_id: id } });
       for (const c of carriers) {
         c.status = CarrierStatusEnum.AVAILABLE;
-        c.order_id = undefined;
+        c.order_id = null;
         c.current_step_no = 1;
         c.current_resource_id = null;
       }
@@ -120,4 +129,51 @@ export class OrdersService {
   async getActiveOrders(): Promise<OrderEntity[]> {
     return this.ordersRepo.find({ where: { status: 'in_progress' }, order: { priority: 'DESC', created_at: 'ASC' } });
   }
+
+  private async defaultRouteSteps(machineId: string, productId?: string, productionParameters: Record<string, number> = {}) {
+    const startMachine = await this.machinesRepo.findOne({ where: { id: machineId } });
+    if (!startMachine?.resource_id) throw new BadRequestException('Selected machine requires a resource_id for routing');
+
+    if (productId) return this.productRouteSteps(productId, startMachine.resource_id, productionParameters);
+
+    const lineMachines = await this.machinesRepo.find({
+      where: { location: startMachine.location, opcua_enabled: true },
+      order: { resource_id: 'ASC' },
+    });
+    const routeMachines = lineMachines.filter((machine) =>
+      machine.resource_id && machine.resource_id >= startMachine.resource_id!,
+    );
+    if (!routeMachines.length) throw new BadRequestException('Selected start station is not part of a routable line');
+
+    return routeMachines.map((machine, index) => ({
+      step_no: index + 1,
+      resource_id: machine.resource_id!,
+      operation_no: (index + 1) * 10,
+      operation: machine.name,
+      parameters: productionParameters,
+    }));
+  }
+
+  private async productRouteSteps(productId: string, startResourceId: number, productionParameters: Record<string, number>) {
+    const product = await this.productsRepo.findOne({ where: { id: productId, is_active: true } });
+    if (!product) throw new BadRequestException('Selected product is not active or does not exist');
+
+    const productRoute = await this.productRouteStepsRepo.find({
+      where: { product_id: productId },
+      order: { step_no: 'ASC' },
+    });
+    if (!productRoute.length) throw new BadRequestException('Selected product has no route');
+
+    const startIndex = productRoute.findIndex((step) => step.resource_id === startResourceId);
+    if (startIndex === -1) throw new BadRequestException('Selected start station is not part of the product route');
+
+    return productRoute.slice(startIndex).map((step, index) => ({
+      step_no: index + 1,
+      resource_id: step.resource_id,
+      operation_no: step.operation_no,
+      operation: step.operation,
+      parameters: { ...(step.parameters || {}), ...productionParameters },
+    }));
+  }
+
 }

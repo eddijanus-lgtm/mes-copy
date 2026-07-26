@@ -49,6 +49,22 @@ export interface MachineStationDescriptor {
   readonly enabled: boolean;
 }
 
+export interface MachineOrderParameterDefinition {
+  readonly key: string;
+  readonly label: string;
+  readonly type: 'number' | 'select';
+  readonly default_value?: number;
+  readonly min_value?: number;
+  readonly max_value?: number;
+  readonly unit?: string;
+  readonly available_quantity?: number;
+  readonly options?: readonly {
+    readonly label: string;
+    readonly value: number;
+    readonly available_quantity?: number;
+  }[];
+}
+
 export interface MachineAdapter {
   isConnected(): boolean;
   getConnectionStatus(): Promise<MachineConnectionStatus>;
@@ -110,4 +126,5 @@ export interface MachineAdapter {
   ): Promise<void>;
 
   getStations(): readonly MachineStationDescriptor[];
+  getOrderParameterDefinitions(): readonly MachineOrderParameterDefinition[];
 }

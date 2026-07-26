@@ -1,7 +1,7 @@
 import { Injectable, Inject, Logger } from '@nestjs/common';
 import { OpcUaService } from './opcua.service';
 import { MachineProfileService } from '../machines/profiles/machine-profile.service';
-import type { MachineAdapter, MachineControlCommand, MachineConnectionStatus, MachineStationRequest, MachineRoutingResponse, MachineRecoverySnapshot, MachineAddressWrite, MachineStationDescriptor } from '../machines/adapters/machine-adapter.types';
+import type { MachineAdapter, MachineControlCommand, MachineConnectionStatus, MachineStationRequest, MachineRoutingResponse, MachineRecoverySnapshot, MachineAddressWrite, MachineStationDescriptor, MachineOrderParameterDefinition } from '../machines/adapters/machine-adapter.types';
 import { ShopfloorTelemetryEvent } from './shopfloor-telemetry';
 
 @Injectable()
@@ -163,6 +163,8 @@ export class OpcUaMachineAdapter implements MachineAdapter {
 
   getStations(): readonly MachineStationDescriptor[] {
     this.ensureProfileLoaded();
+    if (!this.profileLoaded) return this.getLegacyStations();
+
     const profile = this.machineProfileService.getProfile();
     const stations: MachineStationDescriptor[] = [];
 
@@ -192,6 +194,16 @@ export class OpcUaMachineAdapter implements MachineAdapter {
     }
 
     return stations;
+  }
+
+  getOrderParameterDefinitions(): readonly MachineOrderParameterDefinition[] {
+    try {
+      const profile = this.machineProfileService.getProfile();
+      return profile.orderParameterDefinitions || [];
+    } catch (error) {
+      this.logger.warn(`Machine profile unavailable for order parameters: ${(error as Error).message}`);
+      return [];
+    }
   }
 
   private ensureProfileLoaded(): void {

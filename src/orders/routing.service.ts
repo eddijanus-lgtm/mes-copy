@@ -16,13 +16,6 @@ export enum DemoRoutingResultCode {
   INTERNAL_ERROR = 9,
 }
 
-const DEMO_PRODUCTION_ROUTE = [
-  { step_no: 1, resource_id: 1, operation_no: 10, operation: 'Deckelfarbe bereitstellen', parameters: { iPar1: 1, iPar2: 3, iPar3: 5, iPar4: 7 } },
-  { step_no: 2, resource_id: 2, operation_no: 20, operation: 'Kugeln dosieren', parameters: { iPar1: 1, iPar2: 3, iPar3: 5, iPar4: 7 } },
-  { step_no: 3, resource_id: 3, operation_no: 30, operation: 'Deckel und Kugeln pruefen', parameters: { iPar1: 1, iPar2: 3, iPar3: 5, iPar4: 7 } },
-];
-const DEMO_CARRIER_NUMBERS = [128, 129];
-
 export type WebshopProductionPayload = {
   bDeckelfarbe: number;
   uiKugelRot: number;
@@ -63,23 +56,18 @@ export class RoutingService {
     return this.dataSource.transaction(async (manager) => {
       const order = await manager.findOne(OrderEntity, { where: { id: orderId } });
       if (!order) throw new NotFoundException('Order not found');
-
-      await manager.delete(OrderRouteStepEntity, { order_id: orderId });
-      const route = await manager.save(OrderRouteStepEntity, DEMO_PRODUCTION_ROUTE.map((step) => manager.create(OrderRouteStepEntity, {
-        ...step,
-        order_id: orderId,
-      })));
+      const route = await manager.find(OrderRouteStepEntity, { where: { order_id: orderId }, order: { step_no: 'ASC' } });
+      if (!route.length) throw new BadRequestException('Order requires a route before release');
 
       order.status = 'in_progress';
       order.completed_quantity = 0;
       order.start_time = new Date();
       await manager.save(order);
 
-      const carrierNumbers = DEMO_CARRIER_NUMBERS.slice(0, Math.max(1, Math.min(quantity, DEMO_CARRIER_NUMBERS.length)));
+      const availableCarriers = await manager.find(CarrierEntity, { where: { status: CarrierStatusEnum.AVAILABLE }, order: { carrier_number: 'ASC' } });
+      if (availableCarriers.length < quantity) throw new BadRequestException(`Not enough available carriers: ${quantity} required, ${availableCarriers.length} available`);
       const carriers: CarrierEntity[] = [];
-      for (const carrierNumber of carrierNumbers) {
-        let carrier = await manager.findOne(CarrierEntity, { where: { carrier_number: carrierNumber } });
-        if (!carrier) carrier = manager.create(CarrierEntity, { carrier_number: carrierNumber });
+      for (const carrier of availableCarriers.slice(0, quantity)) {
         carrier.order_id = orderId;
         carrier.current_step_no = 1;
         carrier.current_resource_id = null;
@@ -93,8 +81,10 @@ export class RoutingService {
 
   async createWebshopProductionOrder(payload: WebshopProductionPayload) {
     return this.dataSource.transaction(async (manager) => {
-      const startStation = await manager.findOne(MachineEntity, { where: { resource_id: 1 } });
-      if (!startStation) throw new NotFoundException('Start station resource 1 not found');
+      const routeMachines = await manager.find(MachineEntity, { where: { opcua_enabled: true }, order: { resource_id: 'ASC' } });
+      const routableMachines = routeMachines.filter((machine) => machine.resource_id);
+      if (!routableMachines.length) throw new NotFoundException('No OPC UA enabled machines with resource_id found');
+      const startStation = routableMachines[0];
 
       const order = await manager.save(OrderEntity, manager.create(OrderEntity, {
         name: `WEBSHOP-${new Date().toISOString().replace(/[-:.TZ]/g, '').slice(0, 14)}`,
@@ -113,14 +103,17 @@ export class RoutingService {
         iPar3: payload.uiKugelGruen,
         iPar4: payload.uiKugelBlau,
       };
-      const route = await manager.save(OrderRouteStepEntity, DEMO_PRODUCTION_ROUTE.map((step) => manager.create(OrderRouteStepEntity, {
-        ...step,
+      const route = await manager.save(OrderRouteStepEntity, routableMachines.map((machine, index) => manager.create(OrderRouteStepEntity, {
+        step_no: index + 1,
+        resource_id: machine.resource_id!,
+        operation_no: (index + 1) * 10,
+        operation: machine.type || machine.name,
         order_id: order.id,
         parameters,
       })));
 
-      let carrier = await manager.findOne(CarrierEntity, { where: { carrier_number: DEMO_CARRIER_NUMBERS[0] } });
-      if (!carrier) carrier = manager.create(CarrierEntity, { carrier_number: DEMO_CARRIER_NUMBERS[0] });
+      let carrier = await manager.findOne(CarrierEntity, { where: { status: CarrierStatusEnum.AVAILABLE }, order: { carrier_number: 'ASC' } });
+      if (!carrier) throw new BadRequestException('No available carrier found for webshop order');
       carrier.order_id = order.id;
       carrier.current_step_no = 1;
       carrier.current_resource_id = null;
@@ -145,6 +138,14 @@ export class RoutingService {
         where: { order_id: carrier.order_id, step_no: carrier.current_step_no },
       });
       if (!order || !step) return { resultCode: DemoRoutingResultCode.ORDER_MISSING };
+      if (order.status === 'completed') {
+        carrier.status = CarrierStatusEnum.AVAILABLE;
+        carrier.order_id = null;
+        carrier.current_step_no = 1;
+        carrier.current_resource_id = null;
+        await manager.save(carrier);
+        return { resultCode: DemoRoutingResultCode.STEP_ALREADY_COMPLETED };
+      }
       if (step.resource_id !== resourceId) return { resultCode: DemoRoutingResultCode.WRONG_RESOURCE };
       if (carrier.status === CarrierStatusEnum.COMPLETED) {
         return { resultCode: DemoRoutingResultCode.STEP_ALREADY_COMPLETED };
@@ -177,7 +178,18 @@ export class RoutingService {
         where: { carrier_number: carrierNumber },
         lock: { mode: 'pessimistic_write' },
       });
-      if (!carrier?.order_id || carrier.current_resource_id !== resourceId) return false;
+      if (!carrier?.order_id) return false;
+
+      const order = await manager.findOne(OrderEntity, { where: { id: carrier.order_id } });
+      if (order?.status === 'completed') {
+        carrier.status = CarrierStatusEnum.AVAILABLE;
+        carrier.order_id = null;
+        carrier.current_step_no = 1;
+        carrier.current_resource_id = null;
+        await manager.save(carrier);
+        return false;
+      }
+      if (carrier.current_resource_id !== resourceId) return false;
 
       const step = await manager.findOne(OrderRouteStepEntity, {
         where: { order_id: carrier.order_id, step_no: carrier.current_step_no },
@@ -195,7 +207,6 @@ export class RoutingService {
       } else {
         carrier.current_resource_id = null;
         carrier.status = CarrierStatusEnum.COMPLETED;
-        const order = await manager.findOne(OrderEntity, { where: { id: carrier.order_id } });
         if (order) {
           order.completed_quantity = Math.min(order.quantity, order.completed_quantity + 1);
           if (order.completed_quantity >= order.quantity) {
@@ -204,7 +215,7 @@ export class RoutingService {
             const orderCarriers = await manager.find(CarrierEntity, { where: { order_id: order.id } });
             for (const oc of orderCarriers) {
               oc.status = CarrierStatusEnum.AVAILABLE;
-              oc.order_id = undefined;
+              oc.order_id = null;
               oc.current_step_no = 1;
               oc.current_resource_id = null;
             }

@@ -273,6 +273,6 @@ export class OpcUaService implements OnModuleInit, OnModuleDestroy {
   }
 
   private resourceIds(): number[] {
-    return this.configService.get('OPC_UA_DEMO_RESOURCE_IDS', '1,2').split(',').map(Number).filter(Number.isInteger);
+    return this.configService.get('OPC_UA_RESOURCE_IDS', '1,2').split(',').map(Number).filter(Number.isInteger);
   }
 }
