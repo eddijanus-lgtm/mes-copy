@@ -34,14 +34,29 @@ export class MachineEntity {
   @Column({ type: 'int', nullable: true, unique: true })
   resource_id?: number;
 
-  @Column({ nullable: true })
-  opcua_endpoint_url?: string;
+  @Column({ type: 'varchar', nullable: true })
+  opcua_endpoint_url?: string | null;
 
-  @Column({ nullable: true })
-  opcua_node_prefix?: string;
+  @Column({ type: 'varchar', nullable: true })
+  opcua_node_prefix?: string | null;
 
   @Column({ default: false })
   opcua_enabled: boolean;
+
+  @Column({ default: false })
+  profile_managed: boolean;
+
+  @Column({ default: false })
+  routing_enabled: boolean;
+
+  @Column({ type: 'int', nullable: true })
+  route_sequence: number | null;
+
+  @Column({ type: 'int', nullable: true })
+  operation_no: number | null;
+
+  @Column({ type: 'varchar', nullable: true })
+  dashboard_image: string | null;
 
   @Column({ type: 'jsonb', nullable: true })
   telemetry: Record<string, any>;

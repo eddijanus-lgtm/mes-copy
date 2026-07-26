@@ -241,6 +241,21 @@ function loadProfile(profilePath) {
   return { profile, absolutePath };
 }
 
+function hasStationCapability(station, capability) {
+  if (Array.isArray(station.capabilities)) {
+    return station.capabilities.includes(capability);
+  }
+  const resourceType = station.resourceType || 'production';
+  if (resourceType === 'production') {
+    return ['production', 'routing', 'control'].includes(capability);
+  }
+  if (resourceType === 'inventory') return capability === 'inventory';
+  if (resourceType === 'storage') {
+    return capability === 'inventory' || capability === 'storage';
+  }
+  return true;
+}
+
 function validateProfileShape(profile) {
   const errors = [];
   const warnings = [];
@@ -270,6 +285,38 @@ function validateProfileShape(profile) {
   if (serialized.includes('YOUR_')) {
     errors.push('Profile still contains YOUR_* placeholders.');
   }
+  const security = (profile.connection && profile.connection.security) || {};
+  const authentication =
+    (profile.connection && profile.connection.authentication) || {};
+  if ((security.mode === 'None') !== (security.policy === 'None')) {
+    errors.push(
+      'OPC UA security mode and policy must both be None or both be secure.',
+    );
+  }
+  if (
+    security.mode !== 'None' &&
+    (!security.certificatePathEnv || !security.privateKeyPathEnv)
+  ) {
+    errors.push(
+      'Secure OPC UA connections require certificatePathEnv and privateKeyPathEnv.',
+    );
+  }
+  if (
+    authentication.type === 'username' &&
+    (!authentication.usernameEnv || !authentication.passwordEnv)
+  ) {
+    errors.push(
+      'Username authentication requires usernameEnv and passwordEnv.',
+    );
+  }
+  if (
+    authentication.type === 'certificate' &&
+    (!authentication.certificatePathEnv || !security.privateKeyPathEnv)
+  ) {
+    errors.push(
+      'Certificate authentication requires certificatePathEnv and privateKeyPathEnv.',
+    );
+  }
 
   const namespaceKeys = new Set();
   for (const namespace of profile.namespaces || []) {
@@ -284,14 +331,60 @@ function validateProfileShape(profile) {
   }
 
   const stationIds = new Set();
+  const resourceIds = new Set();
+  const routeSequences = new Set();
+  const requiredControlRoles = [
+    'workRequest',
+    'requestBusy',
+    'requestAccepted',
+    'requestRejected',
+    'carrierId',
+    'resourceId',
+    'orderId',
+    'partNumber',
+    'operationId',
+    'stepNumber',
+    'nextStationId',
+    'processActive',
+    'processCompleted',
+    'processResult',
+    'completedCarrierId',
+  ];
   for (const station of profile.stations || []) {
     if (!station.stationId) errors.push('A stationId is missing.');
     if (stationIds.has(station.stationId)) {
       errors.push(`Duplicate stationId: ${station.stationId}`);
     }
     stationIds.add(station.stationId);
+    if (!Number.isInteger(station.resourceId) || station.resourceId < 1) {
+      errors.push(`Station ${station.stationId} needs a positive integer resourceId.`);
+    } else if (resourceIds.has(station.resourceId)) {
+      errors.push(`Duplicate resourceId: ${station.resourceId}`);
+    }
+    resourceIds.add(station.resourceId);
+    if (
+      profile.operatingMode === 'control' &&
+      station.enabled &&
+      hasStationCapability(station, 'routing') &&
+      (!station.routing || station.routing.enabled !== false)
+    ) {
+      if (!station.routing) {
+        errors.push(`Control station ${station.stationId} needs routing.`);
+      } else if (
+        !Number.isInteger(station.routing.sequence) ||
+        !Number.isInteger(station.routing.operationNo) ||
+        !station.routing.operation
+      ) {
+        errors.push(`Station ${station.stationId} has incomplete routing.`);
+      } else if (routeSequences.has(station.routing.sequence)) {
+        errors.push(`Duplicate routing sequence: ${station.routing.sequence}`);
+      } else {
+        routeSequences.add(station.routing.sequence);
+      }
+    }
 
     const signalKeys = new Set();
+    const signalRoles = new Map();
     for (const signal of station.signals || []) {
       if (!signal.key || !signal.identifier || !signal.namespace) {
         errors.push(`Incomplete signal in station ${station.stationId}.`);
@@ -303,6 +396,7 @@ function validateProfileShape(profile) {
         );
       }
       signalKeys.add(signal.key);
+      signalRoles.set(signal.role, (signalRoles.get(signal.role) || 0) + 1);
       if (!namespaceKeys.has(signal.namespace)) {
         errors.push(
           `Signal ${station.stationId}.${signal.key} references unknown namespace ${signal.namespace}.`,
@@ -316,6 +410,54 @@ function validateProfileShape(profile) {
       ) {
         warnings.push(
           `Observe profile contains writable signal ${station.stationId}.${signal.key}; the commissioning tool will still never write it.`,
+        );
+      }
+      if (
+        signal.direction === 'machineToMes' &&
+        signal.access === 'write'
+      ) {
+        errors.push(
+          `Machine-to-MES signal ${station.stationId}.${signal.key} is not readable.`,
+        );
+      }
+      if (
+        signal.direction === 'mesToMachine' &&
+        signal.access === 'read'
+      ) {
+        errors.push(
+          `MES-to-machine signal ${station.stationId}.${signal.key} is not writable.`,
+        );
+      }
+    }
+    if (
+      profile.operatingMode === 'control' &&
+      station.enabled &&
+      hasStationCapability(station, 'production')
+    ) {
+      for (const role of requiredControlRoles) {
+        if ((signalRoles.get(role) || 0) !== 1) {
+          errors.push(
+            `Control station ${station.stationId} requires exactly one ${role} signal.`,
+          );
+        }
+      }
+    }
+  }
+
+  for (const definition of profile.orderParameterDefinitions || []) {
+    const signalKey = definition.signalKey || definition.key;
+    for (const station of (profile.stations || []).filter(
+      (candidate) =>
+        candidate.enabled && hasStationCapability(candidate, 'production'),
+    )) {
+      const signal = (station.signals || []).find(
+        (candidate) =>
+          candidate.role === 'routingParameter' &&
+          candidate.key === signalKey,
+      );
+      if (profile.operatingMode === 'control' && !signal) {
+        errors.push(
+          `Order parameter ${definition.key} has no routingParameter signal ${signalKey} in ${station.stationId}.`,
         );
       }
     }
@@ -339,26 +481,45 @@ function profileSecurity(profile) {
   };
 }
 
-function profileCredentials(profile) {
+function profileSessionIdentity(profile) {
   const authentication =
     (profile.connection && profile.connection.authentication) || {
       type: 'anonymous',
     };
-  if (authentication.type !== 'username') {
-    return { username: undefined, password: undefined };
+  if (authentication.type === 'anonymous') {
+    return undefined;
   }
-  return {
-    username:
-      process.env.OPCUA_SCAN_USERNAME ||
-      process.env[authentication.usernameEnv || ''],
-    password:
-      process.env.OPCUA_SCAN_PASSWORD ||
-      process.env[authentication.passwordEnv || ''],
-  };
-}
-
-function sessionIdentity(username, password) {
-  if (!username) return undefined;
+  if (authentication.type === 'certificate') {
+    const certificatePath =
+      process.env.OPCUA_SCAN_USER_CERTIFICATE ||
+      process.env[authentication.certificatePathEnv || ''];
+    const privateKeyPath =
+      process.env.OPCUA_SCAN_USER_PRIVATE_KEY ||
+      process.env[
+        (profile.connection.security &&
+          profile.connection.security.privateKeyPathEnv) ||
+          ''
+      ];
+    if (!certificatePath || !privateKeyPath) {
+      throw new Error(
+        'Certificate authentication requires user certificate and private key environment variables.',
+      );
+    }
+    return {
+      type: UserTokenType.Certificate,
+      certificateData: fs.readFileSync(certificatePath),
+      privateKey: fs.readFileSync(privateKeyPath, 'utf8'),
+    };
+  }
+  const username =
+    process.env.OPCUA_SCAN_USERNAME ||
+    process.env[authentication.usernameEnv || ''];
+  const password =
+    process.env.OPCUA_SCAN_PASSWORD ||
+    process.env[authentication.passwordEnv || ''];
+  if (!username) {
+    throw new Error('OPC UA username is missing.');
+  }
   if (!password) {
     throw new Error('OPC UA username is set, but password is missing.');
   }
@@ -470,15 +631,19 @@ async function withSession(options, callback) {
       maxRetry: 0,
     },
     connectionTimeout: options.connectionTimeout,
+    ...(options.certificateFile
+      ? { certificateFile: options.certificateFile }
+      : {}),
+    ...(options.privateKeyFile
+      ? { privateKeyFile: options.privateKeyFile }
+      : {}),
   });
 
   let session;
   try {
     await client.connect(options.endpoint);
     const endpoints = await client.getEndpoints();
-    session = await client.createSession(
-      sessionIdentity(options.username, options.password),
-    );
+    session = await client.createSession(options.identity);
     return await callback(session, endpoints);
   } finally {
     if (session) await session.close().catch(() => undefined);
@@ -489,8 +654,7 @@ async function withSession(options, callback) {
 async function scanCommand() {
   const endpoint =
     readArg('endpoint') ||
-    process.env.OPCUA_SCAN_ENDPOINT ||
-    process.env.OPC_UA_SERVER_ADDRESS;
+    process.env.OPCUA_SCAN_ENDPOINT;
   if (!endpoint) throw new Error('OPC UA endpoint is missing.');
 
   const report = await withSession(
@@ -504,8 +668,14 @@ async function scanCommand() {
         readArg('security-policy') ||
         process.env.OPCUA_SCAN_SECURITY_POLICY ||
         'None',
-      username: process.env.OPCUA_SCAN_USERNAME,
-      password: process.env.OPCUA_SCAN_PASSWORD,
+      identity:
+        process.env.OPCUA_SCAN_USERNAME || process.env.OPCUA_SCAN_PASSWORD
+          ? {
+              type: UserTokenType.UserName,
+              userName: process.env.OPCUA_SCAN_USERNAME,
+              password: process.env.OPCUA_SCAN_PASSWORD,
+            }
+          : undefined,
       connectionTimeout: 10000,
     },
     async (session, endpoints) => {
@@ -569,7 +739,7 @@ async function checkCommand() {
     readArg('endpoint') ||
     process.env.OPCUA_SCAN_ENDPOINT ||
     profile.connection.endpointUrl;
-  const credentials = profileCredentials(profile);
+  const identity = profileSessionIdentity(profile);
   const security = profileSecurity(profile);
 
   const report = await withSession(
@@ -583,8 +753,13 @@ async function checkCommand() {
         readArg('security-policy') ||
         process.env.OPCUA_SCAN_SECURITY_POLICY ||
         security.policy,
-      username: credentials.username,
-      password: credentials.password,
+      identity,
+      certificateFile: profile.connection.security.certificatePathEnv
+        ? process.env[profile.connection.security.certificatePathEnv]
+        : undefined,
+      privateKeyFile: profile.connection.security.privateKeyPathEnv
+        ? process.env[profile.connection.security.privateKeyPathEnv]
+        : undefined,
       connectionTimeout: profile.connection.connectionTimeoutMs || 10000,
     },
     async (session, endpoints) => {

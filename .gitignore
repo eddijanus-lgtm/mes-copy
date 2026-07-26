@@ -9,6 +9,7 @@ frontend/dist/
 
 # Environment files
 .env
+.env.bak
 .env.local
 .env.*.local
 !.env.example

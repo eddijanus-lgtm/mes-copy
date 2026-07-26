@@ -7,9 +7,9 @@ _Status: verified - 2026-07-22_
 - Echte Verbindung mit `connect()` und `createSession()`.
 - `connected` wird erst nach erfolgreicher Session gesetzt.
 - Messwerte werden sekündlich gelesen und als Telemetrie publiziert.
-- Bei Ausfall wird die Session geschlossen und nach fünf Sekunden neu verbunden.
+- Bei Ausfall wird die Session geschlossen und nach der im Maschinenprofil definierten Backoff-Strategie neu verbunden.
 - Reads ohne Verbindung liefern HTTP 503; Read-Fehler HTTP 502.
-- Erlaubte Node-Präfixe kommen aus `OPC_UA_ALLOWED_NODE_PREFIXES`.
+- Erlaubt sind ausschließlich die exakten Nodes des aktiven Maschinenprofils.
 - Session und Client werden beim Shutdown sauber geschlossen.
 
 ## MQTT

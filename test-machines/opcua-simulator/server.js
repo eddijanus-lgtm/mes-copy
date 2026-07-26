@@ -2,9 +2,28 @@ const { DataType, OPCUAServer, StatusCodes, Variant } = require('node-opcua');
 
 const port = Number(process.env.OPC_UA_TEST_SERVER_PORT || 4840);
 const resourcePath = '/UA/WaraMesTest';
+const requestedInventoryCapacity = Number(process.env.DEMO_INVENTORY_CAPACITY || 4);
+const inventoryCapacity =
+  Number.isInteger(requestedInventoryCapacity) && requestedInventoryCapacity > 0
+    ? requestedInventoryCapacity
+    : 4;
+const inventoryValid = process.env.DEMO_INVENTORY_VALID !== 'false';
+const inventoryReaderId = process.env.DEMO_INVENTORY_READER_ID || 'DEMO-PALLET-STORE-RFID';
+const configuredInventoryCarrierIds = (process.env.DEMO_INVENTORY_CARRIER_IDS || '128,129,130,131')
+  .split(',')
+  .map((value) => Number(value.trim()))
+  .filter((value) => Number.isInteger(value) && value > 0)
+  .slice(0, inventoryCapacity);
+const invalidInventorySlots = new Set(
+  (process.env.DEMO_INVENTORY_INVALID_SLOTS || '')
+    .split(',')
+    .map((value) => Number(value.trim()))
+    .filter((value) => Number.isInteger(value) && value > 0),
+);
 
-// Local demo line based on the OpenCart webshop specification.
-// The node contract is still a demo stMES/DB151 contract, but the process model
+// Simulated OPC UA machine based on the OpenCart webshop specification.
+// The node contract is a test-machine stMES/DB151 contract, while the MES connects
+// through the same production OpcUaMachineAdapter used for a physical PLC.
 // now reflects the configured webshop product: lid color plus red/green/blue balls.
 const stationConfigs = [
   {
@@ -42,7 +61,89 @@ const mesApiUser = process.env.MES_API_USER || 'admin';
 const mesApiPass = process.env.MES_API_PASS || 'admin123!';
 const transferMs = 2000;
 const releaseEveryMs = 30000;
+const requestedCarrierRefreshMs = Number(
+  process.env.DEMO_CARRIER_REFRESH_MS || 15000,
+);
+const carrierRefreshMs =
+  Number.isFinite(requestedCarrierRefreshMs) && requestedCarrierRefreshMs >= 250
+    ? requestedCarrierRefreshMs
+    : 15000;
 let mesApiToken = null;
+let lastCarrierPlanSignature = null;
+let lastCarrierApiStateSignature = null;
+
+const carrierInventory = {
+  valid: inventoryValid,
+  revision: 1,
+  capacity: inventoryCapacity,
+  slots: Array.from({ length: inventoryCapacity }, (_, index) => {
+    const slotNumber = index + 1;
+    const carrierId = configuredInventoryCarrierIds[index] || 0;
+    const occupied = carrierId > 0;
+    const rfidReadValid = occupied && !invalidInventorySlots.has(slotNumber);
+    return {
+      slotNumber,
+      slotId: `PALLET-${String(slotNumber).padStart(2, '0')}`,
+      occupied,
+      carrierId,
+      rfidUid: occupied ? `DEMO-RFID-${String(carrierId).padStart(8, '0')}` : '',
+      rfidReadValid,
+      physicalState: occupied ? (rfidReadValid ? 'stored' : 'rfid_error') : 'empty',
+      readerId: occupied ? inventoryReaderId : '',
+      lastSeen: occupied ? new Date() : new Date('1970-01-01T00:00:00.000Z'),
+    };
+  }),
+};
+
+function inventoryTotalCount() {
+  return carrierInventory.slots.filter((slot) => slot.occupied).length;
+}
+
+function inventoryAvailableCount() {
+  return carrierInventory.slots.filter(
+    (slot) => slot.occupied && slot.rfidReadValid && slot.physicalState === 'stored',
+  ).length;
+}
+
+function touchInventory(reason) {
+  carrierInventory.revision += 1;
+  console.log(
+    `Carrier-Inventar rev=${carrierInventory.revision}: ${reason}; ` +
+    `verfuegbar=${inventoryAvailableCount()}/${inventoryTotalCount()}`,
+  );
+}
+
+function observeCarrier(carrierId, physicalState, overrides = {}) {
+  const slot = carrierInventory.slots.find((entry) => entry.carrierId === carrierId);
+  if (!slot) return false;
+  Object.assign(slot, {
+    occupied: physicalState === 'stored' || physicalState === 'rfid_error',
+    physicalState,
+    readerId: overrides.readerId ?? (physicalState === 'stored' ? inventoryReaderId : 'DEMO-LINE-RFID'),
+    lastSeen: new Date(),
+    ...overrides,
+  });
+  touchInventory(`Carrier ${carrierId} -> ${physicalState}`);
+  return true;
+}
+
+function registerCarrierInInventory(carrierId) {
+  const existing = carrierInventory.slots.find((slot) => slot.carrierId === carrierId);
+  if (existing) return existing;
+  const emptySlot = carrierInventory.slots.find((slot) => slot.carrierId === 0);
+  if (!emptySlot) return null;
+  Object.assign(emptySlot, {
+    occupied: true,
+    carrierId,
+    rfidUid: `DEMO-RFID-${String(carrierId).padStart(8, '0')}`,
+    rfidReadValid: true,
+    physicalState: 'stored',
+    readerId: inventoryReaderId,
+    lastSeen: new Date(),
+  });
+  touchInventory(`Carrier ${carrierId} an ${emptySlot.slotId} erkannt`);
+  return emptySlot;
+}
 
 async function getMesApiToken() {
   if (mesApiToken) return mesApiToken;
@@ -69,6 +170,17 @@ async function fetchCarriersFromMes() {
     }
     if (!carriersRes.ok) throw new Error(`Fetch carriers failed: ${carriersRes.status}`);
     const carriers = await carriersRes.json();
+    const apiStateSignature = carriers
+      .map(
+        (carrier) =>
+          `${carrier.carrier_number}:${carrier.status}:${carrier.order_id || '-'}:${carrier.current_step_no ?? '-'}`,
+      )
+      .sort()
+      .join(',');
+    if (apiStateSignature !== lastCarrierApiStateSignature) {
+      lastCarrierApiStateSignature = apiStateSignature;
+      console.log(`MES-Carrierstatus: ${apiStateSignature || 'keine Carrier'}`);
+    }
     const activeCarriers = carriers.filter((c) => c.order_id && (c.status === 'assigned' || c.status === 'in_process'));
     const routesByOrder = new Map();
     for (const carrier of activeCarriers) {
@@ -132,6 +244,7 @@ function createStationState(config) {
     processData: {
       iCarrierID: 0, iStepNo: 0, iResourceID: config.resourceId,
       iPar1: 0, iPar2: 0, iPar3: 0, iPar4: 0,
+      xCompleted: false,
       ldtTimeStamp: new Date('1970-01-01T00:00:00.000Z'),
     },
     currentCarrier: null,
@@ -215,7 +328,55 @@ function addStation(namespace, station) {
   for (const name of ['iCarrierID', 'iStepNo', 'iResourceID', 'iPar1', 'iPar2', 'iPar3', 'iPar4']) {
     addVariable(namespace, processData, name, `${processPrefix}.${name}`, DataType.Int16, () => station.processData[name], (value) => { station.processData[name] = Number(value); });
   }
+  addVariable(
+    namespace,
+    processData,
+    'xCompleted',
+    `${processPrefix}.xCompleted`,
+    DataType.Boolean,
+    () => station.processData.xCompleted,
+  );
   addVariable(namespace, processData, 'ldtTimeStamp', `${processPrefix}.ldtTimeStamp`, DataType.DateTime, () => station.processData.ldtTimeStamp, (value) => { station.processData.ldtTimeStamp = new Date(value); });
+}
+
+function addCarrierInventory(namespace) {
+  const inventoryObject = namespace.addObject({
+    organizedBy: server.engine.addressSpace.rootFolder.objects,
+    browseName: 'CarrierInventory [DEMO]',
+    nodeId: 'ns=1;s=CarrierInventory',
+  });
+  const summaryObject = namespace.addObject({
+    componentOf: inventoryObject,
+    browseName: 'Summary',
+    nodeId: 'ns=1;s=CarrierInventory.Summary',
+  });
+  addVariable(namespace, summaryObject, 'xValid', 'ns=1;s=CarrierInventory.Summary.xValid', DataType.Boolean, () => carrierInventory.valid);
+  addVariable(namespace, summaryObject, 'udRevision', 'ns=1;s=CarrierInventory.Summary.udRevision', DataType.UInt32, () => carrierInventory.revision);
+  addVariable(namespace, summaryObject, 'uiCapacity', 'ns=1;s=CarrierInventory.Summary.uiCapacity', DataType.UInt16, () => carrierInventory.capacity);
+  addVariable(namespace, summaryObject, 'uiAvailableCount', 'ns=1;s=CarrierInventory.Summary.uiAvailableCount', DataType.UInt16, inventoryAvailableCount);
+  addVariable(namespace, summaryObject, 'uiTotalCount', 'ns=1;s=CarrierInventory.Summary.uiTotalCount', DataType.UInt16, inventoryTotalCount);
+
+  const slotsObject = namespace.addObject({
+    componentOf: inventoryObject,
+    browseName: 'Slots',
+    nodeId: 'ns=1;s=CarrierInventory.Slots',
+  });
+  for (const slot of carrierInventory.slots) {
+    const slotPrefix = `ns=1;s=CarrierInventory.Slots.${slot.slotNumber}`;
+    const slotObject = namespace.addObject({
+      componentOf: slotsObject,
+      browseName: `Slot${slot.slotNumber}`,
+      nodeId: slotPrefix,
+    });
+    addVariable(namespace, slotObject, 'xOccupied', `${slotPrefix}.xOccupied`, DataType.Boolean, () => slot.occupied);
+    addVariable(namespace, slotObject, 'sSlotId', `${slotPrefix}.sSlotId`, DataType.String, () => slot.slotId);
+    addVariable(namespace, slotObject, 'uiCarrierId', `${slotPrefix}.uiCarrierId`, DataType.UInt32, () => slot.carrierId);
+    addVariable(namespace, slotObject, 'sRfidUid', `${slotPrefix}.sRfidUid`, DataType.String, () => slot.rfidUid);
+    addVariable(namespace, slotObject, 'xRfidReadValid', `${slotPrefix}.xRfidReadValid`, DataType.Boolean, () => slot.rfidReadValid);
+    addVariable(namespace, slotObject, 'sPhysicalState', `${slotPrefix}.sPhysicalState`, DataType.String, () => slot.physicalState);
+    addVariable(namespace, slotObject, 'sReaderId', `${slotPrefix}.sReaderId`, DataType.String, () => slot.readerId);
+    addVariable(namespace, slotObject, 'ldtLastSeen', `${slotPrefix}.ldtLastSeen`, DataType.DateTime, () => slot.lastSeen);
+  }
 }
 
 function processNextInQueue(station) {
@@ -245,6 +406,10 @@ function requestMesData(station, carrier) {
     return;
   }
   station.responseSeen = false;
+  observeCarrier(carrier.carrierId, 'at_station', {
+    occupied: false,
+    readerId: `DEMO-STATION-${station.resourceId}-RFID`,
+  });
   station.currentCarrier = carrier;
   station.query.uiCarrierId = carrier.carrierId;
   station.query.uiResourceId = station.resourceId;
@@ -256,6 +421,7 @@ function requestMesData(station, carrier) {
   station.query.uiResultCode = 0;
   station.query.xDone = false;
   station.query.xError = false;
+  station.processData.xCompleted = false;
   station.query.xStart = true;
   station.state.xBusy = true;
 
@@ -305,6 +471,10 @@ function completeStationCycle(station) {
     iPar4: station.query.iPar4,
     ldtTimeStamp: new Date(),
   });
+  station.processData.xCompleted = true;
+  setTimeout(() => {
+    station.processData.xCompleted = false;
+  }, 500).unref();
 
   const quality = failed ? 'NOK' : 'OK';
   console.log(`${station.name}: ${station.operation} fertig, carrier=${carrier.carrierId}, deckel=${lidColorName(station.query.iPar1)}, rot=${station.query.iPar2}, gruen=${station.query.iPar3}, blau=${station.query.iPar4}, qualitaet=${quality}`);
@@ -318,9 +488,19 @@ function completeStationCycle(station) {
   if (!failed && station.query.uiNextResourceId) {
     const nextStation = stations.find((candidate) => candidate.resourceId === station.query.uiNextResourceId);
     if (nextStation) {
+      observeCarrier(carrier.carrierId, 'in_transit', {
+        occupied: false,
+        readerId: `DEMO-STATION-${station.resourceId}-EXIT`,
+      });
       console.log(`${station.name}: carrier ${carrier.carrierId} wird zu ${nextStation.name} transportiert (${transferMs} ms)`);
       setTimeout(() => requestMesData(nextStation, carrier), transferMs).unref();
     }
+  } else if (!failed) {
+    console.log(`${station.name}: carrier ${carrier.carrierId} wird ins Palettenlager zuruecktransportiert`);
+    setTimeout(
+      () => observeCarrier(carrier.carrierId, 'stored', { occupied: true, readerId: inventoryReaderId }),
+      transferMs,
+    ).unref();
   }
 
   setTimeout(() => processNextInQueue(station), 100).unref();
@@ -409,6 +589,15 @@ function simulatePlc(station) {
 
 function releaseCarrier(carrier) {
   if (deactivatedCarrierIds.has(carrier.carrierId)) return;
+  const inventorySlot = carrierInventory.slots.find((slot) => slot.carrierId === carrier.carrierId);
+  if (!inventorySlot) {
+    console.log(`Palettenlager: carrier ${carrier.carrierId} ist nicht im Inventar bekannt`);
+    return;
+  }
+  if (!inventorySlot.occupied || inventorySlot.physicalState !== 'stored' || !inventorySlot.rfidReadValid) {
+    return;
+  }
+  observeCarrier(carrier.carrierId, 'in_transit', { occupied: false, readerId: 'DEMO-PALLET-STORE-EXIT' });
   console.log(`Wareneingang: carrier ${carrier.carrierId} (${carrier.partNo}) in die Linie freigegeben`);
   const targetStation = stations.find((station) => station.resourceId === carrier.targetResourceId) || stations[0];
   requestMesData(targetStation, carrier);
@@ -437,6 +626,7 @@ function scheduleNewCarrier(carrierPlan) {
   }
   knownCarrierIds.add(carrierPlan.carrierId);
   knownCarrierPlans.set(carrierPlan.carrierId, carrierPlan);
+  registerCarrierInInventory(carrierPlan.carrierId);
   scheduleCarrierReleases(knownCarrierPlans.get(carrierPlan.carrierId));
   console.log(`Neuer Carrier ${carrierPlan.carrierId} automatisch aufgenommen`);
 }
@@ -444,12 +634,23 @@ function scheduleNewCarrier(carrierPlan) {
 async function refreshCarriers() {
   try {
     const plans = await fetchCarriersFromMes();
+    const signature = plans
+      .map((plan) => `${plan.carrierId}:${plan.targetResourceId}`)
+      .sort()
+      .join(',');
+    if (signature !== lastCarrierPlanSignature) {
+      lastCarrierPlanSignature = signature;
+      console.log(
+        `MES-Carrierplan: ${signature || 'keine aktiven Carrier'}`,
+      );
+    }
     const activeIds = new Set(plans.map((p) => p.carrierId));
     for (const id of knownCarrierIds) {
       if (!activeIds.has(id)) deactivatedCarrierIds.add(id);
     }
     for (const plan of plans) scheduleNewCarrier(plan);
   } catch (err) {
+    console.warn(`Carrierplan konnte nicht aktualisiert werden: ${err.message}`);
     // silent – fetchCarriersFromMes already logs warnings
   }
 }
@@ -457,20 +658,27 @@ async function refreshCarriers() {
 async function start() {
   await server.initialize();
   const namespace = server.engine.addressSpace.getOwnNamespace();
+  addCarrierInventory(namespace);
   stations.forEach((station) => addStation(namespace, station));
   await server.start();
 
   console.log(`WARA MES OPC UA demo production line: opc.tcp://localhost:${port}${resourcePath}`);
   console.log('Product: WEBSHOP-PRODUCT-DEMO / Deckelfarbe + rote/gruene/blaue Kugeln');
   console.log('Route: 10 Deckelfarbe bereitstellen -> 20 Kugeln dosieren -> 30 Endkontrolle');
+  console.log(
+    `Carrier-Inventar: capacity=${carrierInventory.capacity}, ` +
+    `total=${inventoryTotalCount()}, available=${inventoryAvailableCount()}, reader=${inventoryReaderId}`,
+  );
   console.log('Stations:');
   for (const station of stations) {
     console.log(`- Resource ${station.resourceId}: ${station.name}, operation=${station.operation}, cycle=${station.cycleTimeMs} ms`);
     simulatePlc(station);
   }
   await refreshCarriers();
-  console.log(`Carrier automatisch von ${mesApiUrl} geladen, Polling alle 15s`);
-  setInterval(() => void refreshCarriers(), 15000).unref();
+  console.log(
+    `Carrier automatisch von ${mesApiUrl} geladen, Polling alle ${carrierRefreshMs} ms`,
+  );
+  setInterval(() => void refreshCarriers(), carrierRefreshMs).unref();
 }
 
 async function shutdown() {

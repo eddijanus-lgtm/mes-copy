@@ -1,13 +1,14 @@
-import { ConflictException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, Between, LessThanOrEqual, MoreThanOrEqual } from 'typeorm';
+import { Repository } from 'typeorm';
 const dayjs = require('dayjs');
 import { ShiftEntity, ShiftReportEntity, ProductionBatchEntity } from './entities';
+import { OrderEntity } from '../orders/order.entity';
+import { MachineEntity, MachineStatusEnum } from '../machines/machine.entity';
+import { DashboardService } from '../dashboard/dashboard.service';
 
 @Injectable()
 export class ShiftsService {
-  private readonly logger = new Logger(ShiftsService.name);
-
   constructor(
     @InjectRepository(ShiftEntity)
     private readonly shiftRepo: Repository<ShiftEntity>,
@@ -15,6 +16,11 @@ export class ShiftsService {
     private readonly reportRepo: Repository<ShiftReportEntity>,
     @InjectRepository(ProductionBatchEntity)
     private readonly batchRepo: Repository<ProductionBatchEntity>,
+    @InjectRepository(OrderEntity)
+    private readonly orderRepo: Repository<OrderEntity>,
+    @InjectRepository(MachineEntity)
+    private readonly machineRepo: Repository<MachineEntity>,
+    private readonly dashboard: DashboardService,
   ) {}
 
   // --- Shifts ---
@@ -47,19 +53,16 @@ export class ShiftsService {
   async generateReport(shiftId: string, dateForApi?: string): Promise<ShiftReportEntity> {
     const shift = await this.getShift(shiftId);
     const dateStr = dayjs(dateForApi || shift.date).format('YYYY-MM-DD');
-    const startOfDay = dayjs(dateStr).startOf('day').toISOString();
-    const endOfDay = dayjs(dateStr).endOf('day').toISOString();
-
-    // Orders stats (simulated from existing orders module)
-    const totalOrders = Math.floor(Math.random() * 5);
-    const completedOrders = Math.floor(totalOrders * 0.8);
-    const cancelledOrders = totalOrders - completedOrders;
-
-    // OEE calculation placeholder
-    const oeeAvail = 85 + Math.floor(Math.random() * 10);
-    const oeePerf = 75 + Math.floor(Math.random() * 10);
-    const oeeQual = 90 + Math.floor(Math.random() * 5);
-    const oeeTotal = (oeeAvail / 100) * (oeePerf / 100) * (oeeQual / 100) * 100;
+    const { start, end } = this.resolveShiftWindow(dateStr, shift.start_time, shift.end_time);
+    const [kpis, orderStats, machines] = await Promise.all([
+      this.dashboard.getKpis(start.toISOString(), end.toISOString()),
+      this.getOrderStats(start, end),
+      this.machineRepo.find({ order: { name: 'ASC' } }),
+    ]);
+    const activeStatuses = new Set([
+      MachineStatusEnum.ONLINE,
+      MachineStatusEnum.IDLE,
+    ]);
 
     const report = this.reportRepo.create({
       shift_id: shiftId,
@@ -68,17 +71,21 @@ export class ShiftsService {
       shift_start: shift.start_time,
       shift_end: shift.end_time,
       date: dateStr,
-      total_orders: totalOrders,
-      completed_orders: completedOrders,
-      cancelled_orders: cancelledOrders,
-      oee_availability: oeeAvail,
-      oee_performance: oeePerf,
-      oee_quality: oeeQual,
-      oee_total: parseFloat(oeeTotal.toFixed(2)),
-      throughput_units: 150 + Math.floor(Math.random() * 50),
-      active_machines: ['Resource1', 'Resource2', 'Resource3'],
-      offline_machines: [],
-      total_downtime_minutes: 10 + Math.floor(Math.random() * 30),
+      total_orders: orderStats.totalOrders,
+      completed_orders: orderStats.completedOrders,
+      cancelled_orders: orderStats.cancelledOrders,
+      oee_availability: kpis.oee.availability,
+      oee_performance: kpis.oee.performance,
+      oee_quality: kpis.oee.quality,
+      oee_total: kpis.oee.total,
+      throughput_units: kpis.throughput.completedQuantity,
+      active_machines: machines
+        .filter((machine) => activeStatuses.has(machine.status))
+        .map((machine) => machine.name),
+      offline_machines: machines
+        .filter((machine) => !activeStatuses.has(machine.status))
+        .map((machine) => machine.name),
+      total_downtime_minutes: kpis.machines.downtimeMinutes,
     });
 
     return this.reportRepo.save(report);
@@ -153,42 +160,48 @@ export class ShiftsService {
     return shift;
   }
 
-  // TODO: Implement production report generation with real data from Orders, Downtime, DataCollection modules
-  private async generateReportForDate(dateStr: string): Promise<ShiftReportEntity> {
-    const start = dayjs(dateStr).startOf('day').toISOString();
-    const end = dayjs(dateStr).endOf('day').toISOString();
-
-    // Simulate report data until we have actual integration with Orders/Downtime/DataCollection modules
-    const totalOrders = Math.floor(Math.random() * 5);
-    const completedOrders = Math.floor(totalOrders * 0.8);
-    const cancelledOrders = totalOrders - completedOrders;
-    const oeeAvail = 85 + Math.floor(Math.random() * 10);
-    const oeePerf = 75 + Math.floor(Math.random() * 10);
-    const oeeQual = 90 + Math.floor(Math.random() * 5);
-    const oeeTotal = (oeeAvail / 100) * (oeePerf / 100) * (oeeQual / 100) * 100;
-
-    return this.reportRepo.save(this.reportRepo.create({
-      date: dateStr,
-      shift_start: '06:00',
-      shift_end: '14:00',
-      total_orders: totalOrders,
-      completed_orders: completedOrders,
-      cancelled_orders: cancelledOrders,
-      oee_availability: oeeAvail,
-      oee_performance: oeePerf,
-      oee_quality: oeeQual,
-      oee_total: parseFloat(oeeTotal.toFixed(2)),
-      throughput_units: 150 + Math.floor(Math.random() * 50),
-      active_machines: ['Resource1', 'Resource2', 'Resource3'],
-      offline_machines: [],
-      total_downtime_minutes: 10 + Math.floor(Math.random() * 30),
-    }));
-  }
-
   async createReport(dto: Partial<ShiftReportEntity>): Promise<ShiftReportEntity> {
     const report = this.reportRepo.create(dto);
     return this.reportRepo.save(report);
   }
 
-  /** TODO: Implement production report generation with real data from Orders, Downtime, DataCollection modules */
+  private resolveShiftWindow(date: string, startTime: string, endTime: string) {
+    const start = dayjs(`${date}T${startTime}`);
+    let end = dayjs(`${date}T${endTime}`);
+    if (!end.isAfter(start)) end = end.add(1, 'day');
+    return { start: start.toDate(), end: end.toDate() };
+  }
+
+  private async getOrderStats(start: Date, end: Date): Promise<{
+    totalOrders: number;
+    completedOrders: number;
+    cancelledOrders: number;
+  }> {
+    const row = await this.orderRepo
+      .createQueryBuilder('orders')
+      .select('COUNT(*)', 'total_orders')
+      .addSelect(
+        "COUNT(CASE WHEN orders.status = 'completed' THEN 1 END)",
+        'completed_orders',
+      )
+      .addSelect(
+        "COUNT(CASE WHEN orders.status = 'cancelled' THEN 1 END)",
+        'cancelled_orders',
+      )
+      .where('orders.created_at < :end', { end })
+      .andWhere('(orders.end_time IS NULL OR orders.end_time >= :start)', {
+        start,
+      })
+      .getRawOne<{
+        total_orders: string;
+        completed_orders: string;
+        cancelled_orders: string;
+      }>();
+
+    return {
+      totalOrders: Number(row?.total_orders) || 0,
+      completedOrders: Number(row?.completed_orders) || 0,
+      cancelledOrders: Number(row?.cancelled_orders) || 0,
+    };
+  }
 }

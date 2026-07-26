@@ -24,7 +24,7 @@ Der Scanner und die Profilprüfung führen **keine OPC-UA-Schreiboperationen** a
 - [ ] Ansprechpartner für SPS und Arbeitssicherheit ist anwesend oder erreichbar
 - [ ] Benutzername/Passwort oder Client-Zertifikat liegen getrennt vom Repository vor
 - [ ] Schreibzugriffe sind ausdrücklich **nicht** freigegeben
-- [ ] lokaler Simulator startet mit `npm run start:opcua-test`
+- [ ] externe Testmaschine startet mit `npm run start:test-machine`
 - [ ] Backend- und Frontend-Build sind erfolgreich
 
 ## Montag: ein lesender Scan
@@ -135,7 +135,7 @@ Schreibzugriffe sind ein eigener Meilenstein. Vor dem ersten Schreibtest müssen
 | lokale Verriegelung | SPS prüft Automatikbetrieb und Anlagenfreigabe |
 | Freigabe | Name und Datum der SPS-/Anlagenverantwortung |
 
-Erst danach wird ein getrenntes Profil mit `operatingMode: "validate"` erstellt. `control` bleibt bis zur erfolgreichen Simulator- und Abnahmeprüfung gesperrt.
+Erst danach wird das geprüfte Profil zunächst mit `operatingMode: "validate"` betrieben. Nach erfolgreicher Simulator- und Abnahmeprüfung wird ausschließlich dieses Profil auf `control` umgestellt; dafür ist keine MES-Codeänderung erforderlich.
 
 ## Minimaler Informationsbedarf von der Anlage
 

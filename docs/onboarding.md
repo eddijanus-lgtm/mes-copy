@@ -21,7 +21,7 @@ npm install
 cd frontend && npm install && npm run build && cd ..
 
 # 3. OPC-UA-Testserver starten (separates Terminal)
-npm run start:opcua-test
+npm run start:test-machine
 
 # 4. Backend bauen und starten
 npm run build
@@ -73,7 +73,7 @@ ADMIN_USERNAME=my-admin ADMIN_PASSWORD='a-long-random-password' npm run create-a
 ## OPC-UA-Testserver
 
 ```bash
-npm run start:opcua-test
+npm run start:test-machine
 ```
 
 Endpoint: `opc.tcp://localhost:4840/UA/WaraMesTest`. Der Testserver bildet `dbProcessData [DB151]` mit Werkstückträger, Workplan-Schritt, Ressource, vier Parametern und Prozesszeitstempel nach und ist nur für Entwicklung vorgesehen.
@@ -81,7 +81,7 @@ Endpoint: `opc.tcp://localhost:4840/UA/WaraMesTest`. Der Testserver bildet `dbPr
 ### Mehrstations-stMES-Demo vorbereiten
 
 ```bash
-DEMO_ADMIN_USERNAME=<admin> DEMO_ADMIN_PASSWORD=<password> npm run seed:stmes-demo
+DEMO_ADMIN_USERNAME=<admin> DEMO_ADMIN_PASSWORD=<password> npm run seed:test-machine
 ```
 
 Dieser Befehl erzeugt nur klar benannte Testdaten für zwei Demo-Stationen, Carrier 128/129 und `DEMO-ORDER-001`. Der stMES-Vertrag ist erfunden und darf nicht unverändert an einer realen SPS eingesetzt werden. Siehe `docs/guides/07-stmes-demo-contract.md`.

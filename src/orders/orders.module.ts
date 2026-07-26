@@ -12,9 +12,10 @@ import { ProductRouteStepEntity } from '../products/product-route-step.entity';
 import { StMesHandshakeEntity } from '../opcua/stmes-handshake.entity';
 import { OrderProductionLogEntity } from './order-production-log.entity';
 import { OrderProductionLogService } from './order-production-log.service';
+import { MachineProfilesModule } from '../machines/profiles/machine-profiles.module';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([
+  imports: [MachineProfilesModule, TypeOrmModule.forFeature([
     OrderEntity,
     OrderRouteStepEntity,
     CarrierEntity,

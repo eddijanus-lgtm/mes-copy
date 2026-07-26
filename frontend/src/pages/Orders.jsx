@@ -661,7 +661,14 @@ function RouteTimeline({ order, route, carriers, resourceNames }) {
 }
 
 function OrderModal({ form, setForm, machines, products, orderParameterDefinitions, carriers, saving, onSubmit, onClose }) {
-  const availableCount = carriers.filter((c) => c.status === "available").length;
+  const availableCount = carriers.filter(
+    (carrier) =>
+      carrier.status === "available" &&
+      (carrier.inventory_managed !== true ||
+        (carrier.physical_state === "stored" &&
+          carrier.rfid_read_valid === true &&
+          carrier.inventory_stale !== true)),
+  ).length;
   const activeProducts = products.filter((product) => product.is_active);
   const product = selectedProduct(products, form.product_id);
   const parameterDefinitions = orderParameterDefinitions;

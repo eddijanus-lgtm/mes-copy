@@ -6,6 +6,9 @@ import {
 } from '../orders/routing.service';
 import { MqttGatewayService } from './mqtt-gateway.service';
 import { translateWebshopOrder } from './webshop-order-translator';
+import { Inject } from '@nestjs/common';
+import { MACHINE_ADAPTER } from '../machines/adapters/machine-adapter.token';
+import type { MachineAdapter } from '../machines/adapters/machine-adapter.types';
 
 @Injectable()
 export class WebshopOrdersService implements OnModuleInit {
@@ -20,6 +23,7 @@ export class WebshopOrdersService implements OnModuleInit {
     private readonly configService: ConfigService,
     private readonly mqtt: MqttGatewayService,
     private readonly routing: RoutingService,
+    @Inject(MACHINE_ADAPTER) private readonly machine: MachineAdapter,
   ) {}
 
   onModuleInit() {
@@ -40,7 +44,10 @@ export class WebshopOrdersService implements OnModuleInit {
 
   private async handleWebshopOrder(rawPayload: unknown) {
     try {
-      const payload = translateWebshopOrder(rawPayload);
+      const payload = translateWebshopOrder(
+        rawPayload,
+        this.machine.getOrderParameterDefinitions(),
+      );
       const result = await this.routing.createWebshopProductionOrder(payload);
       this.recentOrders.unshift({
         orderName: result.order.name,

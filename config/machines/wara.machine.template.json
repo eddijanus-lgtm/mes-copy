@@ -2,7 +2,7 @@
   "profileVersion": "1.0",
   "machineId": "YOUR_MACHINE_ID",
   "displayName": "YOUR_MACHINE_DISPLAY_NAME",
-  "description": "Replace with a meaningful machine description",
+  "description": "Production template. Replace every YOUR_* value with commissioning results.",
   "transport": "opcua",
   "operatingMode": "control",
   "connection": {
@@ -38,43 +38,45 @@
   "stations": [
     {
       "stationId": "YOUR_STATION_ID",
+      "resourceId": 1,
       "displayName": "YOUR_STATION_DISPLAY_NAME",
-      "description": "Replace with station description",
+      "description": "Replace identifiers with the nodes discovered during commissioning.",
       "enabled": true,
+      "routing": {
+        "sequence": 1,
+        "operationNo": 10,
+        "operation": "YOUR_OPERATION_NAME"
+      },
       "signals": [
-        {
-          "key": "workRequest",
-          "role": "workRequest",
-          "direction": "machineToMes",
-          "namespace": "main",
-          "identifier": "YOUR_WORK_REQUEST_IDENTIFIER",
-          "dataType": "Boolean",
-          "access": "read",
-          "required": true
-        },
-        {
-          "key": "carrierId",
-          "role": "carrierId",
-          "direction": "machineToMes",
-          "namespace": "main",
-          "identifier": "YOUR_CARRIER_ID_IDENTIFIER",
-          "dataType": "String",
-          "access": "read",
-          "required": true
-        },
-        {
-          "key": "processResult",
-          "role": "processResult",
-          "direction": "machineToMes",
-          "namespace": "main",
-          "identifier": "YOUR_PROCESS_RESULT_IDENTIFIER",
-          "dataType": "UInt32",
-          "access": "read",
-          "required": true
-        }
-      ]
+        { "key": "request", "role": "workRequest", "direction": "machineToMes", "namespace": "main", "identifier": "YOUR_WORK_REQUEST_IDENTIFIER", "dataType": "Boolean", "access": "read", "required": true, "event": { "trigger": "change" } },
+        { "key": "requestCarrier", "role": "carrierId", "direction": "machineToMes", "namespace": "main", "identifier": "YOUR_REQUEST_CARRIER_IDENTIFIER", "dataType": "UInt32", "access": "read", "required": true },
+        { "key": "requestedResource", "role": "resourceId", "direction": "machineToMes", "namespace": "main", "identifier": "YOUR_RESOURCE_IDENTIFIER", "dataType": "UInt16", "access": "read", "required": true },
+        { "key": "busyResponse", "role": "requestBusy", "direction": "mesToMachine", "namespace": "main", "identifier": "YOUR_BUSY_IDENTIFIER", "dataType": "Boolean", "access": "write", "required": true },
+        { "key": "acceptedResponse", "role": "requestAccepted", "direction": "mesToMachine", "namespace": "main", "identifier": "YOUR_ACCEPTED_IDENTIFIER", "dataType": "Boolean", "access": "write", "required": true },
+        { "key": "rejectedResponse", "role": "requestRejected", "direction": "mesToMachine", "namespace": "main", "identifier": "YOUR_REJECTED_IDENTIFIER", "dataType": "Boolean", "access": "write", "required": true },
+        { "key": "orderNumber", "role": "orderId", "direction": "mesToMachine", "namespace": "main", "identifier": "YOUR_ORDER_IDENTIFIER", "dataType": "String", "access": "write", "required": true },
+        { "key": "partNumber", "role": "partNumber", "direction": "mesToMachine", "namespace": "main", "identifier": "YOUR_PART_IDENTIFIER", "dataType": "String", "access": "write", "required": true },
+        { "key": "operationNumber", "role": "operationId", "direction": "mesToMachine", "namespace": "main", "identifier": "YOUR_OPERATION_IDENTIFIER", "dataType": "UInt16", "access": "write", "required": true },
+        { "key": "routeStep", "role": "stepNumber", "direction": "mesToMachine", "namespace": "main", "identifier": "YOUR_STEP_IDENTIFIER", "dataType": "UInt16", "access": "write", "required": true },
+        { "key": "nextResource", "role": "nextStationId", "direction": "mesToMachine", "namespace": "main", "identifier": "YOUR_NEXT_RESOURCE_IDENTIFIER", "dataType": "UInt16", "access": "write", "required": true },
+        { "key": "result", "role": "processResult", "direction": "mesToMachine", "namespace": "main", "identifier": "YOUR_RESULT_IDENTIFIER", "dataType": "UInt16", "access": "write", "required": true },
+        { "key": "processBusy", "role": "processActive", "direction": "machineToMes", "namespace": "main", "identifier": "YOUR_PROCESS_ACTIVE_IDENTIFIER", "dataType": "Boolean", "access": "read", "required": true },
+        { "key": "completedCarrier", "role": "completedCarrierId", "direction": "machineToMes", "namespace": "main", "identifier": "YOUR_COMPLETED_CARRIER_IDENTIFIER", "dataType": "UInt32", "access": "read", "required": true },
+        { "key": "completion", "role": "processCompleted", "direction": "machineToMes", "namespace": "main", "identifier": "YOUR_PROCESS_COMPLETED_IDENTIFIER", "dataType": "Boolean", "access": "read", "required": true, "event": { "trigger": "rising" } },
+        { "key": "startCommand", "role": "controlStart", "direction": "mesToMachine", "namespace": "main", "identifier": "YOUR_START_IDENTIFIER", "dataType": "Boolean", "access": "write", "required": false },
+        { "key": "stopCommand", "role": "controlStop", "direction": "mesToMachine", "namespace": "main", "identifier": "YOUR_STOP_IDENTIFIER", "dataType": "Boolean", "access": "write", "required": false },
+        { "key": "resetCommand", "role": "controlReset", "direction": "mesToMachine", "namespace": "main", "identifier": "YOUR_RESET_IDENTIFIER", "dataType": "Boolean", "access": "write", "required": false },
+        { "key": "pauseCommand", "role": "controlPause", "direction": "mesToMachine", "namespace": "main", "identifier": "YOUR_PAUSE_IDENTIFIER", "dataType": "Boolean", "access": "write", "required": false }
+      ],
+      "metadata": {
+        "location": "YOUR_LINE_OR_LOCATION",
+        "machineType": "YOUR_MACHINE_TYPE"
+      }
     }
   ],
+  "resultCodes": {
+    "0": "OK"
+  },
   "metadata": {
     "manufacturer": "YOUR_MANUFACTURER",
     "model": "YOUR_MODEL",

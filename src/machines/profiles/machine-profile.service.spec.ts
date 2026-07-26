@@ -12,7 +12,7 @@ import {
   MachineProfileParseError,
 } from './machine-profile.errors';
 const PROJECT_ROOT = process.cwd();
-const SIMULATOR_RELATIVE = 'config/machines/simulator.machine.json';
+const SIMULATOR_RELATIVE = 'test-machines/opcua-simulator/profile.json';
 const TEMPLATE_RELATIVE = 'config/machines/wara.machine.template.json';
 const SIMULATOR_ABSOLUTE = resolve(PROJECT_ROOT, SIMULATOR_RELATIVE);
 
@@ -57,6 +57,7 @@ function createValidProfile(overrides?: Record<string, unknown>): Record<string,
     stations: [
       {
         stationId: 'station-1',
+        resourceId: 1,
         displayName: 'Station 1',
         description: 'First station',
         enabled: true,
@@ -186,7 +187,7 @@ describe('MachineProfileService', () => {
   // 2. loadProfile with valid profiles
   // -----------------------------------------------------------------------
   describe('loadProfile with valid profiles', () => {
-    it('loads config/machines/simulator.machine.json', () => {
+    it('loads the external test-machine profile', () => {
       const configService = new ConfigService({});
       const service = new MachineProfileService(configService);
       const profile = service.loadProfile({
@@ -197,7 +198,7 @@ describe('MachineProfileService', () => {
       expect(profile.machineId).toBe('simulator');
     });
 
-    it('returns a profile with three stations for the simulator', () => {
+    it('returns production stations and a carrier inventory resource for the test machine', () => {
       const configService = new ConfigService({});
       const service = new MachineProfileService(configService);
       const profile = service.loadProfile({
@@ -205,7 +206,19 @@ describe('MachineProfileService', () => {
         baseDirectory: PROJECT_ROOT,
       });
 
-      expect(profile.stations.length).toBe(3);
+      expect(profile.stations.length).toBe(4);
+      expect(profile.stations).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            stationId: 'carrier-inventory',
+            resourceType: 'inventory',
+            capabilities: expect.arrayContaining(['inventory']),
+            inventory: expect.objectContaining({
+              revisionSignalKey: 'inventoryRevision',
+            }),
+          }),
+        ]),
+      );
     });
 
     it('loads config/machines/wara.machine.template.json', () => {
@@ -629,7 +642,12 @@ describe('MachineProfileService', () => {
         connection: {
           endpointUrl: 'opc.tcp://host:4840',
           applicationName: 'App',
-          security: { mode: 'SignAndEncrypt', policy: 'Basic256Sha256', certificatePathEnv: 'CERT_PATH' },
+          security: {
+            mode: 'SignAndEncrypt',
+            policy: 'Basic256Sha256',
+            certificatePathEnv: 'CERT_PATH',
+            privateKeyPathEnv: 'PRIVATE_KEY_PATH',
+          },
           authentication: { type: 'username', usernameEnv: 'OPCUA_USER', passwordEnv: 'OPCUA_PASS' },
           connectionTimeoutMs: 15000,
           sessionTimeoutMs: 120000,

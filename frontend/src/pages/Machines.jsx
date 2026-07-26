@@ -168,6 +168,7 @@ export default function MachinesPage() {
                         <span className="inline-flex items-center gap-2 text-sm text-neutral-800">
                           <span className={`w-2 h-2 rounded-full ${statusOk ? "bg-status-success" : "bg-status-error"}`} />
                           {m.name || m.machineName || "-"}
+                          {m.profile_managed ? <small className="rounded bg-brand-primary/10 px-2 py-0.5 text-brand-primary">Maschinenprofil</small> : null}
                         </span>
                       </td>
                       <td className="px-5 py-3.5 text-sm text-neutral-600">{m.type || "CNC"}</td>
@@ -177,10 +178,12 @@ export default function MachinesPage() {
                         </span>
                       </td>
                       {canManage && <td className="px-5 py-3.5 text-right">
-                        <button onClick={() => handleEdit(m)} className="mx-1 px-3 py-1.5 text-xs font-medium text-neutral-dark bg-neutral-stroke rounded-md hover:bg-neutral-border transition-colors">
-                          Edit
-                        </button>
-                        {canDelete && (
+                        {!m.profile_managed ? (
+                          <button onClick={() => handleEdit(m)} className="mx-1 px-3 py-1.5 text-xs font-medium text-neutral-dark bg-neutral-stroke rounded-md hover:bg-neutral-border transition-colors">
+                            Edit
+                          </button>
+                        ) : null}
+                        {canDelete && !m.profile_managed && (
                         <button onClick={() => requestDelete(m)} className="ml-2 px-3 py-1.5 text-xs font-medium text-white bg-status-error rounded-md hover:bg-[var(--color-status-error-dark)] transition-colors">
                           ×
                         </button>

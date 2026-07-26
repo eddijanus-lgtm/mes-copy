@@ -10,12 +10,6 @@ import { openDashboardReport } from "../../dashboard/dashboardReport.js";
 
 const TrendWidget = lazy(() => import("./TrendWidget.jsx"));
 
-const STATION_ASSETS = [
-  "/assets/dashboard/station-feed.png",
-  "/assets/dashboard/station-dose.png",
-  "/assets/dashboard/station-inspect.png",
-];
-
 const STATUS_ROWS = [
   ["online", "Online", "green"],
   ["idle", "Bereit", "blue"],
@@ -26,8 +20,8 @@ const STATUS_ROWS = [
 
 export function ProductionFlowWidget({ machines, carriers, kpis, health }) {
   const stations = [...machines]
-    .filter((machine) => machine.resource_id != null)
-    .sort((a, b) => Number(a.resource_id) - Number(b.resource_id));
+    .filter((machine) => machine.resource_id != null && machine.routing_enabled !== false)
+    .sort((a, b) => Number(a.route_sequence ?? Number.MAX_SAFE_INTEGER) - Number(b.route_sequence ?? Number.MAX_SAFE_INTEGER));
 
   if (stations.length === 0) {
     return (
@@ -59,11 +53,13 @@ export function ProductionFlowWidget({ machines, carriers, kpis, health }) {
                   <span>{resourceCode(station)}</span>
                   <strong>{stationDisplayName(station)}</strong>
                 </div>
-                <img
-                  src={assetForStation(station, index)}
-                  alt=""
-                  className={stationCarriers.length > 0 ? "is-working" : ""}
-                />
+                {station.dashboard_image ? (
+                  <img
+                    src={station.dashboard_image}
+                    alt=""
+                    className={stationCarriers.length > 0 ? "is-working" : ""}
+                  />
+                ) : null}
                 <div className="flow-station__meta">
                   <span><i className={`status-dot ${state.dot}`} />{state.label}</span>
                   <span>{formatCarrierCount(stationCarriers.length)}</span>
@@ -260,14 +256,6 @@ function stationDisplayName(station) {
   const name = String(station.name || "").trim();
   const withoutCode = name.replace(/^[A-Za-z]+\d+\s*[-–:]?\s*/, "").trim();
   return withoutCode || `Station ${station.resource_id}`;
-}
-
-function assetForStation(station, index) {
-  const searchable = `${station.type || ""} ${station.name || ""}`.toLocaleLowerCase("de");
-  if (/dose|füll|kugel|hopper/.test(searchable)) return STATION_ASSETS[1];
-  if (/prüf|quality|kontroll|inspect/.test(searchable)) return STATION_ASSETS[2];
-  if (/zuführ|feed|deckel/.test(searchable)) return STATION_ASSETS[0];
-  return STATION_ASSETS[index % STATION_ASSETS.length];
 }
 
 function isActiveCarrier(carrier) {

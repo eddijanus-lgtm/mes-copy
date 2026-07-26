@@ -1,5 +1,7 @@
 const { spawn, spawnSync } = require('node:child_process');
 const { createServer } = require('node:net');
+const { mkdtempSync, readFileSync, rmSync, writeFileSync } = require('node:fs');
+const { tmpdir } = require('node:os');
 const { resolve } = require('node:path');
 
 const projectDirectory = resolve(__dirname, '..');
@@ -7,6 +9,7 @@ const composeFile = resolve(projectDirectory, 'docker-compose.e2e.yml');
 const composeProject = `wara-mes-e2e-${process.pid}`;
 let cleaned = false;
 let jestProcess;
+let temporaryProfileDirectory;
 
 function findFreePort() {
   return new Promise((resolvePort, reject) => {
@@ -59,6 +62,9 @@ function cleanup(environment) {
     ['down', '--volumes', '--remove-orphans', '--timeout', '10'],
     environment,
   );
+  if (temporaryProfileDirectory) {
+    rmSync(temporaryProfileDirectory, { recursive: true, force: true });
+  }
 }
 
 async function main() {
@@ -66,6 +72,24 @@ async function main() {
     process.env.E2E_DB_PORT || (await findFreePort()),
   );
   const mqttPort = String(process.env.E2E_MQTT_PORT || (await findFreePort()));
+  const opcUaPort = String(
+    process.env.OPC_UA_TEST_SERVER_PORT || (await findFreePort()),
+  );
+  const sourceProfilePath = resolve(
+    projectDirectory,
+    'test-machines/opcua-simulator/profile.json',
+  );
+  const testProfile = JSON.parse(readFileSync(sourceProfilePath, 'utf8'));
+  testProfile.connection.endpointUrl =
+    `opc.tcp://127.0.0.1:${opcUaPort}/UA/WaraMesTest`;
+  temporaryProfileDirectory = mkdtempSync(
+    resolve(tmpdir(), 'wara-mes-e2e-profile-'),
+  );
+  const testProfilePath = resolve(
+    temporaryProfileDirectory,
+    'machine-profile.json',
+  );
+  writeFileSync(testProfilePath, JSON.stringify(testProfile, null, 2));
   const infrastructureEnvironment = {
     ...process.env,
     E2E_DB_PORT: databasePort,
@@ -84,9 +108,9 @@ async function main() {
     MQTT_BROKER_URL: `mqtt://127.0.0.1:${mqttPort}`,
     MQTT_ALLOWED_TOPIC_PREFIXES: 'mes/,i4.0/',
     WEBSHOP_MQTT_TOPIC: 'i4.0/production/orders',
-    OPC_UA_ALLOWED_NODE_PREFIXES: 'ns=1;s=Station',
-    OPC_UA_RESOURCE_IDS: '1,2,3',
-    MACHINE_PROFILE_PATH: 'config/machines/simulator.machine.json',
+    MACHINE_PROFILE_PATH: testProfilePath,
+    OPC_UA_TEST_SERVER_PORT: opcUaPort,
+    DEMO_CARRIER_REFRESH_MS: '1000',
     E2E_ADMIN_USERNAME: 'e2e-admin',
     E2E_ADMIN_PASSWORD: 'e2e-admin-password',
   };
@@ -120,6 +144,7 @@ async function main() {
         '--config',
         resolve(projectDirectory, 'test/jest-e2e.json'),
         '--runInBand',
+        ...process.argv.slice(2),
       ],
       {
         cwd: projectDirectory,

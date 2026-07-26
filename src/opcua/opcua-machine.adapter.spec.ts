@@ -1,487 +1,436 @@
-import { Test, TestingModule } from '@nestjs/testing';
-
-// Mock node-opcua before any imports that use it
 jest.mock('node-opcua', () => ({
   AttributeIds: { Value: 13 },
-  DataType: { Boolean: 'Boolean', String: 'String', Int16: 'Int16', UInt16: 'UInt16', UInt32: 'UInt32' },
+  DataType: {
+    Boolean: 'Boolean',
+    String: 'String',
+    UInt16: 'UInt16',
+    UInt32: 'UInt32',
+  },
   Variant: class Variant {
     constructor(public readonly value: unknown) {}
   },
   resolveNodeId: jest.fn((nodeId: string) => nodeId),
 }));
 
-import { OpcUaService } from './opcua.service';
-import { OpcUaMachineAdapter } from './opcua-machine.adapter';
-import { MachineAdapter, MachineControlCommand, MachineRoutingResponse, MachineAddressWrite } from '../machines/adapters/machine-adapter.types';
-import { ShopfloorTelemetryEvent } from './shopfloor-telemetry';
 import { MachineProfileService } from '../machines/profiles/machine-profile.service';
+import type { MachineProfile } from '../machines/profiles/machine-profile.types';
+import { OpcUaMachineAdapter } from './opcua-machine.adapter';
+import {
+  OpcUaConfiguredSignal,
+  OpcUaService,
+} from './opcua.service';
 
-describe('OpcUaMachineAdapter', () => {
+describe('OpcUaMachineAdapter profile contract', () => {
   let adapter: OpcUaMachineAdapter;
-  let mockOpcUa: jest.Mocked<OpcUaService>;
-  let mockMachineProfileService: jest.Mocked<MachineProfileService>;
+  let opcUa: jest.Mocked<OpcUaService>;
+  let profileService: jest.Mocked<MachineProfileService>;
+  let signals: Map<string, OpcUaConfiguredSignal>;
 
-  const mockTelemetryCallback = jest.fn();
-  const mockWorkRequestCallback = jest.fn();
-  const mockProcessCompletedCallback = jest.fn();
-  const mockConnectedCallback = jest.fn();
-  const mockDisconnectedCallback = jest.fn();
+  const profile = {
+    stations: [
+      {
+        stationId: 'loading-cell',
+        resourceId: 7,
+        displayName: 'Loading cell',
+        enabled: true,
+        routing: { sequence: 1, operationNo: 70, operation: 'Load' },
+        signals: [
+          { role: 'controlStart' },
+          { role: 'controlStop' },
+          { role: 'controlReset' },
+          { role: 'controlPause' },
+        ],
+      },
+      {
+        stationId: 'inspection-cell',
+        resourceId: 42,
+        displayName: 'Inspection cell',
+        enabled: true,
+        routing: { sequence: 2, operationNo: 80, operation: 'Inspect' },
+        signals: [],
+      },
+      {
+        stationId: 'disabled-cell',
+        resourceId: 99,
+        displayName: 'Disabled cell',
+        enabled: false,
+        signals: [],
+      },
+    ],
+    orderParameterDefinitions: [
+      { key: 'iPar1', signalKey: 'parameter1', label: 'Colour', type: 'number' },
+      { key: 'iPar2', signalKey: 'parameter2', label: 'Red', type: 'number' },
+      { key: 'iPar3', signalKey: 'parameter3', label: 'Green', type: 'number' },
+      { key: 'iPar4', signalKey: 'parameter4', label: 'Blue', type: 'number' },
+    ],
+  } as unknown as MachineProfile;
 
-  beforeEach(async () => {
-    mockOpcUa = {
+  function configuredSignal(
+    key: string,
+    nodeId: string,
+    dataType: OpcUaConfiguredSignal['dataType'],
+    access: OpcUaConfiguredSignal['access'],
+    direction: OpcUaConfiguredSignal['direction'],
+    role: OpcUaConfiguredSignal['role'] = 'custom',
+  ): OpcUaConfiguredSignal {
+    return {
+      key,
+      role,
+      nodeId,
+      dataType,
+      access,
+      direction,
+      required: true,
+    };
+  }
+
+  beforeEach(() => {
+    signals = new Map<string, OpcUaConfiguredSignal>();
+    const readSignals = [
+      ['carrierId', 'ns=4;s=LineA.Input.Carrier', 'UInt32', 'carrierId'],
+      ['resourceId', 'ns=4;s=LineA.Input.Resource', 'UInt16', 'resourceId'],
+      ['workRequest', 'ns=4;s=LineA.Input.Request', 'Boolean', 'workRequest'],
+      ['processActive', 'ns=4;s=LineA.State.Active', 'Boolean', 'processActive'],
+      ['carrierIdProcess', 'ns=4;s=LineA.Process.Carrier', 'UInt32', 'completedCarrierId'],
+    ] as const;
+    for (const [key, nodeId, dataType, role] of readSignals) {
+      signals.set(
+        key,
+        configuredSignal(key, nodeId, dataType, 'read', 'machineToMes', role),
+      );
+    }
+
+    const writeSignals = [
+      ['requestBusy', 'ns=4;s=LineA.Output.Busy', 'Boolean', 'requestBusy'],
+      ['requestAccepted', 'ns=4;s=LineA.Output.Accepted', 'Boolean', 'requestAccepted'],
+      ['requestRejected', 'ns=4;s=LineA.Output.Rejected', 'Boolean', 'requestRejected'],
+      ['orderId', 'ns=4;s=LineA.Output.Order', 'String', 'orderId'],
+      ['partNumber', 'ns=4;s=LineA.Output.Part', 'String', 'partNumber'],
+      ['operationId', 'ns=4;s=LineA.Output.Operation', 'UInt16', 'operationId'],
+      ['stepNumber', 'ns=4;s=LineA.Output.Step', 'UInt16', 'stepNumber'],
+      ['nextStationId', 'ns=4;s=LineA.Output.Next', 'UInt16', 'nextStationId'],
+      ['parameter1', 'ns=4;s=LineA.Output.Parameter.A', 'UInt16', 'routingParameter'],
+      ['parameter2', 'ns=4;s=LineA.Output.Parameter.B', 'UInt16', 'routingParameter'],
+      ['parameter3', 'ns=4;s=LineA.Output.Parameter.C', 'UInt16', 'routingParameter'],
+      ['parameter4', 'ns=4;s=LineA.Output.Parameter.D', 'UInt16', 'routingParameter'],
+      ['processResult', 'ns=4;s=LineA.Output.Result', 'UInt16', 'processResult'],
+      ['cmdStart', 'ns=4;s=LineA.Commands.Run', 'Boolean', 'controlStart'],
+      ['cmdStop', 'ns=4;s=LineA.Commands.Stop', 'Boolean', 'controlStop'],
+      ['cmdReset', 'ns=4;s=LineA.Commands.Reset', 'Boolean', 'controlReset'],
+      ['cmdPause', 'ns=4;s=LineA.Commands.Pause', 'Boolean', 'controlPause'],
+    ] as const;
+    for (const [key, nodeId, dataType, role] of writeSignals) {
+      signals.set(
+        key,
+        configuredSignal(key, nodeId, dataType, 'write', 'mesToMachine', role),
+      );
+    }
+
+    opcUa = {
       isConnected: jest.fn().mockReturnValue(true),
-      getServerStatus: jest.fn().mockResolvedValue({ connected: true, endpoint: 'opc.tcp://localhost:4840/UA/WaraMesTest' }),
-      onTelemetry: jest.fn().mockReturnValue(() => {}),
-      onStMesRequest: jest.fn().mockReturnValue(() => {}),
-      onProcessCompleted: jest.fn().mockReturnValue(() => {}),
-      onConnected: jest.fn().mockReturnValue(() => {}),
-      onDisconnected: jest.fn().mockReturnValue(() => {}),
+      getServerStatus: jest
+        .fn()
+        .mockResolvedValue({ connected: true, endpoint: 'opc.tcp://machine' }),
+      onTelemetry: jest.fn().mockReturnValue(() => undefined),
+      onStMesRequest: jest.fn().mockReturnValue(() => undefined),
+      onProcessCompleted: jest.fn().mockReturnValue(() => undefined),
+      onCarrierInventoryChanged: jest.fn().mockReturnValue(() => undefined),
+      onConnected: jest.fn().mockReturnValue(() => undefined),
+      onDisconnected: jest.fn().mockReturnValue(() => undefined),
       readNode: jest.fn(),
       writeNodes: jest.fn().mockResolvedValue(undefined),
       publishStMesEvent: jest.fn(),
+      getConfiguredSignal: jest.fn((resourceId: number, key: string) => {
+        if (resourceId !== 7 || !signals.has(key)) {
+          throw new Error(`Signal ${key} is not configured`);
+        }
+        return signals.get(key)!;
+      }),
+      getConfiguredSignalByRole: jest.fn((resourceId: number, role: string) => {
+        const match = [...signals.values()].find((signal) => signal.role === role);
+        if (resourceId !== 7 || !match) {
+          throw new Error(`Signal role ${role} is not configured`);
+        }
+        return match;
+      }),
     } as unknown as jest.Mocked<OpcUaService>;
-
-    mockMachineProfileService = {
-      getProfile: jest.fn(),
-      loadProfile: jest.fn(),
-      loadConfiguredProfile: jest.fn(),
+    profileService = {
+      getProfile: jest.fn().mockReturnValue(profile),
     } as unknown as jest.Mocked<MachineProfileService>;
+    adapter = new OpcUaMachineAdapter(opcUa, profileService);
+  });
 
-    const module: TestingModule = await Test.createTestingModule({
-      providers: [
-        OpcUaMachineAdapter,
-        { provide: OpcUaService, useValue: mockOpcUa },
-        { provide: MachineProfileService, useValue: mockMachineProfileService },
+  it('reads a station request only from arbitrary nodes configured in the profile', async () => {
+    opcUa.readNode
+      .mockResolvedValueOnce(321)
+      .mockResolvedValueOnce(7);
+
+    await expect(adapter.readStationRequest(7)).resolves.toEqual({
+      carrierNumber: 321,
+      requestedResourceId: 7,
+    });
+    expect(opcUa.readNode).toHaveBeenNthCalledWith(
+      1,
+      'ns=4;s=LineA.Input.Carrier',
+    );
+    expect(opcUa.readNode).toHaveBeenNthCalledWith(
+      2,
+      'ns=4;s=LineA.Input.Resource',
+    );
+  });
+
+  it('writes every routing value to its own configured profile signal', async () => {
+    await adapter.writeRoutingResponse(7, {
+      orderNo: 'ORD-15',
+      partNo: 'PART-A',
+      operationNo: 30,
+      stepNo: 2,
+      nextResourceId: 42,
+      parameters: { iPar1: 11, iPar2: 22, iPar3: 33, iPar4: 44 },
+      resultCode: 0,
+      accepted: true,
+    });
+
+    const writes = opcUa.writeNodes.mock.calls[0][0];
+    expect(writes).toEqual(
+      expect.arrayContaining([
+        {
+          nodeId: 'ns=4;s=LineA.Output.Parameter.A',
+          dataType: 'UInt16',
+          value: 11,
+        },
+        {
+          nodeId: 'ns=4;s=LineA.Output.Parameter.B',
+          dataType: 'UInt16',
+          value: 22,
+        },
+        {
+          nodeId: 'ns=4;s=LineA.Output.Parameter.C',
+          dataType: 'UInt16',
+          value: 33,
+        },
+        {
+          nodeId: 'ns=4;s=LineA.Output.Parameter.D',
+          dataType: 'UInt16',
+          value: 44,
+        },
+        {
+          nodeId: 'ns=4;s=LineA.Output.Accepted',
+          dataType: 'Boolean',
+          value: true,
+        },
+      ]),
+    );
+  });
+
+  it('does not invent a fallback address when a profile signal is missing', async () => {
+    signals.delete('resourceId');
+    opcUa.readNode.mockResolvedValue(1);
+
+    await expect(adapter.readStationRequest(7)).rejects.toThrow(
+      'Signal role resourceId is not configured',
+    );
+    expect(opcUa.readNode).toHaveBeenCalledTimes(1);
+  });
+
+  it('reads recovery and completion signals through the profile', async () => {
+    opcUa.readNode
+      .mockResolvedValueOnce(501)
+      .mockResolvedValueOnce(true)
+      .mockResolvedValueOnce(false);
+    await expect(adapter.readRecoverySnapshot(7)).resolves.toEqual({
+      carrierNumber: 501,
+      requestActive: true,
+      processBusy: false,
+    });
+
+    opcUa.readNode.mockResolvedValueOnce(501);
+    await expect(adapter.readCompletedCarrierNumber(7)).resolves.toBe(501);
+    expect(opcUa.readNode).toHaveBeenLastCalledWith(
+      'ns=4;s=LineA.Process.Carrier',
+    );
+  });
+
+  it('reads a complete carrier inventory from primitive profile signals', async () => {
+    const inventorySignals = [
+      ['inventoryValid', 'ns=4;s=Inventory.Valid', 'Boolean', 'inventoryValid'],
+      ['inventoryRevision', 'ns=4;s=Inventory.Revision', 'UInt32', 'inventoryRevision'],
+      ['inventoryCapacity', 'ns=4;s=Inventory.Capacity', 'UInt16', 'inventoryCapacity'],
+      ['availableCount', 'ns=4;s=Inventory.Available', 'UInt16', 'availableCarrierCount'],
+      ['totalCount', 'ns=4;s=Inventory.Total', 'UInt16', 'totalCarrierCount'],
+      ['slot1Present', 'ns=4;s=Inventory.Slot1.Present', 'Boolean', 'slotOccupied'],
+      ['slot1Carrier', 'ns=4;s=Inventory.Slot1.Carrier', 'UInt32', 'carrierId'],
+      ['slot1Rfid', 'ns=4;s=Inventory.Slot1.Rfid', 'String', 'rfidUid'],
+      ['slot1RfidValid', 'ns=4;s=Inventory.Slot1.RfidValid', 'Boolean', 'rfidReadValid'],
+      ['slot1State', 'ns=4;s=Inventory.Slot1.State', 'String', 'carrierPhysicalState'],
+      ['slot1Reader', 'ns=4;s=Inventory.Slot1.Reader', 'String', 'carrierReaderId'],
+      ['slot1LastSeen', 'ns=4;s=Inventory.Slot1.LastSeen', 'DateTime', 'carrierLastSeen'],
+    ] as const;
+    for (const [key, nodeId, dataType, role] of inventorySignals) {
+      signals.set(
+        key,
+        configuredSignal(key, nodeId, dataType, 'read', 'machineToMes', role),
+      );
+    }
+    profileService.getProfile.mockReturnValue({
+      ...profile,
+      stations: [
+        {
+          stationId: 'carrier-store',
+          resourceId: 7,
+          resourceType: 'storage',
+          capabilities: ['inventory', 'storage'],
+          displayName: 'Carrier store',
+          enabled: true,
+          signals: [],
+          inventory: {
+            validSignalKey: 'inventoryValid',
+            revisionSignalKey: 'inventoryRevision',
+            capacitySignalKey: 'inventoryCapacity',
+            availableCountSignalKey: 'availableCount',
+            totalCountSignalKey: 'totalCount',
+            slots: [
+              {
+                slotId: 'PALLET-01',
+                presentSignalKey: 'slot1Present',
+                carrierIdSignalKey: 'slot1Carrier',
+                rfidUidSignalKey: 'slot1Rfid',
+                rfidReadValidSignalKey: 'slot1RfidValid',
+                physicalStateSignalKey: 'slot1State',
+                readerIdSignalKey: 'slot1Reader',
+                lastSeenSignalKey: 'slot1LastSeen',
+              },
+            ],
+          },
+        },
       ],
-    }).compile();
+    });
+    const values: Record<string, unknown> = {
+      'ns=4;s=Inventory.Valid': true,
+      'ns=4;s=Inventory.Revision': 18,
+      'ns=4;s=Inventory.Capacity': 4,
+      'ns=4;s=Inventory.Available': 1,
+      'ns=4;s=Inventory.Total': 1,
+      'ns=4;s=Inventory.Slot1.Present': true,
+      'ns=4;s=Inventory.Slot1.Carrier': 128,
+      'ns=4;s=Inventory.Slot1.Rfid': 'E200-128',
+      'ns=4;s=Inventory.Slot1.RfidValid': true,
+      'ns=4;s=Inventory.Slot1.State': 'stored',
+      'ns=4;s=Inventory.Slot1.Reader': 'RF210R-1',
+      'ns=4;s=Inventory.Slot1.LastSeen': new Date('2026-07-26T12:00:00Z'),
+    };
+    opcUa.readNode.mockImplementation(async (nodeId: string) => values[nodeId]);
 
-    adapter = module.get<OpcUaMachineAdapter>(OpcUaMachineAdapter);
-  });
-
-  describe('isConnected', () => {
-    it('delegates to OpcUaService.isConnected', () => {
-      mockOpcUa.isConnected.mockReturnValue(true);
-      expect(adapter.isConnected()).toBe(true);
-      expect(mockOpcUa.isConnected).toHaveBeenCalledTimes(1);
+    await expect(adapter.readCarrierInventory(7)).resolves.toEqual({
+      resourceId: 7,
+      stationId: 'carrier-store',
+      valid: true,
+      revision: 18,
+      capacity: 4,
+      availableCount: 1,
+      totalCount: 1,
+      observations: [
+        {
+          resourceId: 7,
+          stationId: 'carrier-store',
+          slotId: 'PALLET-01',
+          present: true,
+          carrierNumber: 128,
+          rfidUid: 'E200-128',
+          rfidReadValid: true,
+          physicalState: 'stored',
+          readerId: 'RF210R-1',
+          lastSeenAt: new Date('2026-07-26T12:00:00Z'),
+        },
+      ],
     });
 
-    it('returns false when OpcUaService returns false', () => {
-      mockOpcUa.isConnected.mockReturnValue(false);
-      expect(adapter.isConnected()).toBe(false);
-    });
-  });
+    values['ns=4;s=Inventory.Available'] = 0;
+    values['ns=4;s=Inventory.Total'] = 0;
+    values['ns=4;s=Inventory.Slot1.Present'] = false;
+    values['ns=4;s=Inventory.Slot1.Carrier'] = 0;
 
-  describe('getConnectionStatus', () => {
-    it('normalizes OpcUaService.getServerStatus to MachineConnectionStatus', async () => {
-      mockOpcUa.getServerStatus.mockResolvedValue({ connected: true, endpoint: 'opc.tcp://localhost:4840/UA/WaraMesTest' });
-      const status = await adapter.getConnectionStatus();
-      expect(status).toEqual({ connected: true, endpoint: 'opc.tcp://localhost:4840/UA/WaraMesTest' });
-      expect(mockOpcUa.getServerStatus).toHaveBeenCalledTimes(1);
-    });
-  });
-
-  describe('onTelemetry', () => {
-    it('delegates to OpcUaService.onTelemetry', () => {
-      const unsubscribe = adapter.onTelemetry(mockTelemetryCallback);
-      expect(mockOpcUa.onTelemetry).toHaveBeenCalledWith(mockTelemetryCallback);
-      expect(typeof unsubscribe).toBe('function');
-    });
-  });
-
-  describe('onWorkRequest', () => {
-    it('delegates to OpcUaService.onStMesRequest', () => {
-      const unsubscribe = adapter.onWorkRequest(mockWorkRequestCallback);
-      expect(mockOpcUa.onStMesRequest).toHaveBeenCalledWith(mockWorkRequestCallback);
-      expect(typeof unsubscribe).toBe('function');
-    });
-  });
-
-  describe('onProcessCompleted', () => {
-    it('delegates to OpcUaService.onProcessCompleted', () => {
-      const unsubscribe = adapter.onProcessCompleted(mockProcessCompletedCallback);
-      expect(mockOpcUa.onProcessCompleted).toHaveBeenCalledWith(mockProcessCompletedCallback);
-      expect(typeof unsubscribe).toBe('function');
-    });
-  });
-
-  describe('onConnected', () => {
-    it('delegates to OpcUaService.onConnected', () => {
-      const unsubscribe = adapter.onConnected(mockConnectedCallback);
-      expect(mockOpcUa.onConnected).toHaveBeenCalledWith(mockConnectedCallback);
-      expect(typeof unsubscribe).toBe('function');
+    const emptySnapshot = await adapter.readCarrierInventory(7);
+    expect(emptySnapshot.observations[0]).toEqual({
+      resourceId: 7,
+      stationId: 'carrier-store',
+      slotId: 'PALLET-01',
+      present: false,
     });
   });
 
-  describe('onDisconnected', () => {
-    it('delegates to OpcUaService.onDisconnected', () => {
-      const unsubscribe = adapter.onDisconnected(mockDisconnectedCallback);
-      expect(mockOpcUa.onDisconnected).toHaveBeenCalledWith(mockDisconnectedCallback);
-      expect(typeof unsubscribe).toBe('function');
-    });
+  it('uses the configured command node and datatype', async () => {
+    await adapter.executeControlCommand(7, 'start');
+
+    expect(opcUa.writeNodes).toHaveBeenCalledWith([
+      {
+        nodeId: 'ns=4;s=LineA.Commands.Run',
+        dataType: 'Boolean',
+        value: true,
+      },
+    ]);
   });
 
-  describe('readStationRequest', () => {
-    it('uses expected legacy addresses and normalizes numbers', async () => {
-      mockOpcUa.readNode
-        .mockResolvedValueOnce(123)   // uiCarrierId
-        .mockResolvedValueOnce(456);  // uiResourceId
-
-      const result = await adapter.readStationRequest(1);
-      expect(result).toEqual({ carrierNumber: 123, requestedResourceId: 456 });
-      expect(mockOpcUa.readNode).toHaveBeenCalledTimes(2);
-      expect(mockOpcUa.readNode).toHaveBeenCalledWith('ns=1;s=Station1.stMES.Query.uiCarrierId');
-      expect(mockOpcUa.readNode).toHaveBeenCalledWith('ns=1;s=Station1.stMES.Query.uiResourceId');
-    });
+  it('returns all enabled profile stations without assuming their count or IDs', () => {
+    expect(adapter.getStations()).toEqual([
+      {
+        resourceId: 7,
+        stationId: 'loading-cell',
+        displayName: 'Loading cell',
+        enabled: true,
+        routeSequence: 1,
+        operationNo: 70,
+        operation: 'Load',
+        availableCommands: ['start', 'stop', 'reset', 'pause'],
+      },
+      {
+        resourceId: 42,
+        stationId: 'inspection-cell',
+        displayName: 'Inspection cell',
+        enabled: true,
+        routeSequence: 2,
+        operationNo: 80,
+        operation: 'Inspect',
+        availableCommands: [],
+      },
+    ]);
   });
 
-  describe('markRequestBusy', () => {
-    it('writes exactly the three expected values', async () => {
-      await adapter.markRequestBusy(1);
-      expect(mockOpcUa.writeNodes).toHaveBeenCalledTimes(1);
-      expect(mockOpcUa.writeNodes).toHaveBeenCalledWith([
-        { nodeId: 'ns=1;s=Station1.stMES.Query.xQryBusy', dataType: 'Boolean', value: true },
-        { nodeId: 'ns=1;s=Station1.stMES.Query.xDone', dataType: 'Boolean', value: false },
-        { nodeId: 'ns=1;s=Station1.stMES.Query.xError', dataType: 'Boolean', value: false },
-      ]);
+  it('rejects an enabled station without a valid resource id', () => {
+    profileService.getProfile.mockReturnValue({
+      ...profile,
+      stations: [
+        {
+          ...profile.stations[0],
+          resourceId: 0,
+        },
+      ],
     });
+
+    expect(() => adapter.getStations()).toThrow(
+      'requires a positive integer resourceId',
+    );
   });
 
-  describe('writeRoutingResponse', () => {
-    it('writes response and Done/Error correctly when accepted', async () => {
-      const response: MachineRoutingResponse = {
-        orderNo: 'ORD-001',
-        partNo: 'PART-123',
-        operationNo: 10,
-        stepNo: 5,
-        nextResourceId: 2,
-        iPar1: 100,
-        iPar2: 200,
-        iPar3: 300,
-        iPar4: 400,
-        resultCode: 0,
-        accepted: true,
-      };
+  it('delegates connection state, callbacks and telemetry publication', async () => {
+    const telemetryCallback = jest.fn();
+    const workCallback = jest.fn();
+    const completionCallback = jest.fn();
+    const payload = { resourceId: 7, phase: 'accepted' };
 
-      await adapter.writeRoutingResponse(1, response);
-      expect(mockOpcUa.writeNodes).toHaveBeenCalledTimes(1);
-      const writeCall = mockOpcUa.writeNodes.mock.calls[0][0];
-      expect(writeCall).toContainEqual({ nodeId: 'ns=1;s=Station1.stMES.Query.sOrderNo', dataType: 'String', value: 'ORD-001' });
-      expect(writeCall).toContainEqual({ nodeId: 'ns=1;s=Station1.stMES.Query.xQryBusy', dataType: 'Boolean', value: false });
-      expect(writeCall).toContainEqual({ nodeId: 'ns=1;s=Station1.stMES.Query.xDone', dataType: 'Boolean', value: true });
-      expect(writeCall).toContainEqual({ nodeId: 'ns=1;s=Station1.stMES.Query.xError', dataType: 'Boolean', value: false });
+    expect(adapter.isConnected()).toBe(true);
+    await expect(adapter.getConnectionStatus()).resolves.toEqual({
+      connected: true,
+      endpoint: 'opc.tcp://machine',
     });
+    adapter.onTelemetry(telemetryCallback);
+    adapter.onWorkRequest(workCallback);
+    adapter.onProcessCompleted(completionCallback);
+    adapter.publishHandshakeEvent(payload);
 
-    it('writes response and Done/Error correctly when rejected', async () => {
-      const response: MachineRoutingResponse = {
-        orderNo: '',
-        partNo: '',
-        operationNo: 0,
-        stepNo: 0,
-        nextResourceId: 0,
-        iPar1: 0,
-        iPar2: 0,
-        iPar3: 0,
-        iPar4: 0,
-        resultCode: 404,
-        accepted: false,
-      };
-
-      await adapter.writeRoutingResponse(1, response);
-      const writeCall = mockOpcUa.writeNodes.mock.calls[0][0];
-      expect(writeCall).toContainEqual({ nodeId: 'ns=1;s=Station1.stMES.Query.xDone', dataType: 'Boolean', value: false });
-      expect(writeCall).toContainEqual({ nodeId: 'ns=1;s=Station1.stMES.Query.xError', dataType: 'Boolean', value: true });
-    });
+    expect(opcUa.onTelemetry).toHaveBeenCalledWith(telemetryCallback);
+    expect(opcUa.onStMesRequest).toHaveBeenCalledWith(workCallback);
+    expect(opcUa.onProcessCompleted).toHaveBeenCalledWith(completionCallback);
+    expect(opcUa.publishStMesEvent).toHaveBeenCalledWith(payload);
   });
-
-  describe('writeInternalError', () => {
-    it('writes the error state', async () => {
-      await adapter.writeInternalError(1, 500);
-      expect(mockOpcUa.writeNodes).toHaveBeenCalledTimes(1);
-      expect(mockOpcUa.writeNodes).toHaveBeenCalledWith([
-        { nodeId: 'ns=1;s=Station1.stMES.Query.uiResultCode', dataType: 'UInt16', value: 500 },
-        { nodeId: 'ns=1;s=Station1.stMES.Query.xQryBusy', dataType: 'Boolean', value: false },
-        { nodeId: 'ns=1;s=Station1.stMES.Query.xDone', dataType: 'Boolean', value: false },
-        { nodeId: 'ns=1;s=Station1.stMES.Query.xError', dataType: 'Boolean', value: true },
-      ]);
-    });
-  });
-
-  describe('acknowledgeRequest', () => {
-    it('resets the three handshake bits', async () => {
-      await adapter.acknowledgeRequest(1);
-      expect(mockOpcUa.writeNodes).toHaveBeenCalledTimes(1);
-      expect(mockOpcUa.writeNodes).toHaveBeenCalledWith([
-        { nodeId: 'ns=1;s=Station1.stMES.Query.xQryBusy', dataType: 'Boolean', value: false },
-        { nodeId: 'ns=1;s=Station1.stMES.Query.xDone', dataType: 'Boolean', value: false },
-        { nodeId: 'ns=1;s=Station1.stMES.Query.xError', dataType: 'Boolean', value: false },
-      ]);
-    });
-  });
-
-  describe('readCompletedCarrierNumber', () => {
-    it('reads from process data prefix and normalizes', async () => {
-      mockOpcUa.readNode.mockResolvedValueOnce(789);
-      const carrierNumber = await adapter.readCompletedCarrierNumber(1);
-      expect(carrierNumber).toBe(789);
-      expect(mockOpcUa.readNode).toHaveBeenCalledWith('ns=1;s=Station1.dbProcessData.iCarrierID');
-    });
-  });
-
-  describe('readRecoverySnapshot', () => {
-    it('normalizes carrier, request active, and process busy', async () => {
-      mockOpcUa.readNode
-        .mockResolvedValueOnce(55)   // uiCarrierId
-        .mockResolvedValueOnce(true) // xStart
-        .mockResolvedValueOnce(false); // xBusy
-
-      const snapshot = await adapter.readRecoverySnapshot(1);
-      expect(snapshot).toEqual({ carrierNumber: 55, requestActive: true, processBusy: false });
-      expect(mockOpcUa.readNode).toHaveBeenCalledTimes(3);
-      expect(mockOpcUa.readNode).toHaveBeenCalledWith('ns=1;s=Station1.stMES.Query.uiCarrierId');
-      expect(mockOpcUa.readNode).toHaveBeenCalledWith('ns=1;s=Station1.stMES.Query.xStart');
-      expect(mockOpcUa.readNode).toHaveBeenCalledWith('ns=1;s=Station1.stMES.State.xBusy');
-    });
-  });
-
-  describe('publishHandshakeEvent', () => {
-    it('delegates to OpcUaService.publishStMesEvent', () => {
-      const payload = { resourceId: 1, phase: 'requested' };
-      adapter.publishHandshakeEvent(payload);
-      expect(mockOpcUa.publishStMesEvent).toHaveBeenCalledWith(payload);
-    });
-  });
-
-  describe('executeControlCommand', () => {
-    it('maps commands to control addresses', async () => {
-      await adapter.executeControlCommand(1, 'start');
-      expect(mockOpcUa.writeNodes).toHaveBeenCalledWith([
-        { nodeId: 'ns=1;s=Station1.stMES.Control.xCmdStart', dataType: 'Boolean', value: true },
-      ]);
-
-      await adapter.executeControlCommand(1, 'stop');
-      expect(mockOpcUa.writeNodes).toHaveBeenCalledWith([
-        { nodeId: 'ns=1;s=Station1.stMES.Control.xCmdStop', dataType: 'Boolean', value: true },
-      ]);
-
-      await adapter.executeControlCommand(1, 'reset');
-      expect(mockOpcUa.writeNodes).toHaveBeenCalledWith([
-        { nodeId: 'ns=1;s=Station1.stMES.Control.xCmdReset', dataType: 'Boolean', value: true },
-      ]);
-
-      await adapter.executeControlCommand(1, 'pause');
-      expect(mockOpcUa.writeNodes).toHaveBeenCalledWith([
-        { nodeId: 'ns=1;s=Station1.stMES.Control.xCmdPause', dataType: 'Boolean', value: true },
-      ]);
-    });
-  });
-
-  describe('executeLegacyControlCommand', () => {
-    it('maps start command', async () => {
-      await adapter.executeLegacyControlCommand(1, 'start');
-      expect(mockOpcUa.writeNodes).toHaveBeenCalledWith([
-        { nodeId: 'ns=1;s=Station1.stMES.Query.xStart', dataType: 'Boolean', value: true },
-      ]);
-    });
-
-    it('maps stop command', async () => {
-      await adapter.executeLegacyControlCommand(1, 'stop');
-      expect(mockOpcUa.writeNodes).toHaveBeenCalledWith([
-        { nodeId: 'ns=1;s=Station1.stMES.Query.xQryBusy', dataType: 'Boolean', value: false },
-        { nodeId: 'ns=1;s=Station1.stMES.Query.xDone', dataType: 'Boolean', value: false },
-        { nodeId: 'ns=1;s=Station1.stMES.Query.xError', dataType: 'Boolean', value: false },
-      ]);
-    });
-
-    it('maps reset command', async () => {
-      await adapter.executeLegacyControlCommand(1, 'reset');
-      expect(mockOpcUa.writeNodes).toHaveBeenCalledWith([
-        { nodeId: 'ns=1;s=Station1.stMES.Query.xStart', dataType: 'Boolean', value: false },
-        { nodeId: 'ns=1;s=Station1.stMES.Query.xQryBusy', dataType: 'Boolean', value: false },
-        { nodeId: 'ns=1;s=Station1.stMES.Query.xDone', dataType: 'Boolean', value: false },
-        { nodeId: 'ns=1;s=Station1.stMES.Query.xError', dataType: 'Boolean', value: false },
-      ]);
-    });
-
-    it('maps pause command', async () => {
-      await adapter.executeLegacyControlCommand(1, 'pause');
-      expect(mockOpcUa.writeNodes).toHaveBeenCalledWith([
-        { nodeId: 'ns=1;s=Station1.stMES.Query.xQryBusy', dataType: 'Boolean', value: true },
-      ]);
-    });
-  });
-
-  describe('readDiagnosticAddress', () => {
-    it('delegates to OpcUaService.readNode', async () => {
-      mockOpcUa.readNode.mockResolvedValueOnce('test-value');
-      const result = await adapter.readDiagnosticAddress('ns=1;s=Test');
-      expect(result).toBe('test-value');
-      expect(mockOpcUa.readNode).toHaveBeenCalledWith('ns=1;s=Test');
-    });
-  });
-
-  describe('writeDiagnosticAddresses', () => {
-    it('maps address to nodeId and delegates to writeNodes', async () => {
-      const writes: readonly MachineAddressWrite[] = [
-        { address: 'ns=1;s=Test1', dataType: 'Boolean', value: true },
-        { address: 'ns=1;s=Test2', dataType: 'UInt16', value: 123 },
-      ];
-      await adapter.writeDiagnosticAddresses(writes);
-      expect(mockOpcUa.writeNodes).toHaveBeenCalledWith([
-        { nodeId: 'ns=1;s=Test1', dataType: 'Boolean', value: true },
-        { nodeId: 'ns=1;s=Test2', dataType: 'UInt16', value: 123 },
-      ]);
-    });
-  });
-
-  describe('getStations', () => {
-    it('returns profile stations with valid resourceId metadata', async () => {
-      const mockProfile = {
-        machineId: 'test-machine',
-        stations: [
-          { stationId: 'station-a', displayName: 'Station A', enabled: true, metadata: { resourceId: '1' }, signals: [] },
-          { stationId: 'station-b', displayName: 'Station B', enabled: true, metadata: { resourceId: '2' }, signals: [] },
-          { stationId: 'station-c', displayName: 'Station C', enabled: true, metadata: { resourceId: '3' }, signals: [] },
-        ],
-      };
-      mockMachineProfileService.getProfile.mockReturnValue(mockProfile);
-
-      const stations = adapter.getStations();
-      expect(stations).toHaveLength(3);
-      expect(stations[0]).toEqual({ resourceId: 1, stationId: 'station-a', displayName: 'Station A', enabled: true });
-      expect(stations[1]).toEqual({ resourceId: 2, stationId: 'station-b', displayName: 'Station B', enabled: true });
-      expect(stations[2]).toEqual({ resourceId: 3, stationId: 'station-c', displayName: 'Station C', enabled: true });
-    });
-
-    it('excludes disabled profile stations', async () => {
-      const mockProfile = {
-        machineId: 'test-machine',
-        stations: [
-          { stationId: 'station-a', displayName: 'Station A', enabled: true, metadata: { resourceId: '1' }, signals: [] },
-          { stationId: 'station-b', displayName: 'Station B', enabled: false, metadata: { resourceId: '2' }, signals: [] },
-        ],
-      };
-      mockMachineProfileService.getProfile.mockReturnValue(mockProfile);
-
-      const stations = adapter.getStations();
-      expect(stations).toHaveLength(1);
-      expect(stations[0].stationId).toBe('station-a');
-    });
-
-    it('returns legacy stations when profile is unavailable', async () => {
-      // Profile loading fails
-      jest.spyOn(console, 'warn').mockImplementation();
-      const adapterWithFailedProfile = require('./opcua-machine.adapter').OpcUaMachineAdapter;
-      // We need to create a fresh adapter instance with failing profile service
-      // For this test, we mock the profile service to throw
-    });
-
-    it('excludes stations without valid resourceId metadata', async () => {
-      const mockProfile = {
-        machineId: 'test-machine',
-        stations: [
-          { stationId: 'station-a', displayName: 'Station A', enabled: true, metadata: { resourceId: '1' }, signals: [] },
-          { stationId: 'station-b', displayName: 'Station B', enabled: true, metadata: {}, signals: [] },
-          { stationId: 'station-c', displayName: 'Station C', enabled: true, metadata: { resourceId: 'invalid' }, signals: [] },
-        ],
-      };
-      mockMachineProfileService.getProfile.mockReturnValue(mockProfile);
-
-      const stations = adapter.getStations();
-      expect(stations).toHaveLength(1);
-      expect(stations[0].stationId).toBe('station-a');
-    });
-
-    it('returns legacy stations when no profile stations have valid resourceId', async () => {
-      const mockProfile = {
-        machineId: 'test-machine',
-        stations: [
-          { stationId: 'station-a', displayName: 'Station A', enabled: true, metadata: {}, signals: [] },
-          { stationId: 'station-b', displayName: 'Station B', enabled: true, metadata: { resourceId: 'invalid' }, signals: [] },
-        ],
-      };
-      mockMachineProfileService.getProfile.mockReturnValue(mockProfile);
-
-      const stations = adapter.getStations();
-      expect(stations).toHaveLength(3);
-      expect(stations[0].stationId).toBe('legacy-station-1');
-      expect(stations[1].stationId).toBe('legacy-station-2');
-      expect(stations[2].stationId).toBe('legacy-station-3');
-    });
-  });
-
-  describe('profile integration', () => {
-    it('prefers profile address when identifier starts with ns=', async () => {
-      const mockProfile = {
-        machineId: 'test-machine',
-        stations: [
-          {
-            stationId: 'station-a',
-            displayName: 'Station A',
-            enabled: true,
-            metadata: { resourceId: '1' },
-            signals: [
-              { key: 'carrierId', identifier: 'ns=1;s=Station1.stMES.Query.uiCarrierId' }
-            ]
-          },
-        ],
-      };
-      mockMachineProfileService.getProfile.mockReturnValue(mockProfile);
-
-      // Test that profile address is preferred
-      mockOpcUa.readNode.mockResolvedValueOnce(123);
-      await adapter.readStationRequest(1);
-      expect(mockOpcUa.readNode).toHaveBeenCalledWith('ns=1;s=Station1.stMES.Query.uiCarrierId');
-    });
-
-    it('falls back to legacy when identifier is abstract', async () => {
-      const mockProfile = {
-        machineId: 'test-machine',
-        stations: [
-          {
-            stationId: 'station-a',
-            displayName: 'Station A',
-            enabled: true,
-            metadata: { resourceId: '1' },
-            signals: [
-              { key: 'carrierId', identifier: 'CarrierId' } // Abstract identifier
-            ]
-          },
-        ],
-      };
-      mockMachineProfileService.getProfile.mockReturnValue(mockProfile);
-
-      mockOpcUa.readNode.mockResolvedValueOnce(123);
-      await adapter.readStationRequest(1);
-      // Should fall back to legacy address
-      expect(mockOpcUa.readNode).toHaveBeenCalledWith('ns=1;s=Station1.stMES.Query.uiCarrierId');
-    });
-    });
-
-    it('readRecoverySnapshot uses profile addresses', async () => {
-      const mockProfile = {
-        machineId: 'test-machine',
-        stations: [
-          {
-            stationId: 'station-a',
-            displayName: 'Station A',
-            enabled: true,
-            metadata: { resourceId: '1' },
-            signals: [
-              { key: 'carrierId', identifier: 'ns=1;s=Station1.stMES.Query.uiCarrierId' },
-              { key: 'workRequest', identifier: 'ns=1;s=Station1.stMES.Query.xStart' },
-              { key: 'processActive', identifier: 'ns=1;s=Station1.stMES.State.xBusy' },
-            ]
-          },
-        ],
-      };
-      mockMachineProfileService.getProfile.mockReturnValue(mockProfile);
-
-      mockOpcUa.readNode
-        .mockResolvedValueOnce(55)   // carrierId
-        .mockResolvedValueOnce(true) // workRequest
-        .mockResolvedValueOnce(false); // processActive
-
-      const snapshot = await adapter.readRecoverySnapshot(1);
-      expect(snapshot).toEqual({ carrierNumber: 55, requestActive: true, processBusy: false });
-    });
-  });
+});

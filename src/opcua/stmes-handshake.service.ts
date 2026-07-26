@@ -1,7 +1,7 @@
 import { Injectable, Logger, OnModuleInit, Inject } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { DemoRoutingResultCode, RoutingService } from '../orders/routing.service';
+import { RoutingResultCode, RoutingService } from '../orders/routing.service';
 import { MACHINE_ADAPTER } from '../machines/adapters/machine-adapter.token';
 import type { MachineAdapter } from '../machines/adapters/machine-adapter.types';
 import { StMesHandshakeEntity, StMesHandshakeStatusEnum } from './stmes-handshake.entity';
@@ -57,18 +57,15 @@ export class StMesHandshakeService implements OnModuleInit {
       });
 
       const decision = await this.routing.resolveStationRequest(resourceId, request.carrierNumber);
-      const ok = decision.resultCode === DemoRoutingResultCode.OK;
+      const ok = decision.resultCode === RoutingResultCode.OK;
       const parameters = decision.parameters || {};
       const response = {
-        orderNo: decision.orderNo || '',
-        partNo: decision.partNo || '',
-        operationNo: decision.operationNo || 0,
-        stepNo: decision.stepNo || 0,
-        nextResourceId: decision.nextResourceId || 0,
-        iPar1: parameters.iPar1 || 0,
-        iPar2: parameters.iPar2 || 0,
-        iPar3: parameters.iPar3 || 0,
-        iPar4: parameters.iPar4 || 0,
+        orderNo: decision.orderNo ?? '',
+        partNo: decision.partNo ?? '',
+        operationNo: decision.operationNo ?? 0,
+        stepNo: decision.stepNo ?? 0,
+        nextResourceId: decision.nextResourceId ?? 0,
+        parameters,
         resultCode: decision.resultCode,
       };
 
@@ -94,22 +91,22 @@ export class StMesHandshakeService implements OnModuleInit {
         message: ok ? `Auftrag ${response.orderNo} an SPS uebergeben` : `Anfrage mit Resultcode ${decision.resultCode} abgewiesen`,
       });
     } catch (error) {
-      this.logger.error(`Demo stMES dispatch failed for resource ${resourceId}: ${(error as Error).message}`);
+      this.logger.error(`stMES dispatch failed for resource ${resourceId}: ${(error as Error).message}`);
       try {
-        await this.machine.writeInternalError(resourceId, DemoRoutingResultCode.INTERNAL_ERROR);
+        await this.machine.writeInternalError(resourceId, RoutingResultCode.INTERNAL_ERROR);
       } catch (writeError) {
-        this.logger.error(`Demo stMES error response failed: ${(writeError as Error).message}`);
+        this.logger.error(`stMES error response failed: ${(writeError as Error).message}`);
       }
       if (journal) {
         journal.status = StMesHandshakeStatusEnum.ERROR;
-        journal.result_code = DemoRoutingResultCode.INTERNAL_ERROR;
+        journal.result_code = RoutingResultCode.INTERNAL_ERROR;
         journal.error_message = (error as Error).message;
         await this.handshakes.save(journal);
       }
       this.machine.publishHandshakeEvent({
         resourceId,
         phase: 'error',
-        resultCode: DemoRoutingResultCode.INTERNAL_ERROR,
+        resultCode: RoutingResultCode.INTERNAL_ERROR,
         message: 'Interner Fehler bei der Stationsanfrage',
       });
     }

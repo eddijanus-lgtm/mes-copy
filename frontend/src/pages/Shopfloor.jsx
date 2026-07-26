@@ -2,14 +2,6 @@ import { useEffect, useState } from "react";
 import { api } from "../api/client.js";
 import { useShopfloorTelemetry } from "../hooks/useShopfloorTelemetry.js";
 
-const RESULT_TEXT = {
-  0: "OK",
-  1: "Carrier unbekannt",
-  2: "Auftrag oder Schritt fehlt",
-  3: "Falsche Station",
-  4: "Bereits abgeschlossen",
-  9: "Interner Fehler",
-};
 export default function ShopfloorPage() {
   const [health, setHealth] = useState(null);
   const [carriers, setCarriers] = useState([]);
@@ -17,6 +9,7 @@ export default function ShopfloorPage() {
   const [handshakeJournal, setHandshakeJournal] = useState([]);
   const [mqttHistory, setMqttHistory] = useState([]);
   const [webshopOrders, setWebshopOrders] = useState([]);
+  const [routesByOrder, setRoutesByOrder] = useState({});
   const [now, setNow] = useState(Date.now());
   const [controlLoading, setControlLoading] = useState(null);
   const { status, telemetryByResource, handshakeByResource, eventsByResource, changedAtByResource, mqttEvents, lastMessageAt, logs } = useShopfloorTelemetry();
@@ -33,20 +26,27 @@ export default function ShopfloorPage() {
   };
 
   useEffect(() => {
-    const loadStatus = () => api.get("/shopfloor/health").then(setHealth).catch(() => setHealth(null));
-    const loadFlow = () => Promise.all([api.get("/carriers"), api.get("/orders"), api.get("/shopfloor/stmes/handshakes"), api.get("/shopfloor/mqtt/messages"), api.get("/shopfloor/webshop/orders")])
+    const loadStatus = () => api.getSilent("/shopfloor/health").then(setHealth).catch(() => setHealth(null));
+    const loadFlow = () => Promise.all([api.getSilent("/carriers"), api.getSilent("/orders"), api.getSilent("/shopfloor/stmes/handshakes"), api.getSilent("/shopfloor/mqtt/messages"), api.getSilent("/shopfloor/webshop/orders")])
       .then(([carrierData, orderData, journalData, mqttData, webshopData]) => {
         setCarriers(carrierData);
         setOrders(orderData);
         setHandshakeJournal(journalData);
         setMqttHistory(mqttData);
         setWebshopOrders(Array.isArray(webshopData) ? webshopData : []);
+        const activeOrders = orderData.filter((order) => order.status === "in_progress");
+        return Promise.all(
+          activeOrders.map(async (order) => [
+            order.id,
+            await api.getSilent(`/orders/${order.id}/route`),
+          ]),
+        ).then((entries) => setRoutesByOrder(Object.fromEntries(entries)));
       })
       .catch(() => {});
     loadStatus();
     loadFlow();
-    const healthTimer = setInterval(loadStatus, 5000);
-    const flowTimer = setInterval(loadFlow, 2000);
+    const healthTimer = setInterval(loadStatus, 10_000);
+    const flowTimer = setInterval(loadFlow, 10_000);
     const clockTimer = setInterval(() => setNow(Date.now()), 1000);
     return () => {
       clearInterval(healthTimer);
@@ -57,11 +57,19 @@ export default function ShopfloorPage() {
 
   const connected = status === "connected";
   const stations = Object.values(telemetryByResource).sort((a, b) => a.payload.resourceId - b.payload.resourceId);
-  const controlStations = stations.length > 0
-    ? stations.map((msg) => ({ resourceId: msg.payload.resourceId, state: msg.payload.state }))
-    : [1, 2, 3].map((resourceId) => ({ resourceId, state: null }));
+  const profileStations = health?.machine?.stations || [];
+  const controlStations = profileStations.map((station) => {
+    const telemetry = telemetryByResource[station.resourceId]?.payload;
+    return {
+      ...station,
+      displayName: station.displayName || telemetry?.displayName,
+      signals: telemetry?.signals || {},
+      roles: telemetry?.roles || {},
+    };
+  });
   const activeShopfloorOrder = orders.find((order) => order.status === "in_progress");
   const trackedCarriers = activeShopfloorOrder ? carriers.filter((carrier) => carrier.order_id === activeShopfloorOrder.id) : [];
+  const resultCodes = health?.machine?.resultCodes || {};
 
   return (
     <div className="mes-page min-h-screen bg-neutral-50">
@@ -85,14 +93,17 @@ export default function ShopfloorPage() {
 
         <GatewayRolePanel health={health} />
 
-        <CarrierFlow order={activeShopfloorOrder} carriers={trackedCarriers} />
+        <CarrierFlow order={activeShopfloorOrder} carriers={trackedCarriers} route={routesByOrder[activeShopfloorOrder?.id] || []} />
 
         <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
           {controlStations.map((station) => (
             <MachineControlPanel
               key={station.resourceId}
               resourceId={station.resourceId}
-              stationState={station.state}
+              displayName={station.displayName}
+              signals={station.signals}
+              roles={station.roles}
+              commands={station.availableCommands || []}
               loading={controlLoading === station.resourceId}
               onControl={(command) => handleMachineControl(station.resourceId, command)}
             />
@@ -107,31 +118,34 @@ export default function ShopfloorPage() {
         {stations.map((message) => {
           const payload = message.payload;
           const resourceId = payload.resourceId;
+          const signals = payload.signals || {};
+          const roles = payload.roles || {};
           const changedAt = changedAtByResource[resourceId] || {};
           return (
             <section key={resourceId} className="space-y-3 rounded-xl border border-neutral-200 bg-white p-4 shadow-sm">
               <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
                 <div>
                   <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-neutral-400">Resource {resourceId}</p>
-                  <h2 className="font-mono text-sm font-semibold text-neutral-800">Station {resourceId} · dbProcessData [DB151]</h2>
+                  <h2 className="font-mono text-sm font-semibold text-neutral-800">{payload.displayName || payload.stationId || `Station ${resourceId}`}</h2>
                 </div>
-                <HandshakeStatus snapshot={payload.handshake} lastEvent={handshakeByResource[resourceId]} />
+                <HandshakeStatus snapshot={handshakeSnapshot(roles)} lastEvent={handshakeByResource[resourceId]} resultCodes={resultCodes} />
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
-                <MetricCard label="Werkstückträger" value={payload.iCarrierID ?? "–"} technical="iCarrierID" changed={isRecent(changedAt.iCarrierID, now)} />
-                <MetricCard label="Workplan-Schritt" value={payload.iStepNo ?? "–"} technical="iStepNo" changed={isRecent(changedAt.iStepNo, now)} />
-                <MetricCard label="Nächste Station" value={payload.iResourceID ?? "–"} technical="iResourceID" changed={isRecent(changedAt.iResourceID, now)} />
-                <MetricCard label="Parameter 1" value={payload.iPar1 ?? "–"} technical="iPar1" changed={isRecent(changedAt.iPar1, now)} />
-                <MetricCard label="Parameter 2" value={payload.iPar2 ?? "–"} technical="iPar2" changed={isRecent(changedAt.iPar2, now)} />
-                <MetricCard label="Parameter 3" value={payload.iPar3 ?? "–"} technical="iPar3" changed={isRecent(changedAt.iPar3, now)} />
-                <MetricCard label="Parameter 4" value={payload.iPar4 ?? "–"} technical="iPar4" changed={isRecent(changedAt.iPar4, now)} />
-                <MetricCard label="Prozessabschluss" value={formatTimestamp(payload.ldtTimeStamp)} technical="ldtTimeStamp" changed={isRecent(changedAt.ldtTimeStamp, now)} />
+                {Object.entries(signals).map(([key, value]) => (
+                  <MetricCard
+                    key={key}
+                    label={signalLabel(key)}
+                    value={formatSignalValue(key, value)}
+                    technical={key}
+                    changed={isRecent(changedAt[key], now)}
+                  />
+                ))}
               </div>
 
               <EventTimeline events={(eventsByResource[resourceId] || []).length > 0
                 ? eventsByResource[resourceId]
-                : handshakeJournal.filter((entry) => entry.resource_id === resourceId).reverse().map(journalEvent)} />
+                : handshakeJournal.filter((entry) => entry.resource_id === resourceId).reverse().map((entry) => journalEvent(entry, resultCodes))} />
             </section>
           );
         })}
@@ -164,10 +178,9 @@ function WebshopOrdersPanel({ orders }) {
                 <time className="shrink-0 text-[10px] text-neutral-400">{formatTimestamp(order.timestamp)}</time>
               </div>
               <div className="mt-3 grid grid-cols-2 gap-2 text-sm">
-                <MiniPayload label="Parameter 1" value={order.payload?.bDeckelfarbe} />
-                <MiniPayload label="Parameter 2" value={order.payload?.uiKugelRot} />
-                <MiniPayload label="Parameter 3" value={order.payload?.uiKugelGruen} />
-                <MiniPayload label="Parameter 4" value={order.payload?.uiKugelBlau} />
+                {Object.entries(order.payload?.parameters || {}).map(([key, value]) => (
+                  <MiniPayload key={key} label={signalLabel(key)} value={value} />
+                ))}
               </div>
             </article>
           ))}
@@ -189,7 +202,7 @@ function GatewayRolePanel({ health }) {
         </p>
       </div>
       <div className="grid gap-3 sm:grid-cols-2">
-        <GatewayAdapter title="OPC UA Adapter" active={protocols.opcua?.connected} detail={protocols.opcua?.purpose || "SPS stMES Handshake und DB151 Prozessdaten"} />
+        <GatewayAdapter title="OPC UA Adapter" active={protocols.opcua?.connected} detail={protocols.opcua?.purpose || "Profilkonfigurierte Maschinensignale und Produktionsereignisse"} />
         <GatewayAdapter title="MQTT Adapter" active={protocols.mqtt?.connected} detail={protocols.mqtt?.purpose || "Webshop-Aufträge und Broker-Telemetrie"} />
       </div>
     </section>
@@ -253,7 +266,7 @@ function MqttLivePanel({ messages, connected }) {
   );
 }
 
-function CarrierFlow({ order, carriers }) {
+function CarrierFlow({ order, carriers, route }) {
   return (
     <section className="overflow-hidden rounded-xl border border-neutral-200 bg-white text-neutral-900 shadow-sm">
       <div className="flex flex-col gap-1 border-b border-neutral-100 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
@@ -265,27 +278,37 @@ function CarrierFlow({ order, carriers }) {
       </div>
       <div className="grid gap-3 p-4 md:grid-cols-2">
         {carriers.length === 0 && <p className="text-sm text-neutral-400">Keine aktiven Carrier im Produktionsfluss.</p>}
-        {carriers.map((carrier) => <CarrierRoute key={carrier.id} carrier={carrier} />)}
+        {carriers.map((carrier) => <CarrierRoute key={carrier.id} carrier={carrier} route={route} />)}
       </div>
     </section>
   );
 }
 
-function CarrierRoute({ carrier }) {
-  const position = carrier.status === "completed" ? 3 : Math.max(0, Math.min(2, carrier.current_step_no - 1));
-  const stages = ["Schritt 1", "Schritt 2", "Schritt 3", "Fertig"];
+function CarrierRoute({ carrier, route }) {
+  const sortedRoute = [...route].sort((a, b) => a.step_no - b.step_no);
+  const stages = [
+    ...sortedRoute.map((step) => ({
+      key: step.id || step.step_no,
+      label: step.operation || `Schritt ${step.step_no}`,
+      stepNo: step.step_no,
+    })),
+    { key: "complete", label: "Fertig", stepNo: null },
+  ];
+  const position = carrier.status === "completed"
+    ? stages.length - 1
+    : Math.max(0, sortedRoute.findIndex((step) => step.step_no === carrier.current_step_no));
   return (
     <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-4">
       <div className="mb-4 flex items-center justify-between">
         <strong className="text-neutral-900">Carrier {carrier.carrier_number}</strong>
         <span className="rounded-full bg-white px-2.5 py-1 text-[11px] uppercase tracking-wide text-neutral-500 ring-1 ring-neutral-200">{carrierStatus(carrier.status)}</span>
       </div>
-      <div className="relative grid grid-cols-3">
+      <div className="relative flex">
         <div className="absolute left-[16.66%] right-[16.66%] top-2 h-0.5 bg-neutral-200" />
         {stages.map((stage, index) => (
-          <div key={stage} className="relative z-10 flex flex-col items-center gap-2 text-center text-[11px] text-neutral-500">
+          <div key={stage.key} className="relative z-10 flex min-w-0 flex-1 flex-col items-center gap-2 px-1 text-center text-[11px] text-neutral-500">
             <span className={`h-4 w-4 rounded-full border-2 ${index < position ? "border-emerald-500 bg-emerald-500" : index === position ? "border-amber-400 bg-amber-400 ring-4 ring-amber-200" : "border-neutral-300 bg-white"}`} />
-            <span className={index === position ? "font-semibold text-neutral-900" : ""}>{stage}</span>
+            <span className={index === position ? "font-semibold text-neutral-900" : ""}>{stage.label}</span>
           </div>
         ))}
       </div>
@@ -293,7 +316,7 @@ function CarrierRoute({ carrier }) {
   );
 }
 
-function HandshakeStatus({ snapshot = {}, lastEvent }) {
+function HandshakeStatus({ snapshot = {}, lastEvent, resultCodes = {} }) {
   const phase = snapshot.xQryBusy ? "busy" : snapshot.xDone ? "done" : snapshot.xError ? "error" : snapshot.xStart ? "requested" : "idle";
   const labels = { idle: "Bereit", requested: "SPS-Anfrage", busy: "MES prüft", done: "Antwort bereit", error: "Fehlerantwort" };
   const active = phase !== "idle";
@@ -308,7 +331,7 @@ function HandshakeStatus({ snapshot = {}, lastEvent }) {
       <Signal label="BUSY" active={snapshot.xQryBusy} />
       <Signal label="DONE" active={snapshot.xDone} />
       <Signal label="ERROR" active={snapshot.xError} error />
-      {resultCode !== undefined && <span className="text-xs text-neutral-500">Letztes Ergebnis: {resultCode} · {RESULT_TEXT[resultCode] || "Unbekannt"}</span>}
+      {resultCode !== undefined && <span className="text-xs text-neutral-500">Letztes Ergebnis: {resultCode} · {resultCodes[resultCode] || "Unbekannt"}</span>}
     </div>
   );
 }
@@ -338,13 +361,13 @@ function EventTimeline({ events }) {
   );
 }
 
-function journalEvent(entry) {
+function journalEvent(entry, resultCodes = {}) {
   const resultCode = entry.result_code;
   return {
     timestamp: entry.responded_at || entry.created_at,
     phase: entry.status === "error" ? "error" : "acknowledged",
     resultCode,
-    message: `Carrier ${entry.carrier_number}: ${RESULT_TEXT[resultCode] || entry.status}`,
+    message: `Carrier ${entry.carrier_number}: ${resultCodes[resultCode] || entry.status}`,
   };
 }
 
@@ -365,6 +388,30 @@ function MetricCard({ label, value, technical, changed }) {
       <p className="mt-1 font-mono text-[11px] text-neutral-400">{technical}</p>
     </div>
   );
+}
+
+function signalLabel(key) {
+  return key
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .replace(/^./, (character) => character.toUpperCase());
+}
+
+function formatSignalValue(key, value) {
+  if (value === null || value === undefined || value === "") return "–";
+  if (key === "processCompleted" || key.toLowerCase().includes("timestamp")) {
+    return formatTimestamp(value);
+  }
+  if (typeof value === "boolean") return value ? "Ja" : "Nein";
+  return typeof value === "object" ? JSON.stringify(value) : String(value);
+}
+
+function handshakeSnapshot(roles) {
+  return {
+    xStart: roles.workRequest,
+    xQryBusy: roles.requestBusy,
+    xDone: roles.requestAccepted || roles.requestCompleted,
+    xError: roles.requestRejected,
+  };
 }
 
 function formatTimestamp(value) {
@@ -396,18 +443,20 @@ const CONTROL_COMMANDS = [
   { command: "stop", label: "Stop", color: "bg-red-600 hover:bg-red-700 text-white" },
 ];
 
-function MachineControlPanel({ resourceId, stationState, loading, onControl }) {
-  const stateLabel = stationState?.xErrL0 ? "Fehler/Stop" : stationState?.xAuto ? "Auto aktiv" : stationState ? "Pausiert" : "Warte auf Telemetrie";
-  const stateColor = stationState?.xErrL0 ? "bg-red-50 text-red-700" : stationState?.xAuto ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700";
+function MachineControlPanel({ resourceId, displayName, signals, roles, commands, loading, onControl }) {
+  const hasError = Boolean(signals.stateError || signals.stateErrorL0 || signals.stateErrorL1 || signals.stateErrorL2);
+  const isActive = Boolean(roles.processActive || signals.stateAuto);
+  const stateLabel = hasError ? "Fehler/Stop" : isActive ? "Aktiv" : "Bereit";
+  const stateColor = hasError ? "bg-red-50 text-red-700" : isActive ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700";
   return (
     <section className="rounded-xl border border-neutral-200 bg-white p-4 shadow-sm">
       <div className="mb-3 flex items-center justify-between">
-        <h3 className="font-mono text-sm font-semibold text-neutral-800">Station {resourceId}</h3>
+        <h3 className="font-mono text-sm font-semibold text-neutral-800">{displayName || `Station ${resourceId}`}</h3>
         <span className={`rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider ${stateColor}`}>{stateLabel}</span>
       </div>
       <p className="mb-3 text-xs leading-5 text-neutral-500">Sendet MES-Steuerbefehle an den OPC-UA-Control-Block der Station.</p>
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-        {CONTROL_COMMANDS.map((cmd) => (
+        {CONTROL_COMMANDS.filter((cmd) => commands.includes(cmd.command)).map((cmd) => (
           <button
             key={cmd.command}
             onClick={() => onControl(cmd.command)}
@@ -417,6 +466,7 @@ function MachineControlPanel({ resourceId, stationState, loading, onControl }) {
             {loading ? "Senden..." : cmd.label}
           </button>
         ))}
+        {commands.length === 0 && <p className="col-span-full text-xs text-neutral-400">Für diese Station sind im Profil keine Steuerbefehle freigegeben.</p>}
       </div>
     </section>
   );

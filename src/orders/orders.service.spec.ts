@@ -9,6 +9,7 @@ import { OrderRouteStepEntity } from './order-route-step.entity';
 import { OrderEntity } from './order.entity';
 import { OrdersService } from './orders.service';
 import { OrderProductionLogService } from './order-production-log.service';
+import { MachineProfileService } from '../machines/profiles/machine-profile.service';
 
 describe('OrdersService', () => {
   let service: OrdersService;
@@ -38,6 +39,23 @@ describe('OrdersService', () => {
   const productionLogs = {
     finalize: jest.fn(),
     remove: jest.fn(),
+  };
+  const profiles = {
+    getProfile: jest.fn(() => ({
+      stations: [
+        {
+          stationId: 'cell-seven',
+          resourceId: 1,
+          displayName: 'Station 1',
+          enabled: true,
+          routing: {
+            sequence: 1,
+            operationNo: 25,
+            operation: 'Assemble',
+          },
+        },
+      ],
+    })),
   };
 
   beforeEach(async () => {
@@ -81,6 +99,7 @@ describe('OrdersService', () => {
           useValue: productRouteStepsRepo,
         },
         { provide: OrderProductionLogService, useValue: productionLogs },
+        { provide: MachineProfileService, useValue: profiles },
       ],
     }).compile();
 
@@ -92,6 +111,57 @@ describe('OrdersService', () => {
 
     await expect(service.create(dto)).resolves.toMatchObject(dto);
     expect(ordersRepo.create).toHaveBeenCalledWith(expect.objectContaining(dto));
+  });
+
+  it('assigns only physically available machine-managed carriers', async () => {
+    carriersRepo.find.mockResolvedValue([
+      {
+        id: 'managed-ready',
+        carrier_number: 1,
+        status: 'available',
+        inventory_managed: true,
+        physical_state: 'stored',
+        rfid_read_valid: true,
+        inventory_stale: false,
+      },
+      {
+        id: 'managed-invalid-tag',
+        carrier_number: 2,
+        status: 'available',
+        inventory_managed: true,
+        physical_state: 'stored',
+        rfid_read_valid: false,
+        inventory_stale: false,
+      },
+      {
+        id: 'managed-missing',
+        carrier_number: 3,
+        status: 'available',
+        inventory_managed: true,
+        physical_state: 'missing',
+        rfid_read_valid: true,
+        inventory_stale: false,
+      },
+      {
+        id: 'legacy-ready',
+        carrier_number: 4,
+        status: 'available',
+        inventory_managed: false,
+      },
+    ]);
+
+    const result = await service.create({
+      name: 'RFID order',
+      priority: 1,
+      machine_id: 'm1',
+      operation: 'assemble',
+      quantity: 2,
+    } as any);
+
+    expect(result.carriers.map((carrier) => carrier.id)).toEqual([
+      'managed-ready',
+      'legacy-ready',
+    ]);
   });
 
   it('returns all orders sorted by creation date', async () => {

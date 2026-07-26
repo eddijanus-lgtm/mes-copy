@@ -2,7 +2,7 @@
   "profileVersion": "1.0",
   "machineId": "simulator",
   "displayName": "Simulator",
-  "description": "Local OPC UA simulator machine for development and testing",
+  "description": "External simulated OPC UA machine for development and testing",
   "transport": "opcua",
   "operatingMode": "control",
   "connection": {
@@ -34,6 +34,9 @@
   "orderParameterDefinitions": [
     {
       "key": "iPar1",
+      "sourceKey": "bDeckelfarbe",
+      "signalKey": "parameter1",
+      "required": true,
       "label": "Deckelfarbe",
       "type": "select",
       "default_value": 1,
@@ -43,18 +46,32 @@
         { "label": "Blau", "value": 4, "available_quantity": 40 }
       ]
     },
-    { "key": "iPar2", "label": "Rote Kugeln", "type": "number", "default_value": 3, "min_value": 0, "max_value": 99, "unit": "Stk", "available_quantity": 200 },
-    { "key": "iPar3", "label": "Gruene Kugeln", "type": "number", "default_value": 5, "min_value": 0, "max_value": 99, "unit": "Stk", "available_quantity": 150 },
-    { "key": "iPar4", "label": "Blaue Kugeln", "type": "number", "default_value": 7, "min_value": 0, "max_value": 99, "unit": "Stk", "available_quantity": 90 }
+    { "key": "iPar2", "sourceKey": "uiKugelRot", "signalKey": "parameter2", "required": true, "label": "Rote Kugeln", "type": "number", "default_value": 3, "min_value": 0, "max_value": 99, "unit": "Stk", "available_quantity": 200 },
+    { "key": "iPar3", "sourceKey": "uiKugelGruen", "signalKey": "parameter3", "required": true, "label": "Gruene Kugeln", "type": "number", "default_value": 5, "min_value": 0, "max_value": 99, "unit": "Stk", "available_quantity": 150 },
+    { "key": "iPar4", "sourceKey": "uiKugelBlau", "signalKey": "parameter4", "required": true, "label": "Blaue Kugeln", "type": "number", "default_value": 7, "min_value": 0, "max_value": 99, "unit": "Stk", "available_quantity": 90 }
   ],
+  "resultCodes": {
+    "0": "OK",
+    "1": "Carrier unbekannt",
+    "2": "Auftrag oder Schritt fehlt",
+    "3": "Falsche Station",
+    "4": "Bereits abgeschlossen",
+    "9": "Interner Fehler"
+  },
   "stations": [
     {
       "stationId": "station-a",
+      "resourceId": 1,
       "displayName": "Station A",
       "description": "First assembly station",
       "enabled": true,
       "metadata": {
-        "resourceId": "1"
+        "dashboardImage": "/assets/dashboard/station-feed.png"
+      },
+      "routing": {
+        "sequence": 1,
+        "operationNo": 10,
+        "operation": "Deckelfarbe bereitstellen"
       },
       "signals": [
         {
@@ -148,11 +165,41 @@
           "required": true
         },
         {
-          "key": "custom",
-          "role": "custom",
+          "key": "parameter1",
+          "role": "routingParameter",
           "direction": "mesToMachine",
           "namespace": "station",
           "identifier": "ns=1;s=Station1.stMES.Query.iPar1",
+          "dataType": "Int16",
+          "access": "write",
+          "required": true
+        },
+        {
+          "key": "parameter2",
+          "role": "routingParameter",
+          "direction": "mesToMachine",
+          "namespace": "station",
+          "identifier": "ns=1;s=Station1.stMES.Query.iPar2",
+          "dataType": "Int16",
+          "access": "write",
+          "required": true
+        },
+        {
+          "key": "parameter3",
+          "role": "routingParameter",
+          "direction": "mesToMachine",
+          "namespace": "station",
+          "identifier": "ns=1;s=Station1.stMES.Query.iPar3",
+          "dataType": "Int16",
+          "access": "write",
+          "required": true
+        },
+        {
+          "key": "parameter4",
+          "role": "routingParameter",
+          "direction": "mesToMachine",
+          "namespace": "station",
+          "identifier": "ns=1;s=Station1.stMES.Query.iPar4",
           "dataType": "Int16",
           "access": "write",
           "required": true
@@ -189,7 +236,7 @@
         },
         {
           "key": "carrierIdProcess",
-          "role": "carrierId",
+          "role": "completedCarrierId",
           "direction": "machineToMes",
           "namespace": "station",
           "identifier": "ns=1;s=Station1.dbProcessData.iCarrierID",
@@ -202,10 +249,13 @@
           "role": "processCompleted",
           "direction": "machineToMes",
           "namespace": "station",
-          "identifier": "ns=1;s=Station1.dbProcessData.ldtTimeStamp",
-          "dataType": "DateTime",
+          "identifier": "ns=1;s=Station1.dbProcessData.xCompleted",
+          "dataType": "Boolean",
           "access": "read",
-          "required": true
+          "required": true,
+          "event": {
+            "trigger": "rising"
+          }
         },
         {
           "key": "requestCompleted",
@@ -229,7 +279,7 @@
         },
         {
           "key": "cmdStart",
-          "role": "custom",
+          "role": "controlStart",
           "direction": "mesToMachine",
           "namespace": "station",
           "identifier": "ns=1;s=Station1.stMES.Control.xCmdStart",
@@ -239,7 +289,7 @@
         },
         {
           "key": "cmdStop",
-          "role": "custom",
+          "role": "controlStop",
           "direction": "mesToMachine",
           "namespace": "station",
           "identifier": "ns=1;s=Station1.stMES.Control.xCmdStop",
@@ -249,7 +299,7 @@
         },
         {
           "key": "cmdReset",
-          "role": "custom",
+          "role": "controlReset",
           "direction": "mesToMachine",
           "namespace": "station",
           "identifier": "ns=1;s=Station1.stMES.Control.xCmdReset",
@@ -259,13 +309,33 @@
         },
         {
           "key": "cmdPause",
-          "role": "custom",
+          "role": "controlPause",
           "direction": "mesToMachine",
           "namespace": "station",
           "identifier": "ns=1;s=Station1.stMES.Control.xCmdPause",
           "dataType": "Boolean",
           "access": "write",
           "required": true
+        },
+        {
+          "key": "cycleTimeMs",
+          "role": "custom",
+          "direction": "machineToMes",
+          "namespace": "station",
+          "identifier": "ns=1;s=Station1.LineInfo.uiCycleTimeMs",
+          "dataType": "UInt32",
+          "access": "read",
+          "required": false
+        },
+        {
+          "key": "stateAuto",
+          "role": "custom",
+          "direction": "machineToMes",
+          "namespace": "station",
+          "identifier": "ns=1;s=Station1.stMES.State.xAuto",
+          "dataType": "Boolean",
+          "access": "read",
+          "required": false
         },
         {
           "key": "legacyStart",
@@ -311,11 +381,17 @@
     },
     {
       "stationId": "station-b",
+      "resourceId": 2,
       "displayName": "Station B",
       "description": "Inspection station",
       "enabled": true,
       "metadata": {
-        "resourceId": "2"
+        "dashboardImage": "/assets/dashboard/station-dose.png"
+      },
+      "routing": {
+        "sequence": 2,
+        "operationNo": 20,
+        "operation": "Kugeln dosieren"
       },
       "signals": [
         {
@@ -409,11 +485,41 @@
           "required": true
         },
         {
-          "key": "custom",
-          "role": "custom",
+          "key": "parameter1",
+          "role": "routingParameter",
           "direction": "mesToMachine",
           "namespace": "station",
           "identifier": "ns=1;s=Station2.stMES.Query.iPar1",
+          "dataType": "Int16",
+          "access": "write",
+          "required": true
+        },
+        {
+          "key": "parameter2",
+          "role": "routingParameter",
+          "direction": "mesToMachine",
+          "namespace": "station",
+          "identifier": "ns=1;s=Station2.stMES.Query.iPar2",
+          "dataType": "Int16",
+          "access": "write",
+          "required": true
+        },
+        {
+          "key": "parameter3",
+          "role": "routingParameter",
+          "direction": "mesToMachine",
+          "namespace": "station",
+          "identifier": "ns=1;s=Station2.stMES.Query.iPar3",
+          "dataType": "Int16",
+          "access": "write",
+          "required": true
+        },
+        {
+          "key": "parameter4",
+          "role": "routingParameter",
+          "direction": "mesToMachine",
+          "namespace": "station",
+          "identifier": "ns=1;s=Station2.stMES.Query.iPar4",
           "dataType": "Int16",
           "access": "write",
           "required": true
@@ -450,7 +556,7 @@
         },
         {
           "key": "carrierIdProcess",
-          "role": "carrierId",
+          "role": "completedCarrierId",
           "direction": "machineToMes",
           "namespace": "station",
           "identifier": "ns=1;s=Station2.dbProcessData.iCarrierID",
@@ -463,10 +569,13 @@
           "role": "processCompleted",
           "direction": "machineToMes",
           "namespace": "station",
-          "identifier": "ns=1;s=Station2.dbProcessData.ldtTimeStamp",
-          "dataType": "DateTime",
+          "identifier": "ns=1;s=Station2.dbProcessData.xCompleted",
+          "dataType": "Boolean",
           "access": "read",
-          "required": true
+          "required": true,
+          "event": {
+            "trigger": "rising"
+          }
         },
         {
           "key": "requestCompleted",
@@ -490,7 +599,7 @@
         },
         {
           "key": "cmdStart",
-          "role": "custom",
+          "role": "controlStart",
           "direction": "mesToMachine",
           "namespace": "station",
           "identifier": "ns=1;s=Station2.stMES.Control.xCmdStart",
@@ -500,7 +609,7 @@
         },
         {
           "key": "cmdStop",
-          "role": "custom",
+          "role": "controlStop",
           "direction": "mesToMachine",
           "namespace": "station",
           "identifier": "ns=1;s=Station2.stMES.Control.xCmdStop",
@@ -510,7 +619,7 @@
         },
         {
           "key": "cmdReset",
-          "role": "custom",
+          "role": "controlReset",
           "direction": "mesToMachine",
           "namespace": "station",
           "identifier": "ns=1;s=Station2.stMES.Control.xCmdReset",
@@ -520,13 +629,33 @@
         },
         {
           "key": "cmdPause",
-          "role": "custom",
+          "role": "controlPause",
           "direction": "mesToMachine",
           "namespace": "station",
           "identifier": "ns=1;s=Station2.stMES.Control.xCmdPause",
           "dataType": "Boolean",
           "access": "write",
           "required": true
+        },
+        {
+          "key": "cycleTimeMs",
+          "role": "custom",
+          "direction": "machineToMes",
+          "namespace": "station",
+          "identifier": "ns=1;s=Station2.LineInfo.uiCycleTimeMs",
+          "dataType": "UInt32",
+          "access": "read",
+          "required": false
+        },
+        {
+          "key": "stateAuto",
+          "role": "custom",
+          "direction": "machineToMes",
+          "namespace": "station",
+          "identifier": "ns=1;s=Station2.stMES.State.xAuto",
+          "dataType": "Boolean",
+          "access": "read",
+          "required": false
         },
         {
           "key": "legacyStart",
@@ -572,11 +701,17 @@
     },
     {
       "stationId": "station-c",
+      "resourceId": 3,
       "displayName": "Station C",
       "description": "Packing station",
       "enabled": true,
       "metadata": {
-        "resourceId": "3"
+        "dashboardImage": "/assets/dashboard/station-inspect.png"
+      },
+      "routing": {
+        "sequence": 3,
+        "operationNo": 30,
+        "operation": "Endkontrolle"
       },
       "signals": [
         {
@@ -670,11 +805,41 @@
           "required": true
         },
         {
-          "key": "custom",
-          "role": "custom",
+          "key": "parameter1",
+          "role": "routingParameter",
           "direction": "mesToMachine",
           "namespace": "station",
           "identifier": "ns=1;s=Station3.stMES.Query.iPar1",
+          "dataType": "Int16",
+          "access": "write",
+          "required": true
+        },
+        {
+          "key": "parameter2",
+          "role": "routingParameter",
+          "direction": "mesToMachine",
+          "namespace": "station",
+          "identifier": "ns=1;s=Station3.stMES.Query.iPar2",
+          "dataType": "Int16",
+          "access": "write",
+          "required": true
+        },
+        {
+          "key": "parameter3",
+          "role": "routingParameter",
+          "direction": "mesToMachine",
+          "namespace": "station",
+          "identifier": "ns=1;s=Station3.stMES.Query.iPar3",
+          "dataType": "Int16",
+          "access": "write",
+          "required": true
+        },
+        {
+          "key": "parameter4",
+          "role": "routingParameter",
+          "direction": "mesToMachine",
+          "namespace": "station",
+          "identifier": "ns=1;s=Station3.stMES.Query.iPar4",
           "dataType": "Int16",
           "access": "write",
           "required": true
@@ -711,7 +876,7 @@
         },
         {
           "key": "carrierIdProcess",
-          "role": "carrierId",
+          "role": "completedCarrierId",
           "direction": "machineToMes",
           "namespace": "station",
           "identifier": "ns=1;s=Station3.dbProcessData.iCarrierID",
@@ -724,10 +889,13 @@
           "role": "processCompleted",
           "direction": "machineToMes",
           "namespace": "station",
-          "identifier": "ns=1;s=Station3.dbProcessData.ldtTimeStamp",
-          "dataType": "DateTime",
+          "identifier": "ns=1;s=Station3.dbProcessData.xCompleted",
+          "dataType": "Boolean",
           "access": "read",
-          "required": true
+          "required": true,
+          "event": {
+            "trigger": "rising"
+          }
         },
         {
           "key": "requestCompleted",
@@ -751,7 +919,7 @@
         },
         {
           "key": "cmdStart",
-          "role": "custom",
+          "role": "controlStart",
           "direction": "mesToMachine",
           "namespace": "station",
           "identifier": "ns=1;s=Station3.stMES.Control.xCmdStart",
@@ -761,7 +929,7 @@
         },
         {
           "key": "cmdStop",
-          "role": "custom",
+          "role": "controlStop",
           "direction": "mesToMachine",
           "namespace": "station",
           "identifier": "ns=1;s=Station3.stMES.Control.xCmdStop",
@@ -771,7 +939,7 @@
         },
         {
           "key": "cmdReset",
-          "role": "custom",
+          "role": "controlReset",
           "direction": "mesToMachine",
           "namespace": "station",
           "identifier": "ns=1;s=Station3.stMES.Control.xCmdReset",
@@ -781,13 +949,33 @@
         },
         {
           "key": "cmdPause",
-          "role": "custom",
+          "role": "controlPause",
           "direction": "mesToMachine",
           "namespace": "station",
           "identifier": "ns=1;s=Station3.stMES.Control.xCmdPause",
           "dataType": "Boolean",
           "access": "write",
           "required": true
+        },
+        {
+          "key": "cycleTimeMs",
+          "role": "custom",
+          "direction": "machineToMes",
+          "namespace": "station",
+          "identifier": "ns=1;s=Station3.LineInfo.uiCycleTimeMs",
+          "dataType": "UInt32",
+          "access": "read",
+          "required": false
+        },
+        {
+          "key": "stateAuto",
+          "role": "custom",
+          "direction": "machineToMes",
+          "namespace": "station",
+          "identifier": "ns=1;s=Station3.stMES.State.xAuto",
+          "dataType": "Boolean",
+          "access": "read",
+          "required": false
         },
         {
           "key": "legacyStart",
@@ -828,6 +1016,437 @@
           "dataType": "Boolean",
           "access": "write",
           "required": true
+        }
+      ]
+    },
+    {
+      "stationId": "carrier-inventory",
+      "resourceId": 100,
+      "resourceType": "inventory",
+      "capabilities": ["inventory", "storage"],
+      "displayName": "Demo-Palettenlager",
+      "description": "Konfigurierbares RFID-Carrier-Inventar der externen Testmaschine",
+      "enabled": true,
+      "inventory": {
+        "validSignalKey": "inventoryValid",
+        "revisionSignalKey": "inventoryRevision",
+        "capacitySignalKey": "inventoryCapacity",
+        "availableCountSignalKey": "availableCarrierCount",
+        "totalCountSignalKey": "totalCarrierCount",
+        "slots": [
+          {
+            "slotId": "PALLET-01",
+            "presentSignalKey": "slot1Occupied",
+            "carrierIdSignalKey": "slot1CarrierId",
+            "rfidUidSignalKey": "slot1RfidUid",
+            "rfidReadValidSignalKey": "slot1RfidReadValid",
+            "physicalStateSignalKey": "slot1PhysicalState",
+            "readerIdSignalKey": "slot1ReaderId",
+            "lastSeenSignalKey": "slot1LastSeen"
+          },
+          {
+            "slotId": "PALLET-02",
+            "presentSignalKey": "slot2Occupied",
+            "carrierIdSignalKey": "slot2CarrierId",
+            "rfidUidSignalKey": "slot2RfidUid",
+            "rfidReadValidSignalKey": "slot2RfidReadValid",
+            "physicalStateSignalKey": "slot2PhysicalState",
+            "readerIdSignalKey": "slot2ReaderId",
+            "lastSeenSignalKey": "slot2LastSeen"
+          },
+          {
+            "slotId": "PALLET-03",
+            "presentSignalKey": "slot3Occupied",
+            "carrierIdSignalKey": "slot3CarrierId",
+            "rfidUidSignalKey": "slot3RfidUid",
+            "rfidReadValidSignalKey": "slot3RfidReadValid",
+            "physicalStateSignalKey": "slot3PhysicalState",
+            "readerIdSignalKey": "slot3ReaderId",
+            "lastSeenSignalKey": "slot3LastSeen"
+          },
+          {
+            "slotId": "PALLET-04",
+            "presentSignalKey": "slot4Occupied",
+            "carrierIdSignalKey": "slot4CarrierId",
+            "rfidUidSignalKey": "slot4RfidUid",
+            "rfidReadValidSignalKey": "slot4RfidReadValid",
+            "physicalStateSignalKey": "slot4PhysicalState",
+            "readerIdSignalKey": "slot4ReaderId",
+            "lastSeenSignalKey": "slot4LastSeen"
+          }
+        ]
+      },
+      "signals": [
+        {
+          "key": "inventoryValid",
+          "role": "inventoryValid",
+          "direction": "machineToMes",
+          "namespace": "station",
+          "identifier": "ns=1;s=CarrierInventory.Summary.xValid",
+          "dataType": "Boolean",
+          "access": "read",
+          "required": true
+        },
+        {
+          "key": "inventoryRevision",
+          "role": "inventoryRevision",
+          "direction": "machineToMes",
+          "namespace": "station",
+          "identifier": "ns=1;s=CarrierInventory.Summary.udRevision",
+          "dataType": "UInt32",
+          "access": "read",
+          "required": true,
+          "event": { "trigger": "change" }
+        },
+        {
+          "key": "inventoryCapacity",
+          "role": "inventoryCapacity",
+          "direction": "machineToMes",
+          "namespace": "station",
+          "identifier": "ns=1;s=CarrierInventory.Summary.uiCapacity",
+          "dataType": "UInt16",
+          "access": "read",
+          "required": true
+        },
+        {
+          "key": "availableCarrierCount",
+          "role": "availableCarrierCount",
+          "direction": "machineToMes",
+          "namespace": "station",
+          "identifier": "ns=1;s=CarrierInventory.Summary.uiAvailableCount",
+          "dataType": "UInt16",
+          "access": "read",
+          "required": true
+        },
+        {
+          "key": "totalCarrierCount",
+          "role": "totalCarrierCount",
+          "direction": "machineToMes",
+          "namespace": "station",
+          "identifier": "ns=1;s=CarrierInventory.Summary.uiTotalCount",
+          "dataType": "UInt16",
+          "access": "read",
+          "required": true
+        },
+        {
+          "key": "slot1Occupied",
+          "role": "slotOccupied",
+          "direction": "machineToMes",
+          "namespace": "station",
+          "identifier": "ns=1;s=CarrierInventory.Slots.1.xOccupied",
+          "dataType": "Boolean",
+          "access": "read",
+          "required": true
+        },
+        {
+          "key": "slot1Id",
+          "role": "slotId",
+          "direction": "machineToMes",
+          "namespace": "station",
+          "identifier": "ns=1;s=CarrierInventory.Slots.1.sSlotId",
+          "dataType": "String",
+          "access": "read",
+          "required": true
+        },
+        {
+          "key": "slot1CarrierId",
+          "role": "carrierId",
+          "direction": "machineToMes",
+          "namespace": "station",
+          "identifier": "ns=1;s=CarrierInventory.Slots.1.uiCarrierId",
+          "dataType": "UInt32",
+          "access": "read",
+          "required": true
+        },
+        {
+          "key": "slot1RfidUid",
+          "role": "rfidUid",
+          "direction": "machineToMes",
+          "namespace": "station",
+          "identifier": "ns=1;s=CarrierInventory.Slots.1.sRfidUid",
+          "dataType": "String",
+          "access": "read",
+          "required": false
+        },
+        {
+          "key": "slot1RfidReadValid",
+          "role": "rfidReadValid",
+          "direction": "machineToMes",
+          "namespace": "station",
+          "identifier": "ns=1;s=CarrierInventory.Slots.1.xRfidReadValid",
+          "dataType": "Boolean",
+          "access": "read",
+          "required": false
+        },
+        {
+          "key": "slot1PhysicalState",
+          "role": "carrierPhysicalState",
+          "direction": "machineToMes",
+          "namespace": "station",
+          "identifier": "ns=1;s=CarrierInventory.Slots.1.sPhysicalState",
+          "dataType": "String",
+          "access": "read",
+          "required": false
+        },
+        {
+          "key": "slot1ReaderId",
+          "role": "carrierReaderId",
+          "direction": "machineToMes",
+          "namespace": "station",
+          "identifier": "ns=1;s=CarrierInventory.Slots.1.sReaderId",
+          "dataType": "String",
+          "access": "read",
+          "required": false
+        },
+        {
+          "key": "slot1LastSeen",
+          "role": "carrierLastSeen",
+          "direction": "machineToMes",
+          "namespace": "station",
+          "identifier": "ns=1;s=CarrierInventory.Slots.1.ldtLastSeen",
+          "dataType": "DateTime",
+          "access": "read",
+          "required": false
+        },
+        {
+          "key": "slot2Occupied",
+          "role": "slotOccupied",
+          "direction": "machineToMes",
+          "namespace": "station",
+          "identifier": "ns=1;s=CarrierInventory.Slots.2.xOccupied",
+          "dataType": "Boolean",
+          "access": "read",
+          "required": true
+        },
+        {
+          "key": "slot2Id",
+          "role": "slotId",
+          "direction": "machineToMes",
+          "namespace": "station",
+          "identifier": "ns=1;s=CarrierInventory.Slots.2.sSlotId",
+          "dataType": "String",
+          "access": "read",
+          "required": true
+        },
+        {
+          "key": "slot2CarrierId",
+          "role": "carrierId",
+          "direction": "machineToMes",
+          "namespace": "station",
+          "identifier": "ns=1;s=CarrierInventory.Slots.2.uiCarrierId",
+          "dataType": "UInt32",
+          "access": "read",
+          "required": true
+        },
+        {
+          "key": "slot2RfidUid",
+          "role": "rfidUid",
+          "direction": "machineToMes",
+          "namespace": "station",
+          "identifier": "ns=1;s=CarrierInventory.Slots.2.sRfidUid",
+          "dataType": "String",
+          "access": "read",
+          "required": false
+        },
+        {
+          "key": "slot2RfidReadValid",
+          "role": "rfidReadValid",
+          "direction": "machineToMes",
+          "namespace": "station",
+          "identifier": "ns=1;s=CarrierInventory.Slots.2.xRfidReadValid",
+          "dataType": "Boolean",
+          "access": "read",
+          "required": false
+        },
+        {
+          "key": "slot2PhysicalState",
+          "role": "carrierPhysicalState",
+          "direction": "machineToMes",
+          "namespace": "station",
+          "identifier": "ns=1;s=CarrierInventory.Slots.2.sPhysicalState",
+          "dataType": "String",
+          "access": "read",
+          "required": false
+        },
+        {
+          "key": "slot2ReaderId",
+          "role": "carrierReaderId",
+          "direction": "machineToMes",
+          "namespace": "station",
+          "identifier": "ns=1;s=CarrierInventory.Slots.2.sReaderId",
+          "dataType": "String",
+          "access": "read",
+          "required": false
+        },
+        {
+          "key": "slot2LastSeen",
+          "role": "carrierLastSeen",
+          "direction": "machineToMes",
+          "namespace": "station",
+          "identifier": "ns=1;s=CarrierInventory.Slots.2.ldtLastSeen",
+          "dataType": "DateTime",
+          "access": "read",
+          "required": false
+        },
+        {
+          "key": "slot3Occupied",
+          "role": "slotOccupied",
+          "direction": "machineToMes",
+          "namespace": "station",
+          "identifier": "ns=1;s=CarrierInventory.Slots.3.xOccupied",
+          "dataType": "Boolean",
+          "access": "read",
+          "required": true
+        },
+        {
+          "key": "slot3Id",
+          "role": "slotId",
+          "direction": "machineToMes",
+          "namespace": "station",
+          "identifier": "ns=1;s=CarrierInventory.Slots.3.sSlotId",
+          "dataType": "String",
+          "access": "read",
+          "required": true
+        },
+        {
+          "key": "slot3CarrierId",
+          "role": "carrierId",
+          "direction": "machineToMes",
+          "namespace": "station",
+          "identifier": "ns=1;s=CarrierInventory.Slots.3.uiCarrierId",
+          "dataType": "UInt32",
+          "access": "read",
+          "required": true
+        },
+        {
+          "key": "slot3RfidUid",
+          "role": "rfidUid",
+          "direction": "machineToMes",
+          "namespace": "station",
+          "identifier": "ns=1;s=CarrierInventory.Slots.3.sRfidUid",
+          "dataType": "String",
+          "access": "read",
+          "required": false
+        },
+        {
+          "key": "slot3RfidReadValid",
+          "role": "rfidReadValid",
+          "direction": "machineToMes",
+          "namespace": "station",
+          "identifier": "ns=1;s=CarrierInventory.Slots.3.xRfidReadValid",
+          "dataType": "Boolean",
+          "access": "read",
+          "required": false
+        },
+        {
+          "key": "slot3PhysicalState",
+          "role": "carrierPhysicalState",
+          "direction": "machineToMes",
+          "namespace": "station",
+          "identifier": "ns=1;s=CarrierInventory.Slots.3.sPhysicalState",
+          "dataType": "String",
+          "access": "read",
+          "required": false
+        },
+        {
+          "key": "slot3ReaderId",
+          "role": "carrierReaderId",
+          "direction": "machineToMes",
+          "namespace": "station",
+          "identifier": "ns=1;s=CarrierInventory.Slots.3.sReaderId",
+          "dataType": "String",
+          "access": "read",
+          "required": false
+        },
+        {
+          "key": "slot3LastSeen",
+          "role": "carrierLastSeen",
+          "direction": "machineToMes",
+          "namespace": "station",
+          "identifier": "ns=1;s=CarrierInventory.Slots.3.ldtLastSeen",
+          "dataType": "DateTime",
+          "access": "read",
+          "required": false
+        },
+        {
+          "key": "slot4Occupied",
+          "role": "slotOccupied",
+          "direction": "machineToMes",
+          "namespace": "station",
+          "identifier": "ns=1;s=CarrierInventory.Slots.4.xOccupied",
+          "dataType": "Boolean",
+          "access": "read",
+          "required": true
+        },
+        {
+          "key": "slot4Id",
+          "role": "slotId",
+          "direction": "machineToMes",
+          "namespace": "station",
+          "identifier": "ns=1;s=CarrierInventory.Slots.4.sSlotId",
+          "dataType": "String",
+          "access": "read",
+          "required": true
+        },
+        {
+          "key": "slot4CarrierId",
+          "role": "carrierId",
+          "direction": "machineToMes",
+          "namespace": "station",
+          "identifier": "ns=1;s=CarrierInventory.Slots.4.uiCarrierId",
+          "dataType": "UInt32",
+          "access": "read",
+          "required": true
+        },
+        {
+          "key": "slot4RfidUid",
+          "role": "rfidUid",
+          "direction": "machineToMes",
+          "namespace": "station",
+          "identifier": "ns=1;s=CarrierInventory.Slots.4.sRfidUid",
+          "dataType": "String",
+          "access": "read",
+          "required": false
+        },
+        {
+          "key": "slot4RfidReadValid",
+          "role": "rfidReadValid",
+          "direction": "machineToMes",
+          "namespace": "station",
+          "identifier": "ns=1;s=CarrierInventory.Slots.4.xRfidReadValid",
+          "dataType": "Boolean",
+          "access": "read",
+          "required": false
+        },
+        {
+          "key": "slot4PhysicalState",
+          "role": "carrierPhysicalState",
+          "direction": "machineToMes",
+          "namespace": "station",
+          "identifier": "ns=1;s=CarrierInventory.Slots.4.sPhysicalState",
+          "dataType": "String",
+          "access": "read",
+          "required": false
+        },
+        {
+          "key": "slot4ReaderId",
+          "role": "carrierReaderId",
+          "direction": "machineToMes",
+          "namespace": "station",
+          "identifier": "ns=1;s=CarrierInventory.Slots.4.sReaderId",
+          "dataType": "String",
+          "access": "read",
+          "required": false
+        },
+        {
+          "key": "slot4LastSeen",
+          "role": "carrierLastSeen",
+          "direction": "machineToMes",
+          "namespace": "station",
+          "identifier": "ns=1;s=CarrierInventory.Slots.4.ldtLastSeen",
+          "dataType": "DateTime",
+          "access": "read",
+          "required": false
         }
       ]
     }

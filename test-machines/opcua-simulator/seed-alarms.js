@@ -1,5 +1,7 @@
 require('dotenv').config();
 
+// Test-machine fixture. It is deliberately outside the MES runtime.
+
 const baseUrl = process.env.MES_BASE_URL || 'http://localhost:3000/api/v1';
 const username = process.env.DEMO_ADMIN_USERNAME;
 const password = process.env.DEMO_ADMIN_PASSWORD;
@@ -25,7 +27,7 @@ async function seed() {
   const token = login.access_token;
 
   const machines = await request('/machines', {}, token);
-  if (!machines.length) throw new Error('No machines found. Run seed:stmes-demo first.');
+  if (!machines.length) throw new Error('No machines found. Run seed:test-machine first.');
 
   console.log('Machines available:', machines.map((m) => m.name));
 

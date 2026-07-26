@@ -188,7 +188,7 @@ _Letzte Aktualisierung: 2026-07-22T11:42:00+02:00_
 - DTO-Laufzeitimports, Bulk-Validierung, UUID-, Integer-, Enum-, Datums- und Query-Validierung korrigiert.
 - Öffentliche Seed-Route und festes Default-Passwort entfernt.
 - Lokalen Admin-Bootstrap `npm run create-admin` ergänzt.
-- OPC-UA-Testserver `npm run start:opcua-test` mit vier simulierten Machine1-Nodes erstellt.
+- Externe OPC-UA-Testmaschine `npm run start:test-machine` mit vier simulierten Machine1-Nodes erstellt.
 - OPC-UA-Client verbindet sich real, erstellt eine Session, liest sekündlich Messwerte und verbindet sich nach Ausfall automatisch neu.
 - Globale `uncaughtException`-/`unhandledRejection`-Unterdrückung entfernt; MQTT-Fehler lokal behandelt.
 - Authentifizierten WebSocket `/api/edge/ws` mit JWT-Handshake und OPC-UA-/MQTT-Telemetrie implementiert.
@@ -227,7 +227,7 @@ _Letzte Aktualisierung: 2026-07-22T11:42:00+02:00_
 - Transaktionale Carrier-Auflösung und parallele Verarbeitung je Station implementiert.
 - Subscription auf DB151-Zeitstempel schließt Routenschritte ab, schaltet Carrier weiter und aktualisiert Auftragsfortschritt.
 - Demo-Resultcodes 0, 1, 2, 3, 4 und 9 definiert; Wiederholungen abgeschlossener Schritte sind idempotent.
-- Reproduzierbaren, klar als Testdaten markierten Seed `npm run seed:stmes-demo` ergänzt.
+- Reproduzierbaren, klar als Testdaten markierten Seed `npm run seed:test-machine` ergänzt.
 - Multi-Station-WebSocket und Edge-Anzeige verifiziert; beide Resource-IDs 1 und 2 empfangen.
 - Erfolgreich getestet: beide Stationen Resultcode 0, Carrier 128 auf Schritt 2 und Carrier 129 abgeschlossen.
 - Modellprüfung korrigiert: Routenschritte sind wiederverwendbare Definitionen; Ausführungsstatus wird pro Carrier und Handshake gespeichert, damit mehrere Carrier denselben Workplan nutzen können.
@@ -305,7 +305,7 @@ _Letzte Aktualisierung: 2026-07-22T11:42:00+02:00_
 ### [15:50] Phase 2/3 abgeschlossen und stMES-Demo stabilisiert
 **Prompts:** "mache phase 2 alarme weiter" / "weiter" / "dann phase 3" / "DEMO-ORDER-001 wurde angelegt, sieht aber nicht so aus als würde sie bearbeitet werden" / "aktualisiere die roadmap"
 - Phase 2 vollständig abgeschlossen: Alarme mit Inline-Acknowledge, Bulk-Operationen und CSV-Export; Traces mit `key_data_point`- und Min/Max-Value-Filter; Machines mit CSV-Template und CSV-Bulkimport.
-- Beispielalarm-Seed `tools/seed-demo-alarms.js` ergänzt und 12 Testalarme erzeugt; Admin-Passwort lokal wieder auf `admin123!` gesetzt.
+- Beispielalarm-Seed `test-machines/opcua-simulator/seed-alarms.js` ergänzt und 12 Testalarme erzeugt; Admin-Passwort lokal wieder auf `admin123!` gesetzt.
 - Phase 3 technisch umgesetzt: Docker Compose auf `timescale/timescaledb:latest-pg16`, TimescaleDB-Container `mes_db` auf Port 5433, `data_points` als Hypertable, tägliches Chunking, Compression ab 7 Tagen, Retention 90 Tage und Continuous Aggregate `data_points_1min`.
 - Reproduzierbare Skripte ergänzt: `npm run phase3:apply` und `npm run benchmark:timescale`.
 - Lokaler Benchmark: 10.000 Messpunkte in ca. 0,28 s, rund 36.364 writes/sec. Funktional erfolgreich, Roadmap-Ziel >50K/sec noch offen für spätere Optimierung.

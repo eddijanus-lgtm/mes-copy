@@ -3,12 +3,17 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { OrderEntity } from './order.entity';
 import type { CreateOrderDto, UpdateOrderDto } from './order.dto';
-import { CarrierEntity, CarrierStatusEnum } from '../carriers/carrier.entity';
+import {
+  CarrierEntity,
+  CarrierStatusEnum,
+  isCarrierPhysicallyAvailable,
+} from '../carriers/carrier.entity';
 import { OrderRouteStepEntity } from './order-route-step.entity';
 import { MachineEntity } from '../machines/machine.entity';
 import { ProductEntity } from '../products/product.entity';
 import { ProductRouteStepEntity } from '../products/product-route-step.entity';
 import { OrderProductionLogService } from './order-production-log.service';
+import { MachineProfileService } from '../machines/profiles/machine-profile.service';
 
 @Injectable()
 export class OrdersService {
@@ -26,13 +31,16 @@ export class OrdersService {
     @InjectRepository(ProductRouteStepEntity)
     private readonly productRouteStepsRepo: Repository<ProductRouteStepEntity>,
     private readonly productionLogs: OrderProductionLogService,
+    private readonly profiles: MachineProfileService,
   ) {}
 
   async create(dto: CreateOrderDto) {
-    const availableCarriers = await this.carriersRepo.find({
-      where: { status: CarrierStatusEnum.AVAILABLE },
-      order: { carrier_number: 'ASC' },
-    });
+    const availableCarriers = (
+      await this.carriersRepo.find({
+        where: { status: CarrierStatusEnum.AVAILABLE },
+        order: { carrier_number: 'ASC' },
+      })
+    ).filter(isCarrierPhysicallyAvailable);
 
     if (availableCarriers.length < dto.quantity) {
       throw new BadRequestException(
@@ -65,7 +73,7 @@ export class OrdersService {
     const carriersToAssign = availableCarriers.slice(0, dto.quantity);
     for (const carrier of carriersToAssign) {
       carrier.order_id = savedOrder.id;
-      carrier.current_step_no = 1;
+      carrier.current_step_no = route[0].step_no;
       carrier.current_resource_id = null;
       carrier.status = CarrierStatusEnum.ASSIGNED;
     }
@@ -119,7 +127,7 @@ export class OrdersService {
       for (const c of carriers) {
         c.status = CarrierStatusEnum.AVAILABLE;
         c.order_id = null;
-        c.current_step_no = 1;
+        c.current_step_no = null;
         c.current_resource_id = null;
       }
       await this.carriersRepo.save(carriers);
@@ -143,20 +151,32 @@ export class OrdersService {
 
     if (productId) return this.productRouteSteps(productId, startMachine.resource_id, productionParameters);
 
-    const lineMachines = await this.machinesRepo.find({
-      where: { location: startMachine.location, opcua_enabled: true },
-      order: { resource_id: 'ASC' },
-    });
-    const routeMachines = lineMachines.filter((machine) =>
-      machine.resource_id && machine.resource_id >= startMachine.resource_id!,
+    const profileRoute = this.profiles
+      .getProfile()
+      .stations.filter(
+        (station) =>
+          station.enabled &&
+          station.routing &&
+          station.routing.enabled !== false,
+      )
+      .sort(
+        (left, right) =>
+          left.routing!.sequence - right.routing!.sequence,
+      );
+    const startIndex = profileRoute.findIndex(
+      (station) => station.resourceId === startMachine.resource_id,
     );
-    if (!routeMachines.length) throw new BadRequestException('Selected start station is not part of a routable line');
+    if (startIndex < 0) {
+      throw new BadRequestException(
+        'Selected start station is not part of the configured profile route',
+      );
+    }
 
-    return routeMachines.map((machine, index) => ({
+    return profileRoute.slice(startIndex).map((station, index) => ({
       step_no: index + 1,
-      resource_id: machine.resource_id!,
-      operation_no: (index + 1) * 10,
-      operation: machine.name,
+      resource_id: station.resourceId,
+      operation_no: station.routing!.operationNo,
+      operation: station.routing!.operation,
       parameters: productionParameters,
     }));
   }

@@ -9,6 +9,10 @@ export type MachineControlCommand =
 export interface MachineConnectionStatus {
   readonly connected: boolean;
   readonly endpoint: string;
+  readonly machineId?: string;
+  readonly displayName?: string;
+  readonly operatingMode?: 'observe' | 'validate' | 'control';
+  readonly resultCodes?: Readonly<Record<string, string>>;
 }
 
 export interface MachineStationRequest {
@@ -22,10 +26,7 @@ export interface MachineRoutingResponse {
   readonly operationNo: number;
   readonly stepNo: number;
   readonly nextResourceId: number;
-  readonly iPar1: number;
-  readonly iPar2: number;
-  readonly iPar3: number;
-  readonly iPar4: number;
+  readonly parameters: Readonly<Record<string, number>>;
   readonly resultCode: number;
   readonly accepted: boolean;
 }
@@ -34,6 +35,30 @@ export interface MachineRecoverySnapshot {
   readonly carrierNumber: number;
   readonly requestActive: boolean;
   readonly processBusy: boolean;
+}
+
+export interface MachineCarrierObservation {
+  readonly resourceId: number;
+  readonly stationId: string;
+  readonly slotId: string;
+  readonly present: boolean;
+  readonly carrierNumber?: number;
+  readonly rfidUid?: string;
+  readonly rfidReadValid?: boolean;
+  readonly physicalState?: string;
+  readonly readerId?: string;
+  readonly lastSeenAt?: Date;
+}
+
+export interface MachineCarrierInventorySnapshot {
+  readonly resourceId: number;
+  readonly stationId: string;
+  readonly valid: boolean;
+  readonly revision: number | string;
+  readonly capacity?: number;
+  readonly availableCount: number;
+  readonly totalCount: number;
+  readonly observations: readonly MachineCarrierObservation[];
 }
 
 export interface MachineAddressWrite {
@@ -47,10 +72,25 @@ export interface MachineStationDescriptor {
   readonly stationId: string;
   readonly displayName: string;
   readonly enabled: boolean;
+  readonly routeSequence?: number;
+  readonly operationNo?: number;
+  readonly operation?: string;
+  readonly resourceType?: 'production' | 'inventory' | 'storage' | 'hybrid';
+  readonly capabilities?: readonly (
+    | 'production'
+    | 'routing'
+    | 'control'
+    | 'inventory'
+    | 'storage'
+  )[];
+  readonly availableCommands: readonly MachineControlCommand[];
 }
 
 export interface MachineOrderParameterDefinition {
   readonly key: string;
+  readonly sourceKey?: string;
+  readonly signalKey?: string;
+  readonly required?: boolean;
   readonly label: string;
   readonly type: 'number' | 'select';
   readonly default_value?: number;
@@ -84,6 +124,10 @@ export interface MachineAdapter {
   onConnected(callback: () => void): () => void;
   onDisconnected(callback: (reason: string) => void): () => void;
 
+  onCarrierInventoryChanged?(
+    callback: (snapshot: MachineCarrierInventorySnapshot) => void,
+  ): () => void;
+
   readStationRequest(resourceId: number): Promise<MachineStationRequest>;
   markRequestBusy(resourceId: number): Promise<void>;
 
@@ -105,16 +149,15 @@ export interface MachineAdapter {
     resourceId: number,
   ): Promise<MachineRecoverySnapshot>;
 
+  readCarrierInventory?(
+    resourceId: number,
+  ): Promise<MachineCarrierInventorySnapshot>;
+
   publishHandshakeEvent(
     payload: Readonly<Record<string, unknown>>,
   ): void;
 
   executeControlCommand(
-    resourceId: number,
-    command: MachineControlCommand,
-  ): Promise<void>;
-
-  executeLegacyControlCommand(
     resourceId: number,
     command: MachineControlCommand,
   ): Promise<void>;

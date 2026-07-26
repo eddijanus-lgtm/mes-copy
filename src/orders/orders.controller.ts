@@ -23,13 +23,6 @@ export class OrdersController {
   @Roles(UserRoleEnum.ADMIN, UserRoleEnum.OPERATOR)
   create(@Body() dto: CreateOrderDto) { return this.ordersService.create(dto); }
 
-  @Post('demo-production')
-  @Roles(UserRoleEnum.ADMIN, UserRoleEnum.OPERATOR)
-  async createDemoProductionOrder(@Body() dto: CreateOrderDto) {
-    const order = await this.ordersService.create(dto);
-    return this.routingService.releaseDemoProductionOrder(order.id, order.quantity);
-  }
-
   @Get()
   @Roles(UserRoleEnum.ADMIN, UserRoleEnum.OPERATOR, UserRoleEnum.VIEWER)
   findAll() { return this.ordersService.findAll(); }

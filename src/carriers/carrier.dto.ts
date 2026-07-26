@@ -13,7 +13,7 @@ export class AssignCarrierDto {
 
   @IsInt()
   @Min(1)
-  current_step_no = 1;
+  current_step_no: number;
 }
 
 export class UpdateCarrierDto {

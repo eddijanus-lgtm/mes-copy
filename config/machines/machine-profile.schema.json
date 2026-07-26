@@ -50,6 +50,12 @@
         "$ref": "#/$defs/orderParameterDefinition"
       }
     },
+    "resultCodes": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
     "metadata": {
       "type": "object",
       "additionalProperties": {
@@ -205,6 +211,10 @@
           "type": "string",
           "minLength": 1
         },
+        "resourceId": {
+          "type": "integer",
+          "minimum": 1
+        },
         "displayName": {
           "type": "string",
           "minLength": 1
@@ -215,12 +225,30 @@
         "enabled": {
           "type": "boolean"
         },
+        "resourceType": {
+          "type": "string",
+          "enum": ["production", "inventory", "storage", "hybrid"]
+        },
+        "capabilities": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["production", "routing", "control", "inventory", "storage"]
+          },
+          "uniqueItems": true
+        },
         "signals": {
           "type": "array",
           "items": {
             "$ref": "#/$defs/signal"
           },
           "minItems": 1
+        },
+        "routing": {
+          "$ref": "#/$defs/stationRouting"
+        },
+        "inventory": {
+          "$ref": "#/$defs/carrierInventory"
         },
         "metadata": {
           "type": "object",
@@ -231,16 +259,73 @@
       },
       "required": [
         "stationId",
+        "resourceId",
         "displayName",
         "enabled",
         "signals"
       ],
       "additionalProperties": false
     },
+    "carrierInventory": {
+      "type": "object",
+      "properties": {
+        "validSignalKey": { "type": "string", "minLength": 1 },
+        "revisionSignalKey": { "type": "string", "minLength": 1 },
+        "capacitySignalKey": { "type": "string", "minLength": 1 },
+        "availableCountSignalKey": { "type": "string", "minLength": 1 },
+        "totalCountSignalKey": { "type": "string", "minLength": 1 },
+        "slots": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/carrierInventorySlot" }
+        }
+      },
+      "required": [
+        "validSignalKey",
+        "revisionSignalKey",
+        "availableCountSignalKey",
+        "totalCountSignalKey",
+        "slots"
+      ],
+      "additionalProperties": false
+    },
+    "carrierInventorySlot": {
+      "type": "object",
+      "properties": {
+        "slotId": { "type": "string", "minLength": 1 },
+        "presentSignalKey": { "type": "string", "minLength": 1 },
+        "carrierIdSignalKey": { "type": "string", "minLength": 1 },
+        "rfidUidSignalKey": { "type": "string", "minLength": 1 },
+        "rfidReadValidSignalKey": { "type": "string", "minLength": 1 },
+        "physicalStateSignalKey": { "type": "string", "minLength": 1 },
+        "readerIdSignalKey": { "type": "string", "minLength": 1 },
+        "lastSeenSignalKey": { "type": "string", "minLength": 1 }
+      },
+      "required": ["slotId", "presentSignalKey"],
+      "anyOf": [
+        { "required": ["carrierIdSignalKey"] },
+        { "required": ["rfidUidSignalKey"] }
+      ],
+      "additionalProperties": false
+    },
+    "stationRouting": {
+      "type": "object",
+      "properties": {
+        "sequence": { "type": "integer", "minimum": 1 },
+        "operationNo": { "type": "integer", "minimum": 1 },
+        "operation": { "type": "string", "minLength": 1 },
+        "enabled": { "type": "boolean" }
+      },
+      "required": ["sequence", "operationNo", "operation"],
+      "additionalProperties": false
+    },
     "orderParameterDefinition": {
       "type": "object",
       "properties": {
         "key": { "type": "string", "minLength": 1 },
+        "sourceKey": { "type": "string", "minLength": 1 },
+        "signalKey": { "type": "string", "minLength": 1 },
+        "required": { "type": "boolean" },
         "label": { "type": "string", "minLength": 1 },
         "type": { "type": "string", "enum": ["number", "select"] },
         "default_value": { "type": "number" },
@@ -292,6 +377,24 @@
             "processCompleted",
             "processResult",
             "timestamp",
+            "completedCarrierId",
+            "routingParameter",
+            "controlStart",
+            "controlStop",
+            "controlReset",
+            "controlPause",
+            "inventoryValid",
+            "inventoryRevision",
+            "inventoryCapacity",
+            "availableCarrierCount",
+            "totalCarrierCount",
+            "slotOccupied",
+            "slotId",
+            "rfidUid",
+            "rfidReadValid",
+            "carrierPhysicalState",
+            "carrierReaderId",
+            "carrierLastSeen",
             "custom"
           ]
         },
@@ -335,6 +438,9 @@
         "scaling": {
           "$ref": "#/$defs/scaling"
         },
+        "event": {
+          "$ref": "#/$defs/signalEvent"
+        },
         "metadata": {
           "type": "object",
           "additionalProperties": {
@@ -352,6 +458,17 @@
         "access",
         "required"
       ],
+      "additionalProperties": false
+    },
+    "signalEvent": {
+      "type": "object",
+      "properties": {
+        "trigger": {
+          "type": "string",
+          "enum": ["change", "rising", "falling"]
+        }
+      },
+      "required": ["trigger"],
       "additionalProperties": false
     },
     "scaling": {

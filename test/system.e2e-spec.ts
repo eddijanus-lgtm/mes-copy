@@ -14,10 +14,6 @@ import { configureApiVersioning } from '../src/api-versioning';
 import { AppModule } from '../src/app.module';
 import { ApiExceptionFilter } from '../src/common/api-exception.filter';
 import {
-  CarrierEntity,
-  CarrierStatusEnum,
-} from '../src/carriers/carrier.entity';
-import {
   MachineEntity,
   MachineStatusEnum,
 } from '../src/machines/machine.entity';
@@ -27,8 +23,8 @@ jest.setTimeout(120_000);
 
 describe('WARA MES real system (e2e)', () => {
   let app: INestApplication<App>;
-  let demoMachine: ChildProcessWithoutNullStreams | undefined;
-  let demoMachineOutput = '';
+  let testMachine: ChildProcessWithoutNullStreams | undefined;
+  let testMachineOutput = '';
   let mqttClient: MqttClient;
   let accessToken = '';
   let firstMachine: MachineEntity;
@@ -37,15 +33,14 @@ describe('WARA MES real system (e2e)', () => {
   const adminUsername = process.env.E2E_ADMIN_USERNAME || 'e2e-admin';
   const adminPassword = process.env.E2E_ADMIN_PASSWORD || 'e2e-admin-password';
   const runId = `${process.pid}-${Date.now()}`;
-  const carrierNumber = 9128;
+  const carrierNumber = 128;
 
   beforeAll(async () => {
     backendPort = await findFreePort();
-    opcUaPort = await findFreePort();
-    const opcUaEndpoint = `opc.tcp://127.0.0.1:${opcUaPort}/UA/WaraMesTest`;
-    process.env.OPC_UA_SERVER_ADDRESS = opcUaEndpoint;
-    process.env.OPC_UA_TEST_SERVER_PORT = String(opcUaPort);
-
+    opcUaPort = Number(process.env.OPC_UA_TEST_SERVER_PORT);
+    if (!Number.isInteger(opcUaPort) || opcUaPort < 1) {
+      throw new Error('OPC_UA_TEST_SERVER_PORT must be configured by the E2E runner');
+    }
     app = await NestFactory.create<AppModule>(AppModule, {
       logger: ['error', 'warn'],
     });
@@ -62,7 +57,7 @@ describe('WARA MES real system (e2e)', () => {
     await app.listen(backendPort, '127.0.0.1');
 
     const dataSource = app.get(DataSource);
-    const machines = await seedDatabase(dataSource, opcUaEndpoint);
+    const machines = await seedDatabase(dataSource);
     firstMachine = machines[0];
 
     const login = await request(app.getHttpServer())
@@ -71,9 +66,9 @@ describe('WARA MES real system (e2e)', () => {
       .expect(201);
     accessToken = jsonBody<{ access_token: string }>(login).access_token;
 
-    demoMachine = spawn(
+    testMachine = spawn(
       process.execPath,
-      [resolve(process.cwd(), 'tools/opcua-test-server.js')],
+      [resolve(process.cwd(), 'test-machines/opcua-simulator/server.js')],
       {
         cwd: process.cwd(),
         env: {
@@ -86,24 +81,25 @@ describe('WARA MES real system (e2e)', () => {
         stdio: ['pipe', 'pipe', 'pipe'],
       },
     );
-    demoMachine.stdout.on('data', (chunk: Buffer) => {
-      demoMachineOutput += chunk.toString();
+    testMachine.stdout.on('data', (chunk: Buffer) => {
+      testMachineOutput += chunk.toString();
     });
-    demoMachine.stderr.on('data', (chunk: Buffer) => {
-      demoMachineOutput += chunk.toString();
+    testMachine.stderr.on('data', (chunk: Buffer) => {
+      testMachineOutput += chunk.toString();
     });
-    await waitForDemoMachine(demoMachine, () => demoMachineOutput);
+    await waitForTestMachine(testMachine, () => testMachineOutput);
 
     mqttClient = await connectMqtt(process.env.MQTT_BROKER_URL!);
     await waitForShopfloorReady();
+    await waitForCarrierInventory();
   });
 
   afterAll(async () => {
     if (mqttClient) await closeMqtt(mqttClient);
     if (app) await app.close();
-    if (demoMachine && demoMachine.exitCode === null) {
-      demoMachine.kill();
-      await waitForExit(demoMachine);
+    if (testMachine && testMachine.exitCode === null) {
+      testMachine.kill();
+      await waitForExit(testMachine);
     }
   });
 
@@ -131,6 +127,38 @@ describe('WARA MES real system (e2e)', () => {
     expect(shopfloorBody.ok).toBe(true);
     expect(shopfloorBody.protocols.opcua.connected).toBe(true);
     expect(shopfloorBody.protocols.mqtt.connected).toBe(true);
+  });
+
+  it('discovers the physical RFID carrier inventory through the real adapter', async () => {
+    const inventory = await authenticatedGet(
+      '/api/v1/carriers/inventory',
+    ).expect(200);
+    expect(jsonBody(inventory)).toMatchObject({
+      configured: true,
+      valid: true,
+      stale: false,
+      availableCount: 4,
+      reconciledAvailableCount: 4,
+      countMismatch: false,
+    });
+
+    const carriers = await authenticatedGet('/api/v1/carriers').expect(200);
+    expect(
+      jsonBody<
+        Array<{
+          carrier_number: number;
+          inventory_managed: boolean;
+          physical_state: string;
+          rfid_uid: string | null;
+          rfid_read_valid: boolean | null;
+        }>
+      >(carriers).find((carrier) => carrier.carrier_number === carrierNumber),
+    ).toMatchObject({
+      inventory_managed: true,
+      physical_state: 'stored',
+      rfid_uid: 'DEMO-RFID-00000128',
+      rfid_read_valid: true,
+    });
   });
 
   it('persists the complete alarm lifecycle in PostgreSQL', async () => {
@@ -295,10 +323,12 @@ describe('WARA MES real system (e2e)', () => {
     expect(orderName).toBe(documentedOrderName);
     expect(webshopOrders[0].payload).toMatchObject({
       orderName: documentedOrderName,
-      bDeckelfarbe: 1,
-      uiKugelRot: 1,
-      uiKugelGruen: 2,
-      uiKugelBlau: 4,
+      parameters: {
+        iPar1: 1,
+        iPar2: 1,
+        iPar3: 2,
+        iPar4: 4,
+      },
     });
 
     const order = await poll(
@@ -335,18 +365,54 @@ describe('WARA MES real system (e2e)', () => {
       iPar4: 4,
     });
 
-    const completedOrder = await poll(
+    const assignedCarrier = await poll(
       async () => {
-        const response = await authenticatedGet(`/api/v1/orders/${order.id}`);
-        return jsonBody<{
-          status: string;
-          completed_quantity: number;
-        }>(response);
+        const response = await authenticatedGet('/api/v1/carriers');
+        return jsonBody<
+          Array<{
+            carrier_number: number;
+            status: string;
+            order_id: string | null;
+            current_step_no: number | null;
+            physical_state: string;
+            inventory_stale: boolean;
+          }>
+        >(response).find((carrier) => carrier.order_id === order.id);
       },
-      (entry) => entry.status === 'completed',
-      `Production order did not complete.\nDemo machine output:\n${demoMachineOutput}`,
-      90_000,
+      (carrier) => carrier?.status === 'assigned',
+      'Webshop order did not receive an assigned machine carrier',
+      15_000,
     );
+    expect(assignedCarrier).toMatchObject({
+      carrier_number: carrierNumber,
+      current_step_no: 1,
+      physical_state: 'stored',
+      inventory_stale: false,
+    });
+
+    let completedOrder: {
+      status: string;
+      completed_quantity: number;
+    };
+    try {
+      completedOrder = await poll(
+        async () => {
+          const response = await authenticatedGet(`/api/v1/orders/${order.id}`);
+          return jsonBody<{
+            status: string;
+            completed_quantity: number;
+          }>(response);
+        },
+        (entry) => entry.status === 'completed',
+        'Production order did not complete',
+        90_000,
+      );
+    } catch (error) {
+      throw new Error(
+        `${error instanceof Error ? error.message : String(error)}\n` +
+          `Test machine output:\n${testMachineOutput}`,
+      );
+    }
     expect(completedOrder.completed_quantity).toBe(1);
 
     const carriers = await authenticatedGet('/api/v1/carriers').expect(200);
@@ -362,7 +428,7 @@ describe('WARA MES real system (e2e)', () => {
     ).toMatchObject({
       status: 'available',
       order_id: null,
-      current_step_no: 1,
+      current_step_no: null,
     });
 
     const handshakes = await authenticatedGet(
@@ -429,7 +495,28 @@ describe('WARA MES real system (e2e)', () => {
       (health) =>
         health.protocols?.opcua?.connected === true &&
         health.protocols?.mqtt?.connected === true,
-      `Shopfloor dependencies did not become ready.\nDemo machine output:\n${demoMachineOutput}`,
+      `Shopfloor dependencies did not become ready.\nTest machine output:\n${testMachineOutput}`,
+      20_000,
+    );
+  }
+
+  async function waitForCarrierInventory(): Promise<void> {
+    await poll(
+      async () => {
+        const response = await authenticatedGet('/api/v1/carriers/inventory');
+        return jsonBody<{
+          configured: boolean;
+          valid: boolean;
+          stale: boolean;
+          availableCount: number;
+        }>(response);
+      },
+      (inventory) =>
+        inventory.configured &&
+        inventory.valid &&
+        !inventory.stale &&
+        inventory.availableCount > 0,
+      'Physical carrier inventory was not synchronized through OPC UA',
       20_000,
     );
   }
@@ -453,7 +540,6 @@ describe('WARA MES real system (e2e)', () => {
 
   async function seedDatabase(
     dataSource: DataSource,
-    opcUaEndpoint: string,
   ): Promise<MachineEntity[]> {
     const userRepository = dataSource.getRepository(UserEntity);
     await userRepository.save(
@@ -465,46 +551,21 @@ describe('WARA MES real system (e2e)', () => {
     );
 
     const machineRepository = dataSource.getRepository(MachineEntity);
+    const profileManagedMachines = await machineRepository.find({
+      where: { profile_managed: true },
+      order: { route_sequence: 'ASC' },
+    });
+    if (profileManagedMachines.length === 0) {
+      throw new Error('Machine profile synchronization did not create stations');
+    }
     const machines = await machineRepository.save(
-      [
-        {
-          name: 'S01 Deckelzufuehrung',
-          type: 'lid_feeder',
-          resource_id: 1,
-        },
-        {
-          name: 'S02 Kugeldosierung',
-          type: 'ball_dispenser',
-          resource_id: 2,
-        },
-        {
-          name: 'Q01 Endkontrolle',
-          type: 'quality_gate',
-          resource_id: 3,
-        },
-      ].map((station) =>
-        machineRepository.create({
-          ...station,
-          status: MachineStatusEnum.ONLINE,
-          location: 'E2E Line',
-          opcua_endpoint_url: opcUaEndpoint,
-          opcua_node_prefix: `ns=1;s=Station${station.resource_id}`,
-          opcua_enabled: true,
-          telemetry: {},
-        }),
-      ),
+      profileManagedMachines.map((machine) => ({
+        ...machine,
+        status: MachineStatusEnum.ONLINE,
+        telemetry: {},
+      })),
     );
 
-    const carrierRepository = dataSource.getRepository(CarrierEntity);
-    await carrierRepository.save(
-      carrierRepository.create({
-        carrier_number: carrierNumber,
-        status: CarrierStatusEnum.AVAILABLE,
-        current_step_no: 1,
-        current_resource_id: null,
-        order_id: null,
-      }),
-    );
     return machines;
   }
 });
@@ -527,7 +588,7 @@ async function findFreePort(): Promise<number> {
   });
 }
 
-async function waitForDemoMachine(
+async function waitForTestMachine(
   child: ChildProcessWithoutNullStreams,
   output: () => string,
 ): Promise<void> {

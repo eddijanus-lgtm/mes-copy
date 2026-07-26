@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { MachineEntity, MachineStatusEnum } from './machine.entity';
@@ -40,12 +44,23 @@ export class MachinesService {
 
   async update(id: string, dto: UpdateMachineDto): Promise<MachineEntity> {
     const machine = await this.findOne(id);
+    if (machine.profile_managed) {
+      throw new ConflictException(
+        'Profile-managed stations must be changed in MACHINE_PROFILE_PATH',
+      );
+    }
     Object.assign(machine, dto);
     if (dto.type) machine.type = dto.type;
     return this.machinesRepo.save(machine);
   }
 
   async remove(id: string): Promise<void> {
+    const machine = await this.findOne(id);
+    if (machine.profile_managed) {
+      throw new ConflictException(
+        'Profile-managed stations must be removed from MACHINE_PROFILE_PATH',
+      );
+    }
     const result = await this.machinesRepo.delete(id);
     if (result.affected === 0) throw new NotFoundException('Machine not found');
   }

@@ -2,7 +2,7 @@
 
 ## Zweck
 
-Der MachineProfileService lädt ein neutrales Maschinenprofil aus einer JSON-Datei und stellt es als typisiertes `MachineProfile` bereit. Er ist eine vorbereitende Infrastrukturkomponente: er verbindet sich noch nicht mit OPC UA, registriert keinen MachineAdapter und verändert keine bestehende Maschinenlaufzeit.
+Der MachineProfileService lädt ein neutrales Maschinenprofil aus einer JSON-Datei und stellt es als typisiertes `MachineProfile` bereit. Der Service selbst verbindet sich nicht mit OPC UA; der produktive `OpcUaMachineAdapter` konsumiert das geladene Profil. Dadurch bleibt die Profilladung von Transport und MES-Fachlogik getrennt.
 
 ## Verantwortlichkeiten
 

@@ -34,12 +34,10 @@
   "stations": [
     {
       "stationId": "YOUR_STATION_ID",
+      "resourceId": 1,
       "displayName": "YOUR_STATION_DISPLAY_NAME",
       "description": "Start with only the read signals required for the dashboard.",
       "enabled": true,
-      "metadata": {
-        "resourceId": "1"
-      },
       "signals": [
         {
           "key": "machineState",

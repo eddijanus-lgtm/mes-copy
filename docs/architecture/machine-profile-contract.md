@@ -4,12 +4,13 @@
 
 Das MES soll keine festen Maschinen-, Stations-, Namespace- oder Signalstrukturen voraussetzen. Stattdessen beschreiben Maschinenprofile die Eigenschaften einer Maschine deklarativ in einer JSON-Datei. Dadurch können neue Maschinen hinzugefügt werden, ohne die MES-Fachlogik oder den Adapter-Code zu ändern.
 
-## 2. Aktueller Stand
+## 2. Stand des ursprünglichen MA-02-Arbeitspakets (historisch)
 
 - **MA-01** hat den neutralen `MachineAdapter`-Vertrag eingeführt: ein Interface, das MES-Fachlogik von konkreten Maschinen entkoppelt.
 - **MA-02** definiert nun den konfigurierbaren Maschinenprofil-Vertrag: Typdefinitionen, JSON-Profile, ein JSON-Schema und isolierte Vertragstests.
-- Die Profile werden noch nicht zur Laufzeit geladen. Es existiert kein produktiver `MachineProfileService` und keine Adapter-Integration.
-- Bestehende OPC-UA-Logik (Simulator, Handshake, Recovery) wurde nicht migriert.
+- Der heutige Runtime-Stand ist in `machine-adapter-contract.md` dokumentiert:
+  `MachineProfileService`, `OpcUaMachineAdapter`, Handshake und Recovery sind
+  produktiv integriert.
 
 ## 3. Profilstruktur
 
@@ -25,7 +26,9 @@ Ein Maschinenprofil (`MachineProfile`) besteht aus folgenden Hauptbereichen:
 | `operatingMode` | enum | `observe`, `validate` oder `control` |
 | `connection` | object | Verbindungsparameter (Endpoint, Security, Auth, Reconnect) |
 | `namespaces` | array | Liste der Namespace-Definitionen |
-| `stations` | array | Liste der Stationen mit Signalen |
+| `stations` | array | Liste der Stationen mit eindeutiger `resourceId`, optionalem Routing und Signalen |
+| `orderParameterDefinitions` | array (optional) | Mapping externer Auftragsfelder auf neutrale Parameter- und Signalschlüssel |
+| `resultCodes` | object (optional) | Maschinenspezifische Resultcodes für die Anzeige |
 | `metadata` | object (optional) | Hersteller, Modell, Version |
 
 ### connection
@@ -70,13 +73,13 @@ Konkrete Maschinenbezeichnungen gehören nur in Profilwerte, nicht in die MES-Fa
 
 ## 7. Enthaltene Profile
 
-### simulator.machine.json
+### test-machines/opcua-simulator/profile.json
 
 - Konkretes lokales Beispielprofil für den OPC-UA-Simulator
-- `operatingMode: observe`
+- `operatingMode: control`
 - Anonyme Authentifizierung
 - Drei Stationen: `station-a`, `station-b`, `station-c`
-- Neun Signale pro Station mit den Rollen: workRequest, requestBusy, requestCompleted, carrierId, orderId, resourceId, processCompleted, processResult, timestamp
+- Vollständiger Handshake, Routingparameter, Prozessabschluss, Telemetrie und optionale Bedienkommandos werden über Signalrollen beschrieben.
 
 ### wara.machine.template.json
 
@@ -96,7 +99,7 @@ Konkrete Maschinenbezeichnungen gehören nur in Profilwerte, nicht in die MES-Fa
 - Enthält vollständige Enumerationen für Transport, OperatingMode, Security, Authentication, DataType, Access, Direction und Signalrollen
 - Nutzt `$defs` für wiederverwendbare Komponenten (connection, security, authentication, reconnect, namespace, station, signal, scaling, envReference)
 - Setzt `additionalProperties: false` auf allen strukturierten Objekten (außer metadata)
-- Noch keine produktive Laufzeitvalidierung — die Bewertung einer direkten Validierungsabhängigkeit ist für MA-03 vorgesehen
+- Die Runtime validiert Struktur und Semantik zusätzlich beim Start und bricht bei widersprüchlichen Profilen verständlich ab.
 
 ## 9. Vertragstests
 
@@ -113,31 +116,14 @@ Konkrete Maschinenbezeichnungen gehören nur in Profilwerte, nicht in die MES-Fa
 - Enum-Konsistenz zwischen Profilwerten und Schema-Enums
 - Simulator-Signalumfang (9 Signale, alle erwarteten Rollen)
 
-## 10. Bewusste Nicht-Ziele von MA-02
+## 10. Runtime-Status
 
-Folgende Punkte wurden bewusst nicht umgesetzt:
+`MachineProfileService`, `OpcUaService`, `OpcUaMachineAdapter`, Handshake,
+Recovery, Routing und Dashboard verwenden das aktive Profil produktiv. Beim
+Anwendungsstart werden die Stationen mit der Datenbank synchronisiert. Diese
+Datensätze sind als `profile_managed` markiert und können nicht als zweite
+Konfigurationsquelle über die Maschinen-CRUD-API verändert oder gelöscht werden.
 
-- **MachineProfileService** — kein produktiver Service zum Laden von Profilen
-- **Produktiver Loader** — keine Integration in die NestJS-Startlogik
-- **Runtime-Schema-Validierung** — keine Laufzeitprüfung gegen das JSON-Schema
-- **OpcUaMachineAdapter** — kein konkreter Adapter auf Basis von Profilen
-- **OpcUaService-Änderungen** — bestehende OPC-UA-Logik unverändert
-- **Handshake-Migration** — stMES-Handshake nicht auf Profile umgestellt
-- **Recovery-Migration** — ConnectionRecoveryService nicht angepasst
-- **OrdersService-Änderungen** — Auftragslogik nicht migriert
-- **Simulatorumstellung** — Testserver nicht auf Profile umgestellt
-- **NestJS-Provider-Registrierung** — keine Module oder Provider ergänzt
-
-## 11. Empfohlener nächster Schritt
-
-**MA-03 – MachineProfileService**
-
-Scope:
-
-- Profilpfad aus der Konfiguration lesen
-- JSON-Datei laden und parsen
-- Fehler verständlich melden (Datei nicht gefunden, ungültiges JSON, fehlende Felder)
-- Ausgewähltes Profil bereitstellen
-- Noch keine Adaptermigration
-
-Hinweis: Vor produktiver JSON-Schema-Validierung sollte eine direkte, bewusst versionierte Abhängigkeit gewählt werden. Transitiven `ajv`-Import nicht als stabilen Projektvertrag behandeln.
+Die simulierte Maschine liegt ausschließlich unter
+`test-machines/opcua-simulator/`. Sie benutzt denselben echten OPC-UA-Adapter wie
+eine physische Maschine.

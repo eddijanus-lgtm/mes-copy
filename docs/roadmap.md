@@ -149,7 +149,7 @@ Aktueller Planungswert: **rund 95 % der Gesamtroadmap**.
 | # | Task | Priority | Effort | Status |
 |---|------|----------|--------|--------|
 | 4.1 | Order workflow states: `draft` → `released` → `in_progress` → `completed` / `cancelled` | Critical | 2–3 days | ✅ complete |
-| 4.2 | Production step tracking (operation sequencing per order) | High | 2 days | ✅ complete — Carrier-Routing-System; stMES-Handshake mit OPC UA write-back und Backend-Antwort; Webshop-Auto-Erstellung für Produktionsaufträge über MQTT `i4.0/production/orders`; 3-Station-Simulation in `tools/opcua-test-server.js` mit kurzen Demo-Zeiten (5/6/4 Sekunden). Reconnect-Hardening: bereits aktive `xStart=true` SPS-Anfragen werden beim Polling nacherkannt. Demo-Läufe mit Carrier 128/129 erfolgreich abgeschlossen; echter SPS-Node-Vertrag bleibt für Realanlagen-Anbindung offen. |
+| 4.2 | Production step tracking (operation sequencing per order) | High | 2 days | ✅ complete — Carrier-Routing-System; stMES-Handshake mit OPC UA write-back und Backend-Antwort; Webshop-Auto-Erstellung für Produktionsaufträge über MQTT `i4.0/production/orders`; externe 3-Station-Testmaschine in `test-machines/opcua-simulator/server.js` mit kurzen Laufzeiten (5/6/4 Sekunden). MES und Testmaschine kommunizieren über den produktiven OPC-UA-Adapter. Reconnect-Hardening: bereits aktive `xStart=true` SPS-Anfragen werden beim Polling nacherkannt. |
 | 4.3 | Material consumption tracking (link materials to orders) | Medium | 1–2 days | ✅ complete — Backend-Modul `materials` mit Materialstamm, Verbrauchsbuchung pro Auftrag, Bestandsprüfung und Order-Consumption-Abfrage ergänzt. |
 | 4.4 | Start/Stop commands via OPC UA write-back to machines | High | 2–3 days | ✅ complete — Backend `POST /shopfloor/machine/control`, Frontend-Control-Panel pro Station und Demo-OPC-UA-Control-Block `stMES.Control` (`xCmdStart`, `xCmdPause`, `xCmdStop`, `xCmdReset`). Stop/Pause erhalten Carrier an der Station; Start setzt den wartenden Zyklus fort. |
 | 4.5 | Error handling & downtime logging per machine | High | 1–2 days | ✅ complete — Downtime-Entity, DTOs, Service und API-Endpunkte für Stop/Resume, Downtime-Listen und Maschinenstatistiken ergänzt. |
@@ -210,7 +210,7 @@ Aktueller Planungswert: **rund 95 % der Gesamtroadmap**.
 | **Frontend** | React 19 + Vite 7 + Tailwind 4 | Chart.js / Recharts (Phase 5), Dashboard KPI-OEE (Phase 5 umgesetzt), WebSocket client |
 | **Database** | PostgreSQL 16 (Docker) | → TimescaleDB extension (Phase 3) |
 | **Shopfloor Gateway** | `src/opcua/shopfloor-gateway.*` | OPC-UA Client, MQTT Adapter, stMES-Vermittlung, Webshop-Auto-Erstellung `/api/v1/shopfloor/*`, `/api/v1/shopfloor/ws` |
-| **OPC UA** | `node-opcua` v2.175 | Connection retry + write-back support; 3-Station-Simulation in `tools/opcua-test-server.js` mit schnellen Demo-Zeiten (5/6/4 Sekunden) |
+| **OPC UA** | `node-opcua` v2.175 | Produktiver Adapter mit Connection retry + write-back; externe 3-Station-Testmaschine unter `test-machines/opcua-simulator/` |
 | **MQTT** | `mqtt` v5.15 | QoS configuration, topic routing (`i4.0/production/orders`), Webshop-Auto-Erstellung auf MES |
 | **Tests** | Jest + Supertest — 110 Unit/Integration tests + 9 E2E tests; Phase 6.2 E2E-Flows operational |
 | **Deploy** | pm2 / Docker Compose / nginx | Docker Swarm or K8s evaluation (future) |

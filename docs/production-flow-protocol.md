@@ -27,7 +27,7 @@ Es werden drei OPC-UA-/SPS-Stationen simuliert:
 | 2       |        2 | `S02 Kugeldosierung`   | `Kugeln dosieren`           |      120 s |
 | 3       |        3 | `Q01 Endkontrolle`     | `Deckel und Kugeln pruefen` |       60 s |
 
-Die Stationen werden durch `tools/opcua-test-server.js` bereitgestellt. Die Kommunikation erfolgt trotzdem ueber echte OPC-UA-Nodes und nicht nur ueber eine Frontend-Animation.
+Die Stationen werden durch `test-machines/opcua-simulator/server.js` bereitgestellt. Die Kommunikation erfolgt über echte OPC-UA-Nodes und den produktiven `OpcUaMachineAdapter`.
 
 ## Webshop-Auftrag
 
@@ -271,7 +271,7 @@ Nachgewiesen wurde:
 
 Einschraenkung:
 
-- Die SPS ist simuliert durch `tools/opcua-test-server.js`.
+- Nur die SPS-Gegenstelle ist durch `test-machines/opcua-simulator/server.js` simuliert; der Adapter ist produktiv.
 - Es ist keine physische Anlage angeschlossen.
 - Der Test lief gegen den lokalen MQTT-Broker `localhost:1883`, nicht gegen den externen Broker `10.10.10.253:1883`.
 

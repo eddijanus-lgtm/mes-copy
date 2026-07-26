@@ -61,7 +61,43 @@ export type MachineSignalRole =
   | 'processCompleted'
   | 'processResult'
   | 'timestamp'
+  | 'completedCarrierId'
+  | 'routingParameter'
+  | 'controlStart'
+  | 'controlStop'
+  | 'controlReset'
+  | 'controlPause'
+  | 'inventoryValid'
+  | 'inventoryRevision'
+  | 'inventoryCapacity'
+  | 'availableCarrierCount'
+  | 'totalCarrierCount'
+  | 'slotOccupied'
+  | 'slotId'
+  | 'rfidUid'
+  | 'rfidReadValid'
+  | 'carrierPhysicalState'
+  | 'carrierReaderId'
+  | 'carrierLastSeen'
   | 'custom';
+
+export type MachineResourceType =
+  | 'production'
+  | 'inventory'
+  | 'storage'
+  | 'hybrid';
+
+export type MachineResourceCapability =
+  | 'production'
+  | 'routing'
+  | 'control'
+  | 'inventory'
+  | 'storage';
+
+export type MachineSignalTrigger =
+  | 'change'
+  | 'rising'
+  | 'falling';
 
 export interface MachineEnvironmentReference {
   readonly env: string;
@@ -100,6 +136,10 @@ export interface MachineSignalScalingProfile {
   readonly offset: number;
 }
 
+export interface MachineSignalEventProfile {
+  readonly trigger: MachineSignalTrigger;
+}
+
 export interface MachineSignalProfile {
   readonly key: string;
   readonly role: MachineSignalRole;
@@ -111,15 +151,48 @@ export interface MachineSignalProfile {
   readonly required: boolean;
   readonly description?: string;
   readonly scaling?: MachineSignalScalingProfile;
+  readonly event?: MachineSignalEventProfile;
   readonly metadata?: Readonly<Record<string, string>>;
+}
+
+export interface MachineStationRoutingProfile {
+  readonly sequence: number;
+  readonly operationNo: number;
+  readonly operation: string;
+  readonly enabled?: boolean;
+}
+
+export interface MachineCarrierInventorySlotProfile {
+  readonly slotId: string;
+  readonly presentSignalKey: string;
+  readonly carrierIdSignalKey?: string;
+  readonly rfidUidSignalKey?: string;
+  readonly rfidReadValidSignalKey?: string;
+  readonly physicalStateSignalKey?: string;
+  readonly readerIdSignalKey?: string;
+  readonly lastSeenSignalKey?: string;
+}
+
+export interface MachineCarrierInventoryProfile {
+  readonly validSignalKey: string;
+  readonly revisionSignalKey: string;
+  readonly capacitySignalKey?: string;
+  readonly availableCountSignalKey: string;
+  readonly totalCountSignalKey: string;
+  readonly slots: readonly MachineCarrierInventorySlotProfile[];
 }
 
 export interface MachineStationProfile {
   readonly stationId: string;
+  readonly resourceId: number;
   readonly displayName: string;
   readonly description?: string;
   readonly enabled: boolean;
+  readonly resourceType?: MachineResourceType;
+  readonly capabilities?: readonly MachineResourceCapability[];
   readonly signals: readonly MachineSignalProfile[];
+  readonly routing?: MachineStationRoutingProfile;
+  readonly inventory?: MachineCarrierInventoryProfile;
   readonly metadata?: Readonly<Record<string, string>>;
 }
 
@@ -131,6 +204,9 @@ export interface MachineOrderParameterOptionProfile {
 
 export interface MachineOrderParameterDefinitionProfile {
   readonly key: string;
+  readonly sourceKey?: string;
+  readonly signalKey?: string;
+  readonly required?: boolean;
   readonly label: string;
   readonly type: 'number' | 'select';
   readonly default_value?: number;
@@ -161,6 +237,7 @@ export interface MachineProfile {
   readonly connection: MachineConnectionProfile;
   readonly namespaces: readonly MachineNamespaceProfile[];
   readonly orderParameterDefinitions?: readonly MachineOrderParameterDefinitionProfile[];
+  readonly resultCodes?: Readonly<Record<string, string>>;
   readonly stations: readonly MachineStationProfile[];
   readonly metadata?: Readonly<Record<string, string>>;
 }

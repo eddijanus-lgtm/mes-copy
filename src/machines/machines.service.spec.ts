@@ -1,4 +1,4 @@
-import { NotFoundException } from '@nestjs/common';
+import { ConflictException, NotFoundException } from '@nestjs/common';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { Test, TestingModule } from '@nestjs/testing';
 import { MachineEntity, MachineStatusEnum } from './machine.entity';
@@ -53,7 +53,22 @@ describe('MachinesService', () => {
     await expect(service.update('m1', { name: 'New', type: 'PLC' } as any)).resolves.toMatchObject({ name: 'New', type: 'PLC' });
   });
 
+  it('keeps profile-managed stations read-only in the database API', async () => {
+    machinesRepo.findOne.mockResolvedValue({
+      id: 'profile-station',
+      profile_managed: true,
+    });
+
+    await expect(
+      service.update('profile-station', { name: 'Changed' } as any),
+    ).rejects.toBeInstanceOf(ConflictException);
+    await expect(service.remove('profile-station')).rejects.toBeInstanceOf(
+      ConflictException,
+    );
+  });
+
   it('throws when deleting a missing machine', async () => {
+    machinesRepo.findOne.mockResolvedValue(null);
     machinesRepo.delete.mockResolvedValue({ affected: 0 });
 
     await expect(service.remove('missing')).rejects.toBeInstanceOf(NotFoundException);

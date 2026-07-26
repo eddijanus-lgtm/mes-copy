@@ -21,6 +21,7 @@ import {
   MachineStationProfile,
   MachineSignalProfile,
   MachineSignalScalingProfile,
+  MachineCarrierInventoryProfile,
 } from './machine-profile.types';
 import {
   MACHINE_PROFILE_PATH_CONFIG_KEY,
@@ -86,6 +87,19 @@ const VALID_DATA_TYPE_VALUES: readonly string[] = [
 ];
 const VALID_ACCESS_MODE_VALUES: readonly string[] = ['read', 'write', 'readWrite'];
 const VALID_DIRECTION_VALUES: readonly string[] = ['machineToMes', 'mesToMachine'];
+const VALID_RESOURCE_TYPE_VALUES: readonly string[] = [
+  'production',
+  'inventory',
+  'storage',
+  'hybrid',
+];
+const VALID_RESOURCE_CAPABILITY_VALUES: readonly string[] = [
+  'production',
+  'routing',
+  'control',
+  'inventory',
+  'storage',
+];
 const VALID_ROLE_VALUES: readonly string[] = [
   'workRequest',
   'requestBusy',
@@ -103,8 +117,27 @@ const VALID_ROLE_VALUES: readonly string[] = [
   'processCompleted',
   'processResult',
   'timestamp',
+  'completedCarrierId',
+  'routingParameter',
+  'controlStart',
+  'controlStop',
+  'controlReset',
+  'controlPause',
+  'inventoryValid',
+  'inventoryRevision',
+  'inventoryCapacity',
+  'availableCarrierCount',
+  'totalCarrierCount',
+  'slotOccupied',
+  'slotId',
+  'rfidUid',
+  'rfidReadValid',
+  'carrierPhysicalState',
+  'carrierReaderId',
+  'carrierLastSeen',
   'custom',
 ];
+const VALID_TRIGGER_VALUES: readonly string[] = ['change', 'rising', 'falling'];
 
 function isInAllowedValues(value: unknown, allowed: readonly string[]): boolean {
   return isString(value) && allowed.includes(value);
@@ -152,6 +185,13 @@ function isMachineSignalScalingProfile(value: unknown): value is MachineSignalSc
   return true;
 }
 
+function isMachineSignalEventProfile(value: unknown): boolean {
+  return (
+    isRecord(value) &&
+    isInAllowedValues(value.trigger, VALID_TRIGGER_VALUES)
+  );
+}
+
 function isMachineSignalProfile(value: unknown): value is MachineSignalProfile {
   if (!isRecord(value)) return false;
   if (!isString(value.key)) return false;
@@ -164,18 +204,86 @@ function isMachineSignalProfile(value: unknown): value is MachineSignalProfile {
   if (!isBoolean(value.required)) return false;
   if (value.description !== undefined && !isString(value.description)) return false;
   if (value.scaling !== undefined && !isMachineSignalScalingProfile(value.scaling)) return false;
+  if (value.event !== undefined && !isMachineSignalEventProfile(value.event)) return false;
   if (value.metadata !== undefined && !isStringRecord(value.metadata)) return false;
   return true;
+}
+
+function isMachineStationRoutingProfile(value: unknown): boolean {
+  if (!isRecord(value)) return false;
+  if (!Number.isInteger(value.sequence) || Number(value.sequence) < 1) return false;
+  if (!Number.isInteger(value.operationNo) || Number(value.operationNo) < 1) return false;
+  if (!isString(value.operation) || !value.operation.trim()) return false;
+  if (value.enabled !== undefined && !isBoolean(value.enabled)) return false;
+  return true;
+}
+
+function isMachineCarrierInventoryProfile(
+  value: unknown,
+): value is MachineCarrierInventoryProfile {
+  if (!isRecord(value)) return false;
+  if (!isString(value.validSignalKey)) return false;
+  if (!isString(value.revisionSignalKey)) return false;
+  if (
+    value.capacitySignalKey !== undefined &&
+    !isString(value.capacitySignalKey)
+  ) {
+    return false;
+  }
+  if (!isString(value.availableCountSignalKey)) return false;
+  if (!isString(value.totalCountSignalKey)) return false;
+  if (!Array.isArray(value.slots) || value.slots.length === 0) return false;
+  return value.slots.every((slot: unknown) => {
+    if (!isRecord(slot)) return false;
+    if (!isString(slot.slotId) || !slot.slotId.trim()) return false;
+    if (!isString(slot.presentSignalKey)) return false;
+    for (const optionalKey of [
+      'carrierIdSignalKey',
+      'rfidUidSignalKey',
+      'rfidReadValidSignalKey',
+      'physicalStateSignalKey',
+      'readerIdSignalKey',
+      'lastSeenSignalKey',
+    ]) {
+      if (slot[optionalKey] !== undefined && !isString(slot[optionalKey])) {
+        return false;
+      }
+    }
+    return true;
+  });
 }
 
 function isMachineStationProfile(value: unknown): value is MachineStationProfile {
   if (!isRecord(value)) return false;
   if (!isString(value.stationId)) return false;
+  if (!Number.isInteger(value.resourceId) || Number(value.resourceId) < 1) return false;
   if (!isString(value.displayName)) return false;
   if (value.description !== undefined && !isString(value.description)) return false;
   if (!isBoolean(value.enabled)) return false;
+  if (
+    value.resourceType !== undefined &&
+    !isInAllowedValues(value.resourceType, VALID_RESOURCE_TYPE_VALUES)
+  ) {
+    return false;
+  }
+  if (
+    value.capabilities !== undefined &&
+    (!Array.isArray(value.capabilities) ||
+      !value.capabilities.every((capability: unknown) =>
+        isInAllowedValues(capability, VALID_RESOURCE_CAPABILITY_VALUES),
+      ))
+  ) {
+    return false;
+  }
   if (!Array.isArray(value.signals)) return false;
   if (!value.signals.every((s: unknown) => isMachineSignalProfile(s))) return false;
+  if (value.routing !== undefined && !isMachineStationRoutingProfile(value.routing)) return false;
+  if (
+    value.inventory !== undefined &&
+    !isMachineCarrierInventoryProfile(value.inventory)
+  ) {
+    return false;
+  }
   if (value.metadata !== undefined && !isStringRecord(value.metadata)) return false;
   return true;
 }
@@ -191,6 +299,9 @@ function isMachineOrderParameterOptionProfile(value: unknown): boolean {
 function isMachineOrderParameterDefinitionProfile(value: unknown): boolean {
   if (!isRecord(value)) return false;
   if (!isString(value.key)) return false;
+  if (value.sourceKey !== undefined && !isString(value.sourceKey)) return false;
+  if (value.signalKey !== undefined && !isString(value.signalKey)) return false;
+  if (value.required !== undefined && !isBoolean(value.required)) return false;
   if (!isString(value.label)) return false;
   if (!isInAllowedValues(value.type, ['number', 'select'])) return false;
   if (value.default_value !== undefined && !isNumber(value.default_value)) return false;
@@ -226,10 +337,292 @@ function isMachineProfile(value: unknown): value is MachineProfile {
   if (!Array.isArray(value.namespaces)) return false;
   if (!value.namespaces.every((ns: unknown) => isMachineNamespaceProfile(ns))) return false;
   if (value.orderParameterDefinitions !== undefined && (!Array.isArray(value.orderParameterDefinitions) || !value.orderParameterDefinitions.every(isMachineOrderParameterDefinitionProfile))) return false;
+  if (value.resultCodes !== undefined && !isStringRecord(value.resultCodes)) return false;
   if (!Array.isArray(value.stations)) return false;
   if (!value.stations.every((st: unknown) => isMachineStationProfile(st))) return false;
   if (value.metadata !== undefined && !isStringRecord(value.metadata)) return false;
   return true;
+}
+
+function hasStationCapability(
+  station: MachineStationProfile,
+  capability:
+    | 'production'
+    | 'routing'
+    | 'control'
+    | 'inventory'
+    | 'storage',
+): boolean {
+  if (station.capabilities !== undefined) {
+    return station.capabilities.includes(capability);
+  }
+
+  const resourceType = station.resourceType || 'production';
+  if (resourceType === 'production') {
+    return ['production', 'routing', 'control'].includes(capability);
+  }
+  if (resourceType === 'inventory') {
+    return capability === 'inventory';
+  }
+  if (resourceType === 'storage') {
+    return capability === 'inventory' || capability === 'storage';
+  }
+  return true;
+}
+
+function machineProfileSemanticErrors(profile: MachineProfile): string[] {
+  const errors: string[] = [];
+  const { security, authentication, reconnect } = profile.connection;
+  if ((security.mode === 'None') !== (security.policy === 'None')) {
+    errors.push('OPC UA security mode and policy must both be None or both be secure');
+  }
+  if (
+    security.mode !== 'None' &&
+    (!security.certificatePathEnv || !security.privateKeyPathEnv)
+  ) {
+    errors.push('Secure OPC UA connections require certificatePathEnv and privateKeyPathEnv');
+  }
+  if (
+    authentication.type === 'username' &&
+    (!authentication.usernameEnv || !authentication.passwordEnv)
+  ) {
+    errors.push('Username authentication requires usernameEnv and passwordEnv');
+  }
+  if (
+    authentication.type === 'certificate' &&
+    (!authentication.certificatePathEnv || !security.privateKeyPathEnv)
+  ) {
+    errors.push('Certificate authentication requires certificatePathEnv and privateKeyPathEnv');
+  }
+  if (
+    reconnect.initialDelayMs < 0 ||
+    reconnect.maximumDelayMs < reconnect.initialDelayMs ||
+    reconnect.backoffMultiplier < 1 ||
+    (reconnect.maxAttempts !== undefined &&
+      (!Number.isInteger(reconnect.maxAttempts) || reconnect.maxAttempts < 0))
+  ) {
+    errors.push('Reconnect settings are invalid');
+  }
+  const namespaceKeys = new Set<string>();
+  for (const namespace of profile.namespaces) {
+    if (namespaceKeys.has(namespace.key)) {
+      errors.push(`Duplicate namespace key ${namespace.key}`);
+    }
+    namespaceKeys.add(namespace.key);
+  }
+
+  const stationIds = new Set<string>();
+  const resourceIds = new Set<number>();
+  const routeSequences = new Set<number>();
+  const requiredControlRoles: readonly MachineSignalRole[] = [
+    'workRequest',
+    'requestBusy',
+    'requestAccepted',
+    'requestRejected',
+    'carrierId',
+    'resourceId',
+    'orderId',
+    'partNumber',
+    'operationId',
+    'stepNumber',
+    'nextStationId',
+    'processActive',
+    'processCompleted',
+    'processResult',
+    'completedCarrierId',
+  ];
+
+  for (const station of profile.stations) {
+    if (stationIds.has(station.stationId)) {
+      errors.push(`Duplicate stationId ${station.stationId}`);
+    }
+    stationIds.add(station.stationId);
+    if (resourceIds.has(station.resourceId)) {
+      errors.push(`Duplicate resourceId ${station.resourceId}`);
+    }
+    resourceIds.add(station.resourceId);
+    if (
+      station.capabilities &&
+      new Set(station.capabilities).size !== station.capabilities.length
+    ) {
+      errors.push(`Duplicate capability in ${station.stationId}`);
+    }
+    if (
+      profile.operatingMode === 'control' &&
+      hasStationCapability(station, 'routing') &&
+      station.routing?.enabled !== false
+    ) {
+      if (!station.routing) {
+        errors.push(`Station ${station.stationId} requires routing configuration`);
+      } else if (routeSequences.has(station.routing.sequence)) {
+        errors.push(`Duplicate routing sequence ${station.routing.sequence}`);
+      } else {
+        routeSequences.add(station.routing.sequence);
+      }
+    }
+
+    const signalKeys = new Set<string>();
+    const roles = new Map<MachineSignalRole, number>();
+    for (const signal of station.signals) {
+      if (signalKeys.has(signal.key)) {
+        errors.push(`Duplicate signal key ${signal.key} in ${station.stationId}`);
+      }
+      signalKeys.add(signal.key);
+      roles.set(signal.role, (roles.get(signal.role) || 0) + 1);
+      if (!namespaceKeys.has(signal.namespace)) {
+        errors.push(
+          `Unknown namespace ${signal.namespace} for ${station.stationId}.${signal.key}`,
+        );
+      }
+      if (
+        signal.direction === 'machineToMes' &&
+        signal.access === 'write'
+      ) {
+        errors.push(
+          `Machine-to-MES signal ${station.stationId}.${signal.key} is not readable`,
+        );
+      }
+      if (
+        signal.direction === 'mesToMachine' &&
+        signal.access === 'read'
+      ) {
+        errors.push(
+          `MES-to-machine signal ${station.stationId}.${signal.key} is not writable`,
+        );
+      }
+    }
+
+    if (
+      profile.operatingMode === 'control' &&
+      station.enabled &&
+      hasStationCapability(station, 'production')
+    ) {
+      for (const role of requiredControlRoles) {
+        if ((roles.get(role) || 0) !== 1) {
+          errors.push(
+            `Control station ${station.stationId} requires exactly one ${role} signal`,
+          );
+        }
+      }
+    }
+
+    const inventoryCapable = hasStationCapability(station, 'inventory');
+    if (station.enabled && inventoryCapable && !station.inventory) {
+      errors.push(
+        `Inventory resource ${station.stationId} requires inventory configuration`,
+      );
+    }
+    if (station.inventory && !inventoryCapable) {
+      errors.push(
+        `Station ${station.stationId} has inventory configuration without inventory capability`,
+      );
+    }
+    if (station.inventory) {
+      const signalByKey = new Map(
+        station.signals.map((signal) => [signal.key, signal] as const),
+      );
+      const inventory = station.inventory;
+      const summarySignals: ReadonlyArray<
+        readonly [string, MachineSignalRole]
+      > = [
+        [inventory.validSignalKey, 'inventoryValid'],
+        [inventory.revisionSignalKey, 'inventoryRevision'],
+        [inventory.availableCountSignalKey, 'availableCarrierCount'],
+        [inventory.totalCountSignalKey, 'totalCarrierCount'],
+        ...(inventory.capacitySignalKey
+          ? ([
+              [inventory.capacitySignalKey, 'inventoryCapacity'],
+            ] as const)
+          : []),
+      ];
+      const slotIds = new Set<string>();
+
+      const validateInventorySignal = (
+        signalKey: string,
+        expectedRole: MachineSignalRole,
+        context: string,
+      ) => {
+        const signal = signalByKey.get(signalKey);
+        if (!signal) {
+          errors.push(
+            `Inventory ${context} references unknown signal ${signalKey} in ${station.stationId}`,
+          );
+          return;
+        }
+        if (signal.role !== expectedRole) {
+          errors.push(
+            `Inventory ${context} signal ${station.stationId}.${signalKey} requires role ${expectedRole}`,
+          );
+        }
+        if (
+          signal.direction !== 'machineToMes' ||
+          (signal.access !== 'read' && signal.access !== 'readWrite')
+        ) {
+          errors.push(
+            `Inventory signal ${station.stationId}.${signalKey} must be readable machineToMes`,
+          );
+        }
+      };
+
+      for (const [signalKey, role] of summarySignals) {
+        validateInventorySignal(signalKey, role, role);
+      }
+
+      for (const slot of inventory.slots) {
+        if (slotIds.has(slot.slotId)) {
+          errors.push(
+            `Duplicate inventory slotId ${slot.slotId} in ${station.stationId}`,
+          );
+        }
+        slotIds.add(slot.slotId);
+        if (!slot.carrierIdSignalKey && !slot.rfidUidSignalKey) {
+          errors.push(
+            `Inventory slot ${station.stationId}.${slot.slotId} requires carrierIdSignalKey or rfidUidSignalKey`,
+          );
+        }
+        const slotSignals: ReadonlyArray<
+          readonly [string | undefined, MachineSignalRole]
+        > = [
+          [slot.presentSignalKey, 'slotOccupied'],
+          [slot.carrierIdSignalKey, 'carrierId'],
+          [slot.rfidUidSignalKey, 'rfidUid'],
+          [slot.rfidReadValidSignalKey, 'rfidReadValid'],
+          [slot.physicalStateSignalKey, 'carrierPhysicalState'],
+          [slot.readerIdSignalKey, 'carrierReaderId'],
+          [slot.lastSeenSignalKey, 'carrierLastSeen'],
+        ];
+        for (const [signalKey, role] of slotSignals) {
+          if (signalKey) {
+            validateInventorySignal(
+              signalKey,
+              role,
+              `slot ${slot.slotId}`,
+            );
+          }
+        }
+      }
+    }
+  }
+
+  for (const definition of profile.orderParameterDefinitions || []) {
+    const signalKey = definition.signalKey || definition.key;
+    for (const station of profile.stations.filter(
+      (candidate) =>
+        candidate.enabled && hasStationCapability(candidate, 'production'),
+    )) {
+      const signal = station.signals.find(
+        (candidate) =>
+          candidate.role === 'routingParameter' &&
+          candidate.key === signalKey,
+      );
+      if (profile.operatingMode === 'control' && !signal) {
+        errors.push(
+          `Order parameter ${definition.key} has no routingParameter signal ${signalKey} in ${station.stationId}`,
+        );
+      }
+    }
+  }
+  return errors;
 }
 
 function hasNullByte(value: string): boolean {
@@ -379,6 +772,14 @@ export class MachineProfileService {
     if (!isMachineProfile(parsed)) {
       throw new MachineProfileParseError(
         'Machine profile does not match the expected structure.',
+        resolvedPath,
+      );
+    }
+
+    const semanticErrors = machineProfileSemanticErrors(parsed);
+    if (semanticErrors.length) {
+      throw new MachineProfileParseError(
+        `Machine profile semantic validation failed: ${semanticErrors.join('; ')}`,
         resolvedPath,
       );
     }

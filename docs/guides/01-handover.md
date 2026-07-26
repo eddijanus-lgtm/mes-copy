@@ -18,7 +18,7 @@ Phase 1 ist lokal implementiert und verifiziert. Es wurde nichts committed oder 
 ## Entwicklungsbefehle
 
 ```bash
-npm run start:opcua-test
+npm run start:test-machine
 npm run start:dev
 cd frontend && npm run dev
 ```

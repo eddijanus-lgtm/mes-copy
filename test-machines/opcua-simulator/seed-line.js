@@ -1,6 +1,6 @@
 require('dotenv').config();
 
-// DEMO DATA ONLY: remove this seed and replace the node contract when the real stMES UDT is available.
+// Test-machine fixture. It is deliberately outside the MES runtime.
 const baseUrl = process.env.MES_BASE_URL || 'http://localhost:3000/api/v1';
 const username = process.env.DEMO_ADMIN_USERNAME;
 const password = process.env.DEMO_ADMIN_PASSWORD;

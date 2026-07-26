@@ -5,9 +5,9 @@ const PROJECT_ROOT = process.cwd();
 
 const SIMULATOR_PATH = resolve(
   PROJECT_ROOT,
-  'config',
-  'machines',
-  'simulator.machine.json',
+  'test-machines',
+  'opcua-simulator',
+  'profile.json',
 );
 const TEMPLATE_PATH = resolve(
   PROJECT_ROOT,
@@ -51,7 +51,11 @@ const SCHEMA_DEF_NAMES: ReadonlyArray<string> = [
   'reconnect',
   'namespace',
   'station',
+  'stationRouting',
+  'carrierInventory',
+  'carrierInventorySlot',
   'signal',
+  'signalEvent',
   'scaling',
   'envReference',
   'orderParameterDefinition',
@@ -145,7 +149,7 @@ function hasOwnProperty<X extends Record<string, unknown>, Y extends string>(
 describe('MachineProfile Contract', () => {
   // ---- 1. JSON readability ----
   describe('JSON readability', () => {
-    it('parses simulator.machine.json as valid JSON', () => {
+    it('parses the external test-machine profile as valid JSON', () => {
       const result = parseJsonFile(SIMULATOR_PATH);
       assertRecord(result);
     });
@@ -196,9 +200,13 @@ describe('MachineProfile Contract', () => {
       expect((profile.namespaces as unknown[]).length).toBeGreaterThan(0);
     });
 
-    it('has exactly 3 stations', () => {
+    it('has three production stations and one inventory resource', () => {
       expect(Array.isArray(profile.stations)).toBe(true);
-      expect((profile.stations as unknown[]).length).toBe(3);
+      const stations = profile.stations as Record<string, unknown>[];
+      expect(stations).toHaveLength(4);
+      expect(
+        stations.filter((station) => station.resourceType === 'inventory'),
+      ).toHaveLength(1);
     });
   });
 
@@ -725,7 +733,17 @@ describe('MachineProfile Contract', () => {
     });
 
     it('each station contains at least the required integration signals', () => {
-      const stations = profile.stations as unknown[];
+      const stations = (profile.stations as unknown[]).filter((station) => {
+        assertRecord(station as Record<string, unknown>);
+        const candidate = station as Record<string, unknown>;
+        return (
+          candidate.resourceType === undefined ||
+          candidate.resourceType === 'production' ||
+          candidate.resourceType === 'hybrid' ||
+          (Array.isArray(candidate.capabilities) &&
+            candidate.capabilities.includes('production'))
+        );
+      });
       for (const station of stations) {
         assertRecord(station as Record<string, unknown>);
         const signals = (station as Record<string, unknown>).signals as unknown[];
@@ -736,7 +754,17 @@ describe('MachineProfile Contract', () => {
     });
 
     it('each station contains all expected roles', () => {
-      const stations = profile.stations as unknown[];
+      const stations = (profile.stations as unknown[]).filter((station) => {
+        assertRecord(station as Record<string, unknown>);
+        const candidate = station as Record<string, unknown>;
+        return (
+          candidate.resourceType === undefined ||
+          candidate.resourceType === 'production' ||
+          candidate.resourceType === 'hybrid' ||
+          (Array.isArray(candidate.capabilities) &&
+            candidate.capabilities.includes('production'))
+        );
+      });
       for (const station of stations) {
         assertRecord(station as Record<string, unknown>);
         const signals = (station as Record<string, unknown>).signals as unknown[];

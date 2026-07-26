@@ -64,19 +64,42 @@ describe('CarriersService', () => {
 
   describe('assign', () => {
     it('assigns a carrier and updates status to ASSIGNED', async () => {
-      carriersRepo.findOne.mockResolvedValue({ id: 'c1', current_resource_id: 5, order_id: null } as any);
+      carriersRepo.findOne.mockResolvedValue({
+        id: 'c1',
+        current_resource_id: 5,
+        order_id: null,
+        status: CarrierStatusEnum.AVAILABLE,
+      } as any);
       const dto: any = { order_id: 'o1', current_step_no: 1 };
       const result = await service.assign('c1', dto);
       expect(result.status).toBe(CarrierStatusEnum.ASSIGNED);
       expect(result.current_step_no).toBe(1);
     });
     it('resets current_resource_id on assign', async () => {
-      carriersRepo.findOne.mockResolvedValue({ id: 'c1', order_id: null } as any);
+      carriersRepo.findOne.mockResolvedValue({
+        id: 'c1',
+        order_id: null,
+        status: CarrierStatusEnum.AVAILABLE,
+      } as any);
       const dto: any = { order_id: 'o1' };
       await service.assign('c1', dto);
       const saved = mockSave.mock.calls[0][0];
       expect(saved.current_resource_id).toBe(null);
       expect(saved.order_id).toBe('o1');
+    });
+    it('rejects a machine-managed carrier that is not physically available', async () => {
+      carriersRepo.findOne.mockResolvedValue({
+        id: 'c1',
+        status: CarrierStatusEnum.AVAILABLE,
+        inventory_managed: true,
+        physical_state: 'missing',
+        rfid_read_valid: true,
+        inventory_stale: false,
+      } as any);
+
+      await expect(
+        service.assign('c1', { order_id: 'o1', current_step_no: 1 }),
+      ).rejects.toBeInstanceOf(BadRequestException);
     });
   });
 

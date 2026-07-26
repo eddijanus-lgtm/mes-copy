@@ -35,7 +35,7 @@ Ungültige Clients werden mit WebSocket-Code 4401 getrennt. Das Frontend verbind
 ## Testserver
 
 ```bash
-npm run start:opcua-test
+npm run start:test-machine
 ```
 
 Der Server bildet `dbProcessData [DB151]` aus der Siemens-Dokumentation nach. Alle Variablen sind les- und schreibbar.

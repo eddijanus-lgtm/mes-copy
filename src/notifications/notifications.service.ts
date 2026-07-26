@@ -61,7 +61,7 @@ export class NotificationsService {
 
     if (rule.channels?.includes('push')) {
       try {
-        await this.sendPush(rule, message);
+        await this.sendPush(rule);
         channels.push('push');
         delivered = true;
       } catch (e) {
@@ -114,9 +114,10 @@ export class NotificationsService {
     this.logger.log(`Email notification sent for alert rule ${rule.id} (severity: ${rule.severity})`);
   }
 
-  private async sendPush(rule: AlertRuleEntity, message: string): Promise<void> {
-    const targetSub = process.env.ALERT_PUSH_SUBSCRIPTIONS ? JSON.parse(process.env.ALERT_PUSH_SUBSCRIPTIONS) : [];
-    this.logger.log(`Push notification dispatched for ${rule.id}: ${message.substring(0, 64)}...`);
+  private async sendPush(rule: AlertRuleEntity): Promise<void> {
+    throw new ServiceUnavailableException(
+      `Push transport is not configured for rule ${rule.id}`,
+    );
   }
 
   private async sendMqtt(rule: AlertRuleEntity, messageText: string): Promise<void> {

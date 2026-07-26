@@ -10,10 +10,9 @@
 
 ### Erstellte Dateien
 
-- `src/machines/contracts/machine.types.ts`
-- `src/machines/contracts/machine-adapter.interface.ts`
-- `src/machines/contracts/machine-adapter.token.ts`
-- `src/machines/contracts/machine-adapter.contract.spec.ts`
+- Die damaligen Dateien unter `src/machines/contracts/` wurden nach der
+  produktiven Adaptermigration entfernt. Der kanonische Vertrag liegt heute
+  unter `src/machines/adapters/`.
 - `docs/architecture/machine-adapter-contract.md`
 - `docs/ai-progress.md` (diese Datei)
 
@@ -21,7 +20,9 @@
 
 - Neutrale Maschinentypen und das `MachineAdapter`-Interface definiert.
 - Dependency-Injection-Token `MACHINE_ADAPTER` erstellt.
-- Isolierter Vertragstest mit einem Fake-Adapter umgesetzt.
+- Der damalige Fake-Adapter-Vertragstest wurde entfernt. Die Neutralität wird
+  heute gegen den produktiven `OpcUaMachineAdapter` und eine externe
+  OPC-UA-Testmaschine geprüft.
 - Architekturdokumentation erstellt.
 
 ### Was wurde nicht migriert?
@@ -66,7 +67,7 @@ nicht verändert:
 
 - `src/machines/profiles/machine-profile.types.ts`
 - `src/machines/profiles/machine-profile.contract.spec.ts`
-- `config/machines/simulator.machine.json`
+- `test-machines/opcua-simulator/profile.json`
 - `config/machines/wara.machine.template.json`
 - `config/machines/machine-profile.schema.json`
 - `docs/architecture/machine-profile-contract.md`
@@ -75,7 +76,7 @@ nicht verändert:
 ### Was wurde erreicht?
 
 - Maschinenprofil-Typen definiert (`MachineProfile` und alle Untertypen).
-- Simulator-Profil (`simulator.machine.json`) mit 3 Stationen und 9 Signalen pro Station erstellt.
+- Profil der externen Testmaschine (`test-machines/opcua-simulator/profile.json`) mit 3 Stationen und 9 Signalen pro Station erstellt.
 - WARA-Vorlage (`wara.machine.template.json`) mit Platzhaltern und Env-Referenzen erstellt.
 - JSON-Schema (`machine-profile.schema.json`, Draft 2020-12) mit 9 `$defs` und vollständigen Enumerationen erstellt.
 - 47 isolierte Vertragstests für Profile, Schema und Konsistenz erstellt.

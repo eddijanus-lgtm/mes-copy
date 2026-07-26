@@ -1,103 +1,87 @@
 import { translateWebshopOrder } from './webshop-order-translator';
 
+const definitions = [
+  {
+    key: 'lidColour',
+    sourceKey: 'external_lid',
+    signalKey: 'parameter-a',
+    label: 'Lid colour',
+    type: 'number' as const,
+    required: true,
+  },
+  {
+    key: 'fillAmount',
+    sourceKey: 'external_fill',
+    signalKey: 'parameter-b',
+    label: 'Fill amount',
+    type: 'number' as const,
+    required: true,
+  },
+];
+
 describe('translateWebshopOrder', () => {
-  it('translates the documented nested webshop payload', () => {
+  it('maps arbitrary external fields through profile definitions', () => {
     expect(
-      translateWebshopOrder({
-        order_name: '#WEB-ORDER-123',
-        params: {
-          bDeckelfarbe: true,
-          uiKugelRot: 10,
-          uiKugelGruen: 20,
-          uiKugelBlau: 30,
+      translateWebshopOrder(
+        {
+          order_name: '#WEB-ORDER-123',
+          part_no: 'PART-X',
+          params: {
+            external_lid: true,
+            external_fill: 12.5,
+          },
         },
-      }),
+        definitions,
+      ),
     ).toEqual({
       orderName: '#WEB-ORDER-123',
-      bDeckelfarbe: 1,
-      uiKugelRot: 10,
-      uiKugelGruen: 20,
-      uiKugelBlau: 30,
-      xAuftragAusstehend: false,
-      uiAnzahlAustehenderAuftraege: 0,
+      partNo: 'PART-X',
+      parameters: { lidColour: 1, fillAmount: 12.5 },
+      xAuftragAusstehend: undefined,
+      uiAnzahlAustehenderAuftraege: undefined,
     });
   });
 
-  it('translates a false lid color to zero', () => {
-    expect(
-      translateWebshopOrder({
-        order_name: '#WEB-ORDER-124',
-        params: {
-          bDeckelfarbe: false,
-          uiKugelRot: 1,
-          uiKugelGruen: 2,
-          uiKugelBlau: 3,
-        },
-      }).bDeckelfarbe,
-    ).toBe(0);
-  });
-
-  it.each([
-    [
-      'order_name',
-      {
-        params: {
-          bDeckelfarbe: true,
-          uiKugelRot: 1,
-          uiKugelGruen: 2,
-          uiKugelBlau: 3,
-        },
-      },
-    ],
-    ['params', { order_name: '#WEB-ORDER-125' }],
-    [
-      'uiKugelBlau',
-      {
-        order_name: '#WEB-ORDER-126',
-        params: {
-          bDeckelfarbe: true,
-          uiKugelRot: 1,
-          uiKugelGruen: 2,
-        },
-      },
-    ],
-  ])('rejects a documented payload without %s', (_field, payload) => {
-    expect(() => translateWebshopOrder(payload)).toThrow();
+  it('rejects missing profile-required parameters', () => {
+    expect(() =>
+      translateWebshopOrder(
+        { params: { external_lid: 1 } },
+        definitions,
+      ),
+    ).toThrow('Missing required fields: external_fill');
   });
 
   it.each([
     ['negative', -1],
-    ['fractional', 1.5],
     ['non-numeric', 'red'],
-  ])('rejects a %s ball count', (_description, uiKugelRot) => {
+  ])('rejects a %s configured value', (_description, external_fill) => {
     expect(() =>
-      translateWebshopOrder({
-        order_name: '#WEB-ORDER-127',
-        params: {
-          bDeckelfarbe: true,
-          uiKugelRot,
-          uiKugelGruen: 2,
-          uiKugelBlau: 3,
+      translateWebshopOrder(
+        {
+          params: {
+            external_lid: 1,
+            external_fill,
+          },
         },
-      }),
-    ).toThrow('uiKugelRot must be a non-negative integer');
+        definitions,
+      ),
+    ).toThrow('external_fill must be a non-negative number');
   });
 
-  it('keeps accepting the legacy flat payload', () => {
+  it('accepts generic parameters when no mapping is configured', () => {
     expect(
       translateWebshopOrder({
-        bDeckelfarbe: 1,
-        uiKugelRot: 10,
-        uiKugelGruen: 20,
-        uiKugelBlau: 30,
+        orderName: 'GENERIC-1',
+        productId: 'product-1',
+        temperature: 21.5,
+        pressure: 3,
       }),
     ).toEqual({
-      bDeckelfarbe: 1,
-      uiKugelRot: 10,
-      uiKugelGruen: 20,
-      uiKugelBlau: 30,
-      xAuftragAusstehend: false,
-      uiAnzahlAustehenderAuftraege: 0,
+      orderName: 'GENERIC-1',
+      productId: 'product-1',
+      parameters: { temperature: 21.5, pressure: 3 },
+      xAuftragAusstehend: undefined,
+      uiAnzahlAustehenderAuftraege: undefined,
     });
   });
 });

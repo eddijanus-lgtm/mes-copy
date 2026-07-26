@@ -50,7 +50,6 @@ const CUSTOM_SUMMARIES: Record<string, string> = {
   bulkRemove: 'Mehrere Ressourcen löschen',
   closeShift: 'Schicht schließen',
   completeBatch: 'Produktionslos abschließen',
-  createDemoProductionOrder: 'Demo-Produktionsauftrag starten',
   executeControlCommand: 'Freigegebenen Maschinenbefehl ausführen',
   executeLegacyControlCommand: 'Veralteten Maschinenbefehl ausführen',
   exportCsv: 'Daten als CSV exportieren',

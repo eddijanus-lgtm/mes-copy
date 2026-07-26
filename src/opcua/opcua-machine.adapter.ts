@@ -1,17 +1,32 @@
-import { Injectable, Inject, Logger } from '@nestjs/common';
-import { OpcUaService } from './opcua.service';
+import { Inject, Injectable, Logger } from '@nestjs/common';
+import type {
+  MachineAdapter,
+  MachineAddressWrite,
+  MachineCarrierInventorySnapshot,
+  MachineCarrierObservation,
+  MachineConnectionStatus,
+  MachineControlCommand,
+  MachineOrderParameterDefinition,
+  MachineRecoverySnapshot,
+  MachineRoutingResponse,
+  MachineStationDescriptor,
+  MachineStationRequest,
+} from '../machines/adapters/machine-adapter.types';
 import { MachineProfileService } from '../machines/profiles/machine-profile.service';
-import type { MachineAdapter, MachineControlCommand, MachineConnectionStatus, MachineStationRequest, MachineRoutingResponse, MachineRecoverySnapshot, MachineAddressWrite, MachineStationDescriptor, MachineOrderParameterDefinition } from '../machines/adapters/machine-adapter.types';
 import { ShopfloorTelemetryEvent } from './shopfloor-telemetry';
+import {
+  OpcUaConfiguredSignal,
+  OpcUaService,
+} from './opcua.service';
 
 @Injectable()
 export class OpcUaMachineAdapter implements MachineAdapter {
   private readonly logger = new Logger(OpcUaMachineAdapter.name);
-  private profileLoaded = false;
 
   constructor(
     @Inject(OpcUaService) private readonly opcUa: OpcUaService,
-    @Inject(MachineProfileService) private readonly machineProfileService: MachineProfileService,
+    @Inject(MachineProfileService)
+    private readonly machineProfileService: MachineProfileService,
   ) {}
 
   isConnected(): boolean {
@@ -20,18 +35,24 @@ export class OpcUaMachineAdapter implements MachineAdapter {
 
   async getConnectionStatus(): Promise<MachineConnectionStatus> {
     const status = await this.opcUa.getServerStatus();
-    return { connected: status.connected, endpoint: status.endpoint };
+    return status;
   }
 
-  onTelemetry(callback: (event: ShopfloorTelemetryEvent) => void): () => void {
+  onTelemetry(
+    callback: (event: ShopfloorTelemetryEvent) => void,
+  ): () => void {
     return this.opcUa.onTelemetry(callback);
   }
 
-  onWorkRequest(callback: (resourceId: number, active: boolean) => void): () => void {
+  onWorkRequest(
+    callback: (resourceId: number, active: boolean) => void,
+  ): () => void {
     return this.opcUa.onStMesRequest(callback);
   }
 
-  onProcessCompleted(callback: (resourceId: number, timestamp: Date) => void): () => void {
+  onProcessCompleted(
+    callback: (resourceId: number, timestamp: Date) => void,
+  ): () => void {
     return this.opcUa.onProcessCompleted(callback);
   }
 
@@ -43,232 +64,469 @@ export class OpcUaMachineAdapter implements MachineAdapter {
     return this.opcUa.onDisconnected(callback);
   }
 
-  async readStationRequest(resourceId: number): Promise<MachineStationRequest> {
+  onCarrierInventoryChanged(
+    callback: (snapshot: MachineCarrierInventorySnapshot) => void,
+  ): () => void {
+    let active = true;
+    const publishSnapshot = (resourceId: number) => {
+      void this.readCarrierInventory(resourceId)
+        .then((snapshot) => {
+          if (active) callback(snapshot);
+        })
+        .catch((error) =>
+          this.logger.warn(
+            `Carrier inventory ${resourceId} could not be read: ${
+              (error as Error).message
+            }`,
+          ),
+        );
+    };
+    const unsubscribe = this.opcUa.onCarrierInventoryChanged(publishSnapshot);
+
+    if (this.isConnected()) {
+      for (const station of this.machineProfileService
+        .getProfile()
+        .stations.filter(
+          (candidate) => candidate.enabled && candidate.inventory,
+        )) {
+        publishSnapshot(station.resourceId);
+      }
+    }
+
+    return () => {
+      active = false;
+      unsubscribe();
+    };
+  }
+
+  async readStationRequest(
+    resourceId: number,
+  ): Promise<MachineStationRequest> {
     const [carrierNumber, requestedResourceId] = await Promise.all([
-      this.opcUa.readNode(this.addressOrLegacy(resourceId, 'carrierId', this.queryPrefix(resourceId) + 'uiCarrierId')),
-      this.opcUa.readNode(this.addressOrLegacy(resourceId, 'resourceId', this.queryPrefix(resourceId) + 'uiResourceId')),
+      this.readRole(resourceId, 'carrierId'),
+      this.readRole(resourceId, 'resourceId'),
     ]);
-    return { carrierNumber: Number(carrierNumber), requestedResourceId: Number(requestedResourceId) };
+    return {
+      carrierNumber: Number(carrierNumber),
+      requestedResourceId: Number(requestedResourceId),
+    };
   }
 
   async markRequestBusy(resourceId: number): Promise<void> {
-    const prefix = this.queryPrefix(resourceId);
-    await this.opcUa.writeNodes([
-      { nodeId: this.addressOrLegacy(resourceId, 'requestBusy', prefix + 'xQryBusy'), dataType: 'Boolean', value: true },
-      { nodeId: this.addressOrLegacy(resourceId, 'requestAccepted', prefix + 'xDone'), dataType: 'Boolean', value: false },
-      { nodeId: this.addressOrLegacy(resourceId, 'requestRejected', prefix + 'xError'), dataType: 'Boolean', value: false },
+    await this.write(resourceId, [
+      [this.role(resourceId, 'requestBusy'), true],
+      [this.role(resourceId, 'requestAccepted'), false],
+      [this.role(resourceId, 'requestRejected'), false],
     ]);
   }
 
-  async writeRoutingResponse(resourceId: number, response: MachineRoutingResponse): Promise<void> {
-    const prefix = this.queryPrefix(resourceId);
-    await this.opcUa.writeNodes([
-      { nodeId: this.addressOrLegacy(resourceId, 'orderId', prefix + 'sOrderNo'), dataType: 'String', value: response.orderNo },
-      { nodeId: this.addressOrLegacy(resourceId, 'partNumber', prefix + 'sPartNo'), dataType: 'String', value: response.partNo },
-      { nodeId: this.addressOrLegacy(resourceId, 'operationId', prefix + 'uiOperationNo'), dataType: 'UInt16', value: response.operationNo },
-      { nodeId: this.addressOrLegacy(resourceId, 'stepNumber', prefix + 'iStepNo'), dataType: 'Int16', value: response.stepNo },
-      { nodeId: this.addressOrLegacy(resourceId, 'nextStationId', prefix + 'uiNextResourceId'), dataType: 'UInt16', value: response.nextResourceId },
-      { nodeId: this.addressOrLegacy(resourceId, 'custom', prefix + 'iPar1'), dataType: 'Int16', value: response.iPar1 },
-      { nodeId: this.addressOrLegacy(resourceId, 'custom', prefix + 'iPar2'), dataType: 'Int16', value: response.iPar2 },
-      { nodeId: this.addressOrLegacy(resourceId, 'custom', prefix + 'iPar3'), dataType: 'Int16', value: response.iPar3 },
-      { nodeId: this.addressOrLegacy(resourceId, 'custom', prefix + 'iPar4'), dataType: 'Int16', value: response.iPar4 },
-      { nodeId: this.addressOrLegacy(resourceId, 'processResult', prefix + 'uiResultCode'), dataType: 'UInt16', value: response.resultCode },
-      { nodeId: this.addressOrLegacy(resourceId, 'requestBusy', prefix + 'xQryBusy'), dataType: 'Boolean', value: false },
-      { nodeId: this.addressOrLegacy(resourceId, 'requestAccepted', prefix + 'xDone'), dataType: 'Boolean', value: response.accepted },
-      { nodeId: this.addressOrLegacy(resourceId, 'requestRejected', prefix + 'xError'), dataType: 'Boolean', value: !response.accepted },
+  async writeRoutingResponse(
+    resourceId: number,
+    response: MachineRoutingResponse,
+  ): Promise<void> {
+    const parameterDefinitions =
+      this.machineProfileService.getProfile().orderParameterDefinitions || [];
+    const parameterWrites = parameterDefinitions.map((definition) => [
+      this.signal(resourceId, definition.signalKey || definition.key),
+      response.parameters[definition.key] ?? definition.default_value ?? 0,
+    ] as const);
+    await this.writeSignals([
+      [this.role(resourceId, 'orderId'), response.orderNo],
+      [this.role(resourceId, 'partNumber'), response.partNo],
+      [this.role(resourceId, 'operationId'), response.operationNo],
+      [this.role(resourceId, 'stepNumber'), response.stepNo],
+      [this.role(resourceId, 'nextStationId'), response.nextResourceId],
+      ...parameterWrites,
+      [this.role(resourceId, 'processResult'), response.resultCode],
+      [this.role(resourceId, 'requestBusy'), false],
+      [this.role(resourceId, 'requestAccepted'), response.accepted],
+      [this.role(resourceId, 'requestRejected'), !response.accepted],
     ]);
   }
 
-  async writeInternalError(resourceId: number, resultCode: number): Promise<void> {
-    const prefix = this.queryPrefix(resourceId);
-    await this.opcUa.writeNodes([
-      { nodeId: this.addressOrLegacy(resourceId, 'processResult', prefix + 'uiResultCode'), dataType: 'UInt16', value: resultCode },
-      { nodeId: this.addressOrLegacy(resourceId, 'requestBusy', prefix + 'xQryBusy'), dataType: 'Boolean', value: false },
-      { nodeId: this.addressOrLegacy(resourceId, 'requestAccepted', prefix + 'xDone'), dataType: 'Boolean', value: false },
-      { nodeId: this.addressOrLegacy(resourceId, 'requestRejected', prefix + 'xError'), dataType: 'Boolean', value: true },
+  async writeInternalError(
+    resourceId: number,
+    resultCode: number,
+  ): Promise<void> {
+    await this.write(resourceId, [
+      [this.role(resourceId, 'processResult'), resultCode],
+      [this.role(resourceId, 'requestBusy'), false],
+      [this.role(resourceId, 'requestAccepted'), false],
+      [this.role(resourceId, 'requestRejected'), true],
     ]);
   }
 
   async acknowledgeRequest(resourceId: number): Promise<void> {
-    const prefix = this.queryPrefix(resourceId);
-    await this.opcUa.writeNodes([
-      { nodeId: this.addressOrLegacy(resourceId, 'requestBusy', prefix + 'xQryBusy'), dataType: 'Boolean', value: false },
-      { nodeId: this.addressOrLegacy(resourceId, 'requestAccepted', prefix + 'xDone'), dataType: 'Boolean', value: false },
-      { nodeId: this.addressOrLegacy(resourceId, 'requestRejected', prefix + 'xError'), dataType: 'Boolean', value: false },
+    await this.write(resourceId, [
+      [this.role(resourceId, 'requestBusy'), false],
+      [this.role(resourceId, 'requestAccepted'), false],
+      [this.role(resourceId, 'requestRejected'), false],
     ]);
   }
 
   async readCompletedCarrierNumber(resourceId: number): Promise<number> {
-    return Number(await this.opcUa.readNode(this.addressOrLegacy(resourceId, 'carrierId', this.processPrefix(resourceId) + 'iCarrierID')));
+    return Number(await this.readRole(resourceId, 'completedCarrierId'));
   }
 
-  async readRecoverySnapshot(resourceId: number): Promise<MachineRecoverySnapshot> {
+  async readRecoverySnapshot(
+    resourceId: number,
+  ): Promise<MachineRecoverySnapshot> {
     const [carrierNumber, requestActive, processBusy] = await Promise.all([
-      this.opcUa.readNode(this.addressOrLegacy(resourceId, 'carrierId', this.queryPrefix(resourceId) + 'uiCarrierId')),
-      this.opcUa.readNode(this.addressOrLegacy(resourceId, 'workRequest', this.queryPrefix(resourceId) + 'xStart')),
-      this.opcUa.readNode(this.addressOrLegacy(resourceId, 'processActive', this.statePrefix(resourceId) + 'xBusy')),
+      this.readRole(resourceId, 'carrierId'),
+      this.readRole(resourceId, 'workRequest'),
+      this.readRole(resourceId, 'processActive'),
     ]);
-    return { carrierNumber: Number(carrierNumber), requestActive: Boolean(requestActive), processBusy: Boolean(processBusy) };
+    return {
+      carrierNumber: Number(carrierNumber),
+      requestActive: Boolean(requestActive),
+      processBusy: Boolean(processBusy),
+    };
+  }
+
+  async readCarrierInventory(
+    resourceId: number,
+  ): Promise<MachineCarrierInventorySnapshot> {
+    const station = this.machineProfileService
+      .getProfile()
+      .stations.find(
+        (candidate) =>
+          candidate.enabled && candidate.resourceId === resourceId,
+      );
+    if (!station?.inventory) {
+      throw new Error(
+        `Carrier inventory is not configured for resource ${resourceId}`,
+      );
+    }
+
+    const inventory = station.inventory;
+    const readSignal = async (signalKey: string) => {
+      const signal = this.signal(resourceId, signalKey);
+      try {
+        this.assertReadable(resourceId, signal);
+        const value: unknown = await this.opcUa.readNode(signal.nodeId);
+        return this.fromMachineValue(signal, value);
+      } catch (error) {
+        if (signal.required) throw error;
+        return undefined;
+      }
+    };
+    const [valid, revision, capacity, availableCount, totalCount, observations] =
+      await Promise.all([
+        readSignal(inventory.validSignalKey),
+        readSignal(inventory.revisionSignalKey),
+        inventory.capacitySignalKey
+          ? readSignal(inventory.capacitySignalKey)
+          : Promise.resolve(undefined),
+        readSignal(inventory.availableCountSignalKey),
+        readSignal(inventory.totalCountSignalKey),
+        Promise.all(
+          inventory.slots.map(async (slot): Promise<MachineCarrierObservation> => {
+            const [
+              present,
+              carrierNumber,
+              rfidUid,
+              rfidReadValid,
+              physicalState,
+              readerId,
+              lastSeenAt,
+            ] = await Promise.all([
+              readSignal(slot.presentSignalKey),
+              slot.carrierIdSignalKey
+                ? readSignal(slot.carrierIdSignalKey)
+                : Promise.resolve(undefined),
+              slot.rfidUidSignalKey
+                ? readSignal(slot.rfidUidSignalKey)
+                : Promise.resolve(undefined),
+              slot.rfidReadValidSignalKey
+                ? readSignal(slot.rfidReadValidSignalKey)
+                : Promise.resolve(undefined),
+              slot.physicalStateSignalKey
+                ? readSignal(slot.physicalStateSignalKey)
+                : Promise.resolve(undefined),
+              slot.readerIdSignalKey
+                ? readSignal(slot.readerIdSignalKey)
+                : Promise.resolve(undefined),
+              slot.lastSeenSignalKey
+                ? readSignal(slot.lastSeenSignalKey)
+                : Promise.resolve(undefined),
+            ]);
+            const isPresent = Boolean(present);
+            if (!isPresent) {
+              return {
+                resourceId,
+                stationId: station.stationId,
+                slotId: slot.slotId,
+                present: false,
+              };
+            }
+            const parsedCarrierNumber =
+              this.optionalPositiveInteger(carrierNumber);
+            const parsedLastSeenAt = this.optionalDate(lastSeenAt);
+            return {
+              resourceId,
+              stationId: station.stationId,
+              slotId: slot.slotId,
+              present: true,
+              ...(parsedCarrierNumber !== undefined
+                ? { carrierNumber: parsedCarrierNumber }
+                : {}),
+              ...(this.optionalString(rfidUid) !== undefined
+                ? { rfidUid: this.optionalString(rfidUid) }
+                : {}),
+              ...(rfidReadValid !== undefined
+                ? { rfidReadValid: Boolean(rfidReadValid) }
+                : {}),
+              ...(this.optionalString(physicalState) !== undefined
+                ? { physicalState: this.optionalString(physicalState) }
+                : {}),
+              ...(this.optionalString(readerId) !== undefined
+                ? { readerId: this.optionalString(readerId) }
+                : {}),
+              ...(parsedLastSeenAt ? { lastSeenAt: parsedLastSeenAt } : {}),
+            };
+          }),
+        ),
+      ]);
+
+    return {
+      resourceId,
+      stationId: station.stationId,
+      valid: Boolean(valid),
+      revision: this.inventoryRevision(revision),
+      ...(capacity !== undefined
+        ? { capacity: this.requiredNonNegativeInteger(capacity, 'capacity') }
+        : {}),
+      availableCount: this.requiredNonNegativeInteger(
+        availableCount,
+        'availableCount',
+      ),
+      totalCount: this.requiredNonNegativeInteger(totalCount, 'totalCount'),
+      observations,
+    };
   }
 
   publishHandshakeEvent(payload: Readonly<Record<string, unknown>>): void {
     this.opcUa.publishStMesEvent(payload);
   }
 
-  async executeControlCommand(resourceId: number, command: MachineControlCommand): Promise<void> {
-    const prefix = this.controlPrefix(resourceId);
-    const commandNode = {
-      start: 'xCmdStart',
-      stop: 'xCmdStop',
-      reset: 'xCmdReset',
-      pause: 'xCmdPause',
-    }[command];
-    await this.opcUa.writeNodes([{ nodeId: prefix + commandNode, dataType: 'Boolean', value: true }]);
-  }
-
-  async executeLegacyControlCommand(resourceId: number, command: MachineControlCommand): Promise<void> {
-    const prefix = this.queryPrefix(resourceId);
-    switch (command) {
-      case 'start':
-        await this.opcUa.writeNodes([{ nodeId: prefix + 'xStart', dataType: 'Boolean', value: true }]);
-        break;
-      case 'stop':
-        await this.opcUa.writeNodes([
-          { nodeId: prefix + 'xQryBusy', dataType: 'Boolean', value: false },
-          { nodeId: prefix + 'xDone', dataType: 'Boolean', value: false },
-          { nodeId: prefix + 'xError', dataType: 'Boolean', value: false },
-        ]);
-        break;
-      case 'reset':
-        await this.opcUa.writeNodes([
-          { nodeId: prefix + 'xStart', dataType: 'Boolean', value: false },
-          { nodeId: prefix + 'xQryBusy', dataType: 'Boolean', value: false },
-          { nodeId: prefix + 'xDone', dataType: 'Boolean', value: false },
-          { nodeId: prefix + 'xError', dataType: 'Boolean', value: false },
-        ]);
-        break;
-      case 'pause':
-        await this.opcUa.writeNodes([{ nodeId: prefix + 'xQryBusy', dataType: 'Boolean', value: true }]);
-        break;
-    }
+  async executeControlCommand(
+    resourceId: number,
+    command: MachineControlCommand,
+  ): Promise<void> {
+    const signalRole: Record<
+      MachineControlCommand,
+      'controlStart' | 'controlStop' | 'controlReset' | 'controlPause'
+    > = {
+      start: 'controlStart',
+      stop: 'controlStop',
+      reset: 'controlReset',
+      pause: 'controlPause',
+    };
+    await this.writeSignals([[this.role(resourceId, signalRole[command]), true]]);
   }
 
   async readDiagnosticAddress(address: string): Promise<unknown> {
     return this.opcUa.readNode(address);
   }
 
-  async writeDiagnosticAddresses(writes: readonly MachineAddressWrite[]): Promise<void> {
-    await this.opcUa.writeNodes(writes.map(w => ({ nodeId: w.address, dataType: w.dataType, value: w.value })));
+  async writeDiagnosticAddresses(
+    writes: readonly MachineAddressWrite[],
+  ): Promise<void> {
+    await this.opcUa.writeNodes(
+      writes.map((write) => ({
+        nodeId: write.address,
+        dataType: write.dataType,
+        value: write.value,
+      })),
+    );
   }
 
   getStations(): readonly MachineStationDescriptor[] {
-    this.ensureProfileLoaded();
-    if (!this.profileLoaded) return this.getLegacyStations();
-
     const profile = this.machineProfileService.getProfile();
-    const stations: MachineStationDescriptor[] = [];
-
-    for (const station of profile.stations) {
-      if (!station.enabled) continue;
-
-      let resourceId: number | null = null;
-      if (station.metadata && station.metadata.resourceId) {
-        const parsed = Number(station.metadata.resourceId);
-        if (!Number.isNaN(parsed) && parsed > 0) {
-          resourceId = parsed;
-        } else {
-          this.logger.warn(`Station ${station.stationId} has invalid resourceId metadata: ${station.metadata.resourceId}, falling back to legacy`);
+    return profile.stations
+      .filter((station) => station.enabled)
+      .map((station) => {
+        const resourceId = station.resourceId;
+        if (!Number.isInteger(resourceId) || resourceId <= 0) {
+          throw new Error(
+            `Station ${station.stationId} requires a positive integer resourceId`,
+          );
         }
-      } else {
-        this.logger.warn(`Station ${station.stationId} missing resourceId metadata, falling back to legacy`);
-      }
-
-      if (resourceId !== null) {
-        stations.push({ resourceId, stationId: station.stationId, displayName: station.displayName, enabled: station.enabled });
-      }
-    }
-
-    if (stations.length === 0) {
-      this.logger.warn('No profile stations with valid resourceId, using legacy stations');
-      return this.getLegacyStations();
-    }
-
-    return stations;
+        const roleToCommand = {
+          controlStart: 'start',
+          controlStop: 'stop',
+          controlReset: 'reset',
+          controlPause: 'pause',
+        } as const;
+        const availableCommands = station.signals
+          .map((signal) => roleToCommand[signal.role as keyof typeof roleToCommand])
+          .filter(
+            (command): command is MachineControlCommand =>
+              command !== undefined,
+          );
+        return {
+          resourceId,
+          stationId: station.stationId,
+          displayName: station.displayName,
+          enabled: true,
+          routeSequence: station.routing?.sequence,
+          operationNo: station.routing?.operationNo,
+          operation: station.routing?.operation,
+          ...(station.resourceType
+            ? { resourceType: station.resourceType }
+            : {}),
+          ...(station.capabilities
+            ? { capabilities: station.capabilities }
+            : {}),
+          availableCommands,
+        };
+      });
   }
 
   getOrderParameterDefinitions(): readonly MachineOrderParameterDefinition[] {
-    try {
-      const profile = this.machineProfileService.getProfile();
-      return profile.orderParameterDefinitions || [];
-    } catch (error) {
-      this.logger.warn(`Machine profile unavailable for order parameters: ${(error as Error).message}`);
-      return [];
+    return this.machineProfileService.getProfile().orderParameterDefinitions || [];
+  }
+
+  private async read(resourceId: number, signalKey: string): Promise<unknown> {
+    const signal = this.signal(resourceId, signalKey);
+    this.assertReadable(resourceId, signal);
+    const value = await this.opcUa.readNode(signal.nodeId);
+    return this.fromMachineValue(signal, value);
+  }
+
+  private readRole(
+    resourceId: number,
+    role: OpcUaConfiguredSignal['role'],
+  ): Promise<unknown> {
+    const signal = this.role(resourceId, role);
+    this.assertReadable(resourceId, signal);
+    return this.opcUa
+      .readNode(signal.nodeId)
+      .then((value) => this.fromMachineValue(signal, value));
+  }
+
+  private async write(
+    resourceId: number,
+    values: readonly (readonly [signal: OpcUaConfiguredSignal, value: unknown])[],
+  ): Promise<void> {
+    await this.writeSignals(values, resourceId);
+  }
+
+  private async writeSignals(
+    values: readonly (readonly [signal: OpcUaConfiguredSignal, value: unknown])[],
+    resourceId?: number,
+  ): Promise<void> {
+    const nodes = values.map(([signal, value]) => {
+      this.assertWritable(resourceId, signal);
+      return {
+        nodeId: signal.nodeId,
+        dataType: signal.dataType,
+        value: this.toMachineValue(signal, value),
+      };
+    });
+    await this.opcUa.writeNodes(nodes);
+  }
+
+  private signal(
+    resourceId: number,
+    signalKey: string,
+  ): OpcUaConfiguredSignal {
+    return this.opcUa.getConfiguredSignal(resourceId, signalKey);
+  }
+
+  private role(
+    resourceId: number,
+    role: OpcUaConfiguredSignal['role'],
+  ): OpcUaConfiguredSignal {
+    return this.opcUa.getConfiguredSignalByRole(resourceId, role);
+  }
+
+  private assertReadable(
+    resourceId: number | undefined,
+    signal: OpcUaConfiguredSignal,
+  ): void {
+    if (signal.access !== 'read' && signal.access !== 'readWrite') {
+      throw new Error(
+        `Signal ${signal.key} for resource ${resourceId} is not readable`,
+      );
     }
   }
 
-  private ensureProfileLoaded(): void {
-    if (this.profileLoaded) return;
-
-    try {
-      const profile = this.machineProfileService.getProfile();
-      this.logger.log(`Machine profile loaded: ${profile.machineId} with ${profile.stations.length} stations`);
-      this.profileLoaded = true;
-    } catch (error) {
-      this.logger.warn(`Machine profile unavailable; using legacy OPC-UA mapping: ${(error as Error).message}`);
-      this.profileLoaded = false;
+  private assertWritable(
+    resourceId: number | undefined,
+    signal: OpcUaConfiguredSignal,
+  ): void {
+    if (signal.access !== 'write' && signal.access !== 'readWrite') {
+      throw new Error(
+        `Signal ${signal.key} for resource ${resourceId} is not writable`,
+      );
     }
   }
 
-  private addressOrLegacy(resourceId: number, signalKey: string, legacyAddress: string): string {
-    this.ensureProfileLoaded();
-    if (!this.profileLoaded) return legacyAddress;
-
-    const profileAddress = this.resolveSignalAddress(resourceId, signalKey);
-    if (profileAddress) return profileAddress;
-    return legacyAddress;
+  private fromMachineValue(
+    signal: OpcUaConfiguredSignal,
+    value: unknown,
+  ): unknown {
+    if (!signal.scaling || typeof value !== 'number') return value;
+    return value * signal.scaling.factor + signal.scaling.offset;
   }
 
-  private resolveSignalAddress(resourceId: number, signalKey: string): string | undefined {
-    const station = this.resolveProfileStation(resourceId);
-    if (!station) return undefined;
-
-    const signal = station.signals.find(s => s.key === signalKey);
-    if (!signal) return undefined;
-
-    const identifier = signal.identifier;
-    if (!identifier.startsWith('ns=')) return undefined;
-
-    return identifier;
+  private toMachineValue(
+    signal: OpcUaConfiguredSignal,
+    value: unknown,
+  ): unknown {
+    if (!signal.scaling || typeof value !== 'number') return value;
+    if (signal.scaling.factor === 0) {
+      throw new Error(`Signal ${signal.key} has an invalid scaling factor of 0`);
+    }
+    return (value - signal.scaling.offset) / signal.scaling.factor;
   }
 
-  private resolveProfileStation(resourceId: number): { signals: readonly { key: string; identifier: string }[] } | undefined {
-    const profile = this.machineProfileService.getProfile();
-    const station = profile.stations.find(s => s.enabled && s.metadata && Number(s.metadata.resourceId) === resourceId);
-    if (!station) return undefined;
-    return { signals: station.signals };
+  private optionalPositiveInteger(value: unknown): number | undefined {
+    if (value === undefined || value === null || value === '') return undefined;
+    const number = Number(value);
+    return Number.isInteger(number) && number > 0 ? number : undefined;
   }
 
-  private getLegacyStations(): readonly MachineStationDescriptor[] {
-    return [
-      { resourceId: 1, stationId: 'legacy-station-1', displayName: 'Station 1', enabled: true },
-      { resourceId: 2, stationId: 'legacy-station-2', displayName: 'Station 2', enabled: true },
-      { resourceId: 3, stationId: 'legacy-station-3', displayName: 'Station 3', enabled: true },
-    ];
+  private optionalString(value: unknown): string | undefined {
+    if (value === undefined || value === null) return undefined;
+    if (
+      typeof value !== 'string' &&
+      typeof value !== 'number' &&
+      typeof value !== 'bigint' &&
+      typeof value !== 'boolean'
+    ) {
+      return undefined;
+    }
+    const string = String(value).trim();
+    return string.length > 0 ? string : undefined;
   }
 
-  private queryPrefix(resourceId: number): string {
-    return `ns=1;s=Station${resourceId}.stMES.Query.`;
+  private optionalDate(value: unknown): Date | undefined {
+    if (value === undefined || value === null || value === '') return undefined;
+    if (
+      !(value instanceof Date) &&
+      typeof value !== 'string' &&
+      typeof value !== 'number'
+    ) {
+      return undefined;
+    }
+    const date = value instanceof Date ? value : new Date(value);
+    return Number.isFinite(date.getTime()) ? date : undefined;
   }
 
-  private processPrefix(resourceId: number): string {
-    return `ns=1;s=Station${resourceId}.dbProcessData.`;
+  private inventoryRevision(value: unknown): number | string {
+    if (typeof value === 'number' && Number.isFinite(value)) return value;
+    const string = this.optionalString(value);
+    if (string !== undefined) return string;
+    throw new Error('Inventory revision must be a finite number or string');
   }
 
-  private statePrefix(resourceId: number): string {
-    return `ns=1;s=Station${resourceId}.stMES.State.`;
-  }
-
-  private controlPrefix(resourceId: number): string {
-    return `ns=1;s=Station${resourceId}.stMES.Control.`;
+  private requiredNonNegativeInteger(value: unknown, field: string): number {
+    const number = Number(value);
+    if (!Number.isInteger(number) || number < 0) {
+      throw new Error(`Inventory ${field} must be a non-negative integer`);
+    }
+    return number;
   }
 }

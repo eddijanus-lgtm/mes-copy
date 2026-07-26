@@ -194,7 +194,7 @@ nicht implementiert.
 
 ### 9.1 Testumgebung (Demo-Simulator)
 
-Der aktuelle Demo-Simulator in `opcua-test-server.js` simuliert 3 Stationen mit kurzen Zeiten:
+Die externe Testmaschine in `test-machines/opcua-simulator/server.js` simuliert 3 Stationen mit kurzen Zeiten. Das MES verwendet dafür den produktiven OPC-UA-Adapter:
 
 - Station 1: 5 Sekunden Zykluszeit
 - Station 2: 6 Sekunden Zykluszeit

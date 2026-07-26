@@ -77,9 +77,9 @@ Präfix: `ns=1;s=Station<resourceId>.stMES.Query.`
 ## Demo starten
 
 ```bash
-npm run start:opcua-test
+npm run start:test-machine
 npm run start:prod
-DEMO_ADMIN_USERNAME=<admin> DEMO_ADMIN_PASSWORD=<password> npm run seed:stmes-demo
+DEMO_ADMIN_USERNAME=<admin> DEMO_ADMIN_PASSWORD=<password> npm run seed:test-machine
 ```
 
 Der Seed legt ausschließlich folgende Testdaten an beziehungsweise aktualisiert sie:
@@ -100,11 +100,11 @@ Für einen vollständig sichtbaren Lauf zuerst den Seed ausführen, dann die Edg
 
 ## Austauschgrenze zur realen SPS
 
-- Ausschließlich `tools/opcua-test-server.js` spielt die Rolle der SPS und initiiert Prozesssignale.
+- Ausschließlich `test-machines/opcua-simulator/server.js` spielt die Rolle der SPS und initiiert Prozesssignale. Das MES verwendet dabei den echten `OpcUaMachineAdapter`.
 - Backend und Frontend enthalten keinen Demo-Replay-Endpunkt und treiben die SPS nicht künstlich an.
 - Das MES reagiert auf `xStart`, schreibt die Antwortfelder und wertet die SPS-Quittierung sowie `ldtTimeStamp` aus.
-- Wenn die reale SPS denselben Vertrag und dieselben NodeIds bereitstellt, wird der Testserver beendet und `OPC_UA_SERVER_ADDRESS` auf den realen Endpoint gesetzt.
-- Solange die echte UDT-Dokumentation fehlt, ist ein reiner Endpoint-Wechsel nicht garantiert. Abweichende NodeIds, Typen oder Signalfolgen müssen zuerst im Vertrag und in der Konfiguration umgesetzt und gegen den Simulator getestet werden.
+- Für die reale SPS wird `MACHINE_PROFILE_PATH` auf ein validiertes Anlagenprofil gesetzt. Endpoint, Namespace-URIs, Stationen, Rollen, Datentypen, Routing und Security werden aus diesem Profil geladen.
+- Der Simulator darf eigene NodeIds und Signalnamen besitzen: Das MES arbeitet nur mit den semantischen Rollen des jeweils aktiven Profils. Der produktive Adapter bleibt dabei derselbe.
 
 ## Vor realer SPS-Anbindung zwingend ersetzen
 

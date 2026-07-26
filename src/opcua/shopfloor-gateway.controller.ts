@@ -1,7 +1,7 @@
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { Controller, Get, Post, Body, Inject } from '@nestjs/common';
 import { MqttGatewayService } from './mqtt-gateway.service';
-import { MqttPublishDto, OpcUaReadDto, MachineControlDto, OpcUaWriteDto, OpcUaWriteItemDto } from './shopfloor-gateway.dto';
+import { MqttPublishDto, OpcUaReadDto, MachineControlDto, OpcUaWriteDto } from './shopfloor-gateway.dto';
 import { Roles } from '../auth/roles.decorator';
 import { UserRoleEnum } from '../users/user.entity';
 import { StMesHandshakeService } from './stmes-handshake.service';
@@ -49,7 +49,8 @@ export class ShopfloorGatewayController {
 
   @Get('health')
   @Roles(UserRoleEnum.ADMIN, UserRoleEnum.OPERATOR, UserRoleEnum.VIEWER)
-  getHealth() {
+  async getHealth() {
+    const machineStatus = await this.machine.getConnectionStatus();
     return {
       status: 'ok',
       ok: this.machine.isConnected() && this.mqttGatewayService.isConnected(),
@@ -57,11 +58,22 @@ export class ShopfloorGatewayController {
       role: 'OT/IT gateway for OPC UA station handshakes, MQTT ingress and shopfloor telemetry forwarding. Routing decisions stay in MES routing.',
       timestamp: new Date().toISOString(),
       protocols: {
-        opcua: { connected: this.machine.isConnected(), direction: 'read/write', purpose: 'SPS stMES handshake and DB151 process data' },
+        opcua: {
+          connected: this.machine.isConnected(),
+          direction:
+            machineStatus.operatingMode === 'control'
+              ? 'read/write'
+              : 'read-only',
+          purpose: 'Profile-configured machine signals and production events',
+        },
         mqtt: { connected: this.mqttGatewayService.isConnected(), direction: 'subscribe/publish', purpose: 'Webshop order ingress and broker telemetry' },
       },
       opcua: this.machine.isConnected(),
       mqtt: this.mqttGatewayService.isConnected(),
+      machine: {
+        ...machineStatus,
+        stations: this.machine.getStations(),
+      },
     };
   }
 
@@ -87,13 +99,6 @@ export class ShopfloorGatewayController {
   @Roles(UserRoleEnum.ADMIN, UserRoleEnum.OPERATOR)
   async controlMachine(@Body() dto: MachineControlDto) {
     await this.machine.executeControlCommand(dto.resourceId, dto.command);
-    return { success: true, command: dto.command, resourceId: dto.resourceId };
-  }
-
-  @Post('machine/control/legacy')
-  @Roles(UserRoleEnum.ADMIN, UserRoleEnum.OPERATOR)
-  async controlMachineLegacy(@Body() dto: MachineControlDto) {
-    await this.machine.executeLegacyControlCommand(dto.resourceId, dto.command);
     return { success: true, command: dto.command, resourceId: dto.resourceId };
   }
 
