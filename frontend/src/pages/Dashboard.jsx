@@ -77,7 +77,7 @@ export default function Dashboard() {
     const initWebSocket = () => {
       if (!token || wsRef.current) return;
       const protocol = window.location.protocol === "https:" ? "wss" : "ws";
-      const ws = new WebSocket(`${protocol}://${window.location.host}/api/shopfloor/ws`);
+      const ws = new WebSocket(`${protocol}://${window.location.host}/api/v1/shopfloor/ws`);
       wsRef.current = ws;
 
       ws.onopen = () => {

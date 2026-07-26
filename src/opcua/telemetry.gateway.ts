@@ -9,7 +9,7 @@ import { DashboardService } from '../dashboard/dashboard.service';
 import { MACHINE_ADAPTER } from '../machines/adapters/machine-adapter.token';
 import type { MachineAdapter } from '../machines/adapters/machine-adapter.types';
 
-@WebSocketGateway({ path: '/api/shopfloor/ws' })
+@WebSocketGateway({ path: '/api/v1/shopfloor/ws' })
 export class TelemetryGateway implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect, OnModuleDestroy {
   @WebSocketServer()
   server: WsServer;

@@ -71,7 +71,7 @@ Das relationale Datenmodell bleibt PostgreSQL-kompatibel. NestJS/TypeORM schreib
 - Nutzt `data_points` als TimescaleDB-Hypertable und kann historische Trends über `data_points_1min` abfragen
 
 ### Shopfloor Gateway Controller (`src/opcua/shopfloor-gateway.controller.ts`)
-- Health-Check Endpoints unter `/api/shopfloor/*`
+- Health-Check Endpoints unter `/api/v1/shopfloor/*`
 - OPC-UA-/MQTT-Status-Anzeige
 - Direkte erlaubte Lesezugriffe auf OPC-UA-Nodes
 - Historie fuer stMES-Handshakes, MQTT-Nachrichten und Webshop-Auftraege

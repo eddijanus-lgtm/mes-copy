@@ -2,13 +2,13 @@
 
 ## Basis-URL
 ```
-http://localhost:3000/api
+http://localhost:3000/api/v1
 ```
 
 ## Authentifizierung
 
 ```http
-POST /api/auth/login
+POST /api/v1/auth/login
 Content-Type: application/json
 
 {
@@ -26,7 +26,7 @@ Authorization: Bearer <access_token>
 Rollen: `viewer` liest, `operator` liest und bearbeitet Produktionsdaten, `admin` besitzt Vollzugriff. Benutzeranlage ist Admin-only:
 
 ```http
-POST /api/auth/register
+POST /api/v1/auth/register
 Authorization: Bearer <admin-token>
 
 {
@@ -40,21 +40,21 @@ Der erste Admin wird lokal mit `npm run create-admin` angelegt. Es gibt keinen H
 
 ---
 
-## Alarme (`/api/alarms`)
+## Alarme (`/api/v1/alarms`)
 
 ### Alle aktiven Alarme
 ```
-GET /api/alarms
+GET /api/v1/alarms
 ```
 
 ### einzelnen Alarm abrufen
 ```
-GET /api/alarms/:id
+GET /api/v1/alarms/:id
 ```
 
 ### Alarm erstellen
 ```
-POST /api/alarms
+POST /api/v1/alarms
 Content-Type: application/json
 
 {
@@ -66,31 +66,31 @@ Content-Type: application/json
 
 ### Alarm bestätigen
 ```
-POST /api/alarms/:id/acknowledge
+POST /api/v1/alarms/:id/acknowledge
 ```
 
 ### Alarm löschen
 ```
-DELETE /api/alarms/:id
+DELETE /api/v1/alarms/:id
 ```
 
 ### Anzahl aktiver Alarme
 ```
-GET /api/alarms/stats/active-count
+GET /api/v1/alarms/stats/active-count
 ```
 
 ---
 
-## Maschinen (`/api/machines`)
+## Maschinen (`/api/v1/machines`)
 
 ### Alle Maschinen
 ```
-GET /api/machines
+GET /api/v1/machines
 ```
 
 ### Maschine erstellen
 ```
-POST /api/machines
+POST /api/v1/machines
 {
   "name": "CNC-Maschine-01",
   "status": "offline",
@@ -101,12 +101,12 @@ POST /api/machines
 
 ### Maschinen aktualisieren
 ```
-PATCH /api/machines/:id
+PATCH /api/v1/machines/:id
 ```
 
 ### Maschinenauftrag löschen
 ```
-DELETE /api/machines/:id
+DELETE /api/v1/machines/:id
 ```
 
 ---
@@ -114,11 +114,11 @@ DELETE /api/machines/:id
 ## Shopfloor Gateway und OPC UA
 
 ```http
-GET /api/shopfloor/health
-GET /api/shopfloor/stmes/handshakes
-GET /api/shopfloor/mqtt/messages
-GET /api/shopfloor/webshop/orders
-POST /api/shopfloor/opcua/read
+GET /api/v1/shopfloor/health
+GET /api/v1/shopfloor/stmes/handshakes
+GET /api/v1/shopfloor/mqtt/messages
+GET /api/v1/shopfloor/webshop/orders
+POST /api/v1/shopfloor/opcua/read
 
 {
   "nodeId": "ns=1;s=DB151.dbProcessData.iCarrierID"
@@ -129,7 +129,7 @@ OPC-UA-Reads sind Operator/Admin vorbehalten. MQTT-Publish ist Admin-only und au
 
 ## Live-Telemetrie WebSocket
 
-Verbindung: `ws://localhost:3000/api/shopfloor/ws`
+Verbindung: `ws://localhost:3000/api/v1/shopfloor/ws`
 
 Erste Nachricht innerhalb von fünf Sekunden:
 
@@ -139,24 +139,24 @@ Erste Nachricht innerhalb von fünf Sekunden:
 
 Danach folgen Nachrichten vom Typ `auth.ok` und `shopfloor.telemetry`. Ungültige Verbindungen werden mit Code 4401 geschlossen.
 
-OPC-UA-Nachrichten enthalten entweder einen sekündlichen `station.snapshot` mit DB151- und aktuellen Query-Signalen oder ein ereignisgetriebenes `stmes.handshake` fuer Anfrage, Verarbeitung, Antwort, Quittierung und Prozessabschluss. `GET /api/shopfloor/stmes/handshakes` liefert das persistierte Journal fuer die Anzeige nach einem Seiten-Reload.
+OPC-UA-Nachrichten enthalten entweder einen sekündlichen `station.snapshot` mit DB151- und aktuellen Query-Signalen oder ein ereignisgetriebenes `stmes.handshake` fuer Anfrage, Verarbeitung, Antwort, Quittierung und Prozessabschluss. `GET /api/v1/shopfloor/stmes/handshakes` liefert das persistierte Journal fuer die Anzeige nach einem Seiten-Reload.
 
-MQTT-Nachrichten auf den konfigurierten Subscribe-Topics werden ebenfalls als `shopfloor.telemetry` mit `source: "mqtt"` uebertragen. `GET /api/shopfloor/mqtt/messages` liefert die letzten 50 seit dem Backend-Start empfangenen Nachrichten fuer die initiale Browseranzeige.
+MQTT-Nachrichten auf den konfigurierten Subscribe-Topics werden ebenfalls als `shopfloor.telemetry` mit `source: "mqtt"` uebertragen. `GET /api/v1/shopfloor/mqtt/messages` liefert die letzten 50 seit dem Backend-Start empfangenen Nachrichten fuer die initiale Browseranzeige.
 
 ## Health
 
-`GET /api/health` ist öffentlich und liefert den Datenbankstatus. Alle öffentlichen Endpunkte unterliegen Rate Limits.
+`GET /api/v1/health` ist öffentlich und liefert den Datenbankstatus. Alle öffentlichen Endpunkte unterliegen Rate Limits.
 
 ---
 
 ## Aufträge
 
 ```http
-GET    /api/orders
-POST   /api/orders
-GET    /api/orders/:id
-PATCH  /api/orders/:id
-DELETE /api/orders/:id
+GET    /api/v1/orders
+POST   /api/v1/orders
+GET    /api/v1/orders/:id
+PATCH  /api/v1/orders/:id
+DELETE /api/v1/orders/:id
 ```
 
 Viewer dürfen Aufträge lesen, Operatoren und Admins dürfen sie anlegen und bearbeiten, nur Admins dürfen löschen. `PATCH` unterstützt Stammdaten, Planung, Status und Fertigmenge. Aufträge mit zugeordneten Carriern können nicht gelöscht werden.
@@ -164,11 +164,11 @@ Viewer dürfen Aufträge lesen, Operatoren und Admins dürfen sie anlegen und be
 ## Carrier und Routing (Demo-Grundmodell)
 
 ```http
-GET  /api/carriers
-POST /api/carriers
-POST /api/carriers/:id/assignment
-GET  /api/orders/:id/route
-PATCH /api/orders/:id/route
+GET  /api/v1/carriers
+POST /api/v1/carriers
+POST /api/v1/carriers/:id/assignment
+GET  /api/v1/orders/:id/route
+PATCH /api/v1/orders/:id/route
 ```
 
 Carrier anlegen:

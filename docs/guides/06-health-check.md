@@ -39,7 +39,7 @@ Ein Health Check ist ein spezieller API-Endpoint (`GET /health`), der prüft ob 
 
 ### Schritt 3: AppGlobal Health-Module registrieren
 **Was:** health.module in app.module.ts imports
-**Warum:** Damit der Endpoint unter `/api/health` erreichbar ist
+**Warum:** Damit der Endpoint unter `/api/v1/health` erreichbar ist
 
 ### Implementierte Struktur (2026-07-22T12:45+02:00):
 ```
@@ -56,7 +56,7 @@ app.module.ts                ✅ HealthModule registriert
 - [x] `npm install @nestjs/terminus` ausgeführt
 - [x] TypeORM-Datenbankindikator korrekt eingebunden
 - [x] `HealthModule` in `AppModule` registriert
-- [x] `GET /api/health` ist öffentlich und gibt HTTP 200 zurück
+- [x] `GET /api/v1/health` ist öffentlich und gibt HTTP 200 zurück
 - [x] Response meldet `database.status: up`
 - [ ] OPC-UA- und MQTT-Status ergänzen
 

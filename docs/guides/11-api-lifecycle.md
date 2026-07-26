@@ -1,6 +1,6 @@
 # 11 – API-Versionierung und Deprecation Policy
 
-_Status: v1 aktiv – unversionierte Übergangspfade veraltet_
+_Status: v1 aktiv – unversionierte REST-Pfade abgeschaltet_
 
 ## Aktueller Vertrag
 
@@ -26,25 +26,9 @@ Swagger UI und OpenAPI-Vertrag:
 /api/docs/openapi.json
 ```
 
-Nur die aktuelle Version wird im OpenAPI-Vertrag veröffentlicht. Dadurch
-generieren Frontends und andere Clients keine neuen Aufrufe gegen veraltete
-Pfade.
-
-## Übergang für bestehende Clients
-
-Die bisherigen unversionierten Pfade unter `/api/*` bleiben vorübergehend als
-Kompatibilitätsalias aktiv. Antworten dieser Pfade enthalten:
-
-```text
-Deprecation: true
-Sunset: Tue, 01 Dec 2026 00:00:00 GMT
-Warning: 299 - "Unversioned API path is deprecated; use /api/v1"
-Link: </api/v1/...>; rel="successor-version"
-```
-
-Der 1. Dezember 2026 ist der **früheste** Abschaltzeitpunkt. Eine Entfernung
-erfolgt nur, wenn Frontend, Werkzeuge und dokumentierte Integrationen auf v1
-umgestellt und erneut getestet sind.
+Nur die aktuelle Version wird im OpenAPI-Vertrag veröffentlicht. Unversionierte
+REST-Pfade unter `/api/*` sind nicht verfügbar und liefern HTTP 404. Frontend,
+Werkzeuge und Integrationen müssen `/api/v1/*` verwenden.
 
 ## Breaking und Non-Breaking Changes
 
@@ -71,9 +55,8 @@ Ein veralteter Endpoint muss:
 
 1. in OpenAPI mit `deprecated: true` markiert sein;
 2. die konkrete Nachfolgeoperation nennen;
-3. einen frühesten Abschaltzeitpunkt dokumentieren;
-4. mindestens bis nach der Hausmesse funktionsfähig bleiben;
-5. einen automatisierten Test für Alt- und Nachfolgepfad besitzen.
+3. einen geplanten Abschaltzeitpunkt in der Projektdokumentation nennen;
+4. einen automatisierten Test für Alt- und Nachfolgeoperation besitzen.
 
 Aktuelles Beispiel:
 
@@ -110,7 +93,5 @@ Das Frontend verwendet ausschließlich `/api/v1`. Codex kann den Vertrag unter
 - Statuscodes und standardisierte Fehler korrekt zu behandeln;
 - bei Änderungen betroffene Seiten gezielt zu finden.
 
-Der WebSocket-Pfad `/api/shopfloor/ws` bleibt zunächst unverändert. Sein
-Nachrichtenformat wird separat über das Feld `type` versioniert, damit bestehende
-Live-Dashboard-Verbindungen nicht durch die HTTP-Versionierung unterbrochen
-werden.
+Der WebSocket-Pfad `/api/v1/shopfloor/ws` verwendet denselben Versionspräfix.
+Das Nachrichtenformat wird zusätzlich über das Feld `type` versioniert.

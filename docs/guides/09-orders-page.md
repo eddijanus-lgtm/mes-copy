@@ -37,7 +37,7 @@ Dieser Client ist die Basis **aller** API-Kommunikation im Frontend.
 const API_BASE = '/api';
 
 async function request(endpoint, options = {}) {
-  const url = `${API_BASE}${endpoint}`;  // z.B. "/api/orders"
+  const url = `${API_BASE}${endpoint}`;  // z.B. "/api/v1/orders"
 ```
 
 - Alle Requests gehen automatisch über `/api` — das ist der Proxy zum Backend (Vite proxys zu `localhost:3000`).
@@ -367,14 +367,14 @@ function toLocalInput(value) { ... }                           {/* UTC -> dateti
 
 | Endpoint | Methode | Funktion |
 |----------|---------|---------|
-| `/api/orders` | GET | Alle Orders |
-| `/api/orders/active` | GET | Aktive orders (`status !== completed && cancelled`) |
-| `/api/orders/line/:machineId/pending` | GET | Pending Orders für eine Station (für Routing) |
-| `/api/orders/:id` | GET | Einzelne Order |
-| `/api/orders/:id/route` | POST | Route-Zuweisung an Carrier |
-| `/api/orders` | POST | **Neuen Order erstellen** |
-| `/api/orders/:id` | PATCH | **Order aktualisieren** (status + completed_quantity) |
-| `/api/orders/:id` | DELETE | **Order löschen** |
+| `/api/v1/orders` | GET | Alle Orders |
+| `/api/v1/orders/active` | GET | Aktive orders (`status !== completed && cancelled`) |
+| `/api/v1/orders/line/:machineId/pending` | GET | Pending Orders für eine Station (für Routing) |
+| `/api/v1/orders/:id` | GET | Einzelne Order |
+| `/api/v1/orders/:id/route` | POST | Route-Zuweisung an Carrier |
+| `/api/v1/orders` | POST | **Neuen Order erstellen** |
+| `/api/v1/orders/:id` | PATCH | **Order aktualisieren** (status + completed_quantity) |
+| `/api/v1/orders/:id` | DELETE | **Order löschen** |
 
 ### Orders Service (`src/orders/order.service.ts`)
 
@@ -465,7 +465,7 @@ export default defineConfig({
 });
 ```
 
-Das Frontend läuft auf Port `5173`, aber der Backend ist auf `3000`. Die Vite-Dev-Server-Proxies alle `/api/*` automatisch zum Backend → das frontend muss keinen API-Prefix mitgeben. Nur `api.get("/orders")` wird zu `GET /api/orders → http://localhost:3000/api/orders`.
+Das Frontend läuft auf Port `5173`, aber das Backend auf `3000`. Der Vite-Dev-Server leitet alle `/api/*` automatisch zum Backend weiter. `api.get("/orders")` wird dadurch zu `GET /api/v1/orders → http://localhost:3000/api/v1/orders`.
 
 ---
 

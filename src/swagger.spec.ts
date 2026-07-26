@@ -14,10 +14,7 @@ import {
 import { Test, TestingModule } from '@nestjs/testing';
 import request from 'supertest';
 import { App } from 'supertest/types';
-import {
-  LEGACY_API_SUNSET,
-  configureApiVersioning,
-} from './api-versioning';
+import { configureApiVersioning } from './api-versioning';
 import { createDocument } from './swagger';
 
 class ContractRequestDto {
@@ -66,15 +63,13 @@ describe('OpenAPI contract', () => {
     await app.close();
   });
 
-  it('serves v1 and keeps the unversioned route as deprecated alias', async () => {
+  it('serves v1 and rejects the unversioned route', async () => {
     await request(app.getHttpServer()).get('/api/v1/contract').expect(200);
-
-    const legacy = await request(app.getHttpServer())
+    const unversioned = await request(app.getHttpServer())
       .get('/api/contract')
-      .expect(200);
-    expect(legacy.headers.deprecation).toBe('true');
-    expect(legacy.headers.sunset).toBe(LEGACY_API_SUNSET);
-    expect(legacy.headers.link).toContain('/api/v1/contract');
+      .expect(404);
+    expect(unversioned.headers.deprecation).toBeUndefined();
+    expect(unversioned.headers.sunset).toBeUndefined();
   });
 
   it('publishes only v1 paths with complete operation contracts', () => {
@@ -113,13 +108,13 @@ describe('OpenAPI contract', () => {
     }
   });
 
-  it('marks deprecated operations with a sunset contract', () => {
+  it('keeps deprecated operations visible without a global sunset header', () => {
     const document = createDocument(app);
     const operation =
       document.paths['/api/v1/contract/deprecated']?.get;
 
     expect(operation?.deprecated).toBe(true);
-    expect(operation?.['x-sunset']).toBe(LEGACY_API_SUNSET);
-    expect(operation?.responses['200']?.headers?.Sunset).toBeDefined();
+    expect(operation?.['x-sunset']).toBeUndefined();
+    expect(operation?.responses['200']?.headers?.Sunset).toBeUndefined();
   });
 });

@@ -12,7 +12,7 @@ Dieses Protokoll beschreibt einen kompletten Demoablauf vom Webshop-Auftrag bis 
 | --- | --- | --- |
 | Frontend | Bedienoberflaeche und Live-Anzeige | `http://localhost:5173` |
 | Backend / MES API | Auftragsanlage, Routing und Carrier-Tracking | `http://localhost:3000/api` |
-| Shopfloor Gateway | OT/IT-Vermittlung fuer OPC-UA, MQTT und stMES-Handshakes | `http://localhost:3000/api/shopfloor` |
+| Shopfloor Gateway | OT/IT-Vermittlung fuer OPC-UA, MQTT und stMES-Handshakes | `http://localhost:3000/api/v1/shopfloor` |
 | PostgreSQL | Persistenz fuer Auftraege, Routen, Carrier und Stammdaten | Docker-Container `mes_db_dev`, Port `5433` |
 | MQTT Broker | Eingang der Webshop-Bestellungen | lokal `mqtt://localhost:1883` |
 | OPC-UA-Testanlage | Simulierte SPS-/Produktionslinie | `opc.tcp://localhost:4840/UA/WaraMesTest` |

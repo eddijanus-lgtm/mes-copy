@@ -31,4 +31,4 @@ Das Backend setzt dieselben Regeln unabhängig von der Sichtbarkeit der Buttons 
 
 ## Verifikation
 
-Der Zyklus `POST /api/orders` -> `PATCH /api/orders/:id` -> `DELETE /api/orders/:id` wurde gegen die lokale PostgreSQL-Datenbank erfolgreich geprüft. Die Löschung des Demo-Auftrags mit zugeordneten Carriern wurde erwartungsgemäß mit HTTP 400 abgelehnt.
+Der Zyklus `POST /api/v1/orders` -> `PATCH /api/v1/orders/:id` -> `DELETE /api/v1/orders/:id` wurde gegen die lokale PostgreSQL-Datenbank erfolgreich geprüft. Die Löschung des Demo-Auftrags mit zugeordneten Carriern wurde erwartungsgemäß mit HTTP 400 abgelehnt.

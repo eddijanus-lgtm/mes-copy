@@ -4,7 +4,7 @@ _Status: Phase 1 complete and verified - 2026-07-22_
 
 ## Architektur
 
-- `POST /api/auth/login` ist öffentlich und auf 5 Versuche pro Minute begrenzt.
+- `POST /api/v1/auth/login` ist öffentlich und auf 5 Versuche pro Minute begrenzt.
 - Alle anderen Fach-APIs benötigen einen signierten JWT.
 - JWTs enthalten `sub`, `username`, `role`, `iat` und `exp` und laufen nach einer Stunde ab.
 - Rollen werden als `admin`, `operator` oder `viewer` validiert.

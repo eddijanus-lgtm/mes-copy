@@ -29,7 +29,7 @@ export function useShopfloorTelemetry() {
     function connect() {
       const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
       setState((current) => ({ ...current, status: "connecting" }));
-      socket = new WebSocket(`${protocol}//${window.location.host}/api/shopfloor/ws`);
+      socket = new WebSocket(`${protocol}//${window.location.host}/api/v1/shopfloor/ws`);
 
       socket.onopen = () => socket.send(JSON.stringify({ type: "auth", token }));
       socket.onmessage = (event) => {

@@ -6,11 +6,7 @@ import {
 } from '@nestjs/swagger';
 import type { OpenAPIObject } from '@nestjs/swagger';
 import { ApiInfoDto } from './app.dto';
-import {
-  API_VERSION,
-  LEGACY_API_SUNSET,
-  VERSIONED_API_PREFIX,
-} from './api-versioning';
+import { API_VERSION } from './api-versioning';
 import {
   AccessTokenDto,
   UserCreatedDto,
@@ -191,40 +187,12 @@ function addDeprecationContract(operation: Record<string, any>): void {
   if (!operation.deprecated) return;
 
   operation.description = `${operation.description || ''}\n\nDieser Endpoint ist veraltet. Die Nachfolgeoperation ist in der Beschreibung genannt.`.trim();
-  operation['x-sunset'] = LEGACY_API_SUNSET;
-
-  for (const response of Object.values(
-    operation.responses as Record<string, any>,
-  )) {
-    if (!response || typeof response !== 'object') continue;
-    response.headers ||= {};
-    response.headers.Deprecation ||= {
-      description: 'Kennzeichnet einen veralteten Endpoint.',
-      schema: { type: 'boolean', example: true },
-    };
-    response.headers.Sunset ||= {
-      description: 'Frühester geplanter Abschaltzeitpunkt.',
-      schema: { type: 'string', example: LEGACY_API_SUNSET },
-    };
-  }
 }
 
 export function enhanceOpenApiDocument(document: OpenAPIObject): OpenAPIObject {
   const errorContent = {
     'application/json': { schema: { $ref: getSchemaPath(ApiErrorDto) } },
   };
-
-  // Unversioned compatibility aliases remain callable, but are deliberately
-  // omitted from the current contract to keep the documentation unambiguous.
-  for (const path of Object.keys(document.paths)) {
-    if (
-      path.startsWith('/api/') &&
-      !path.startsWith(`/${VERSIONED_API_PREFIX}/`) &&
-      path !== `/${VERSIONED_API_PREFIX}`
-    ) {
-      delete document.paths[path];
-    }
-  }
 
   for (const [path, pathItem] of Object.entries(document.paths)) {
     for (const [httpMethod, rawOperation] of Object.entries(pathItem ?? {})) {
@@ -277,8 +245,7 @@ export function enhanceOpenApiDocument(document: OpenAPIObject): OpenAPIObject {
 
   (document as OpenAPIObject & Record<string, unknown>)['x-api-lifecycle'] = {
     currentVersion: `v${API_VERSION}`,
-    unversionedAliasDeprecated: true,
-    unversionedAliasSunset: LEGACY_API_SUNSET,
+    unversionedPathsSupported: false,
     policy: '/docs/guides/11-api-lifecycle.md',
   };
   return document;

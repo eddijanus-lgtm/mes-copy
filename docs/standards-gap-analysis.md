@@ -65,7 +65,7 @@ Bewertungsstatus:
 | MES-06 | Level-3/Level-4-Nachrichtenverträge | Teilweise | Webshop-Aufträge über MQTT und REST-Verträge | Kanonisches Nachrichtenmodell, Schema-Versionierung, Message-ID, Idempotenz, Dublettenbehandlung und fachliche Bestätigungen fehlen. |
 | MES-07 | Verlässliche Produktionskennzahlen | Offen | Schichtbericht-Endpunkte und DTOs | `src/shifts/shifts.service.ts` erzeugt OEE-, Durchsatz- und Stillstandswerte teilweise per `Math.random()`. Vor Produktivbetrieb durch berechnete, rückverfolgbare Werte ersetzen. |
 | API-01 | Maschinenlesbare API-Dokumentation | Teilweise | OpenAPI/Swagger-Konfiguration in `src/swagger.ts`; Tags, standardisierte Erfolgs- und Fehlerverträge, Beispiele, Security-Scheme und OpenAPI-Vertragstest | Für komplexe fachliche Antworten sollten schrittweise noch spezifische Response-DTOs anstelle des generischen Fallback-Schemas ergänzt werden. |
-| API-02 | Stabiler API-Lebenszyklus | Erfüllt | Versionierter `/api/v1`-Vertrag, vorübergehender unversionierter Kompatibilitätspfad und `docs/guides/11-api-lifecycle.md` | Abschaltung des Kompatibilitätspfads erst nach dokumentierter Clientprüfung durchführen. |
+| API-02 | Stabiler API-Lebenszyklus | Erfüllt | Ausschließlich versionierter `/api/v1`-Vertrag, automatischer Test gegen unversionierte Aufrufe und `docs/guides/11-api-lifecycle.md` | Bei einer späteren v2 die Migrations- und Abschaltregeln erneut festlegen. |
 | API-03 | Robuste Schreiboperationen | Teilweise | Validierung, Transaktionen und Konfliktbehandlung in Teilen der Anwendung | Idempotency Keys, einheitliche Concurrency-Kontrolle und Wiederholungssemantik für alle kritischen Befehle fehlen. |
 
 ### 4.2 OT-, Kommunikations- und Anwendungssicherheit

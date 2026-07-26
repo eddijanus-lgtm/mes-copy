@@ -124,5 +124,5 @@ Aktueller lokaler Messwert: `10000` Testpunkte in `0.27s`, ungefähr `36496 writ
 ## Health-Check Endpoint
 
 ```bash
-curl http://localhost:3000/api/shopfloor/health
+curl http://localhost:3000/api/v1/shopfloor/health
 ```
