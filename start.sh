@@ -19,7 +19,7 @@ cd "$PROJECT_DIR"
 
 echo "WARA MES wird mit den Werten aus .env gestartet."
 
-npm run opcua:validate-profile
+npm run opcua:validate-profile -- "$(env_value MACHINE_PROFILE_PATH '')"
 
 echo "[*] Starte die konfigurierte PostgreSQL-Instanz ..."
 docker compose up --detach --wait postgres

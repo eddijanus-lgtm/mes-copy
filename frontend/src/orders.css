@@ -1,5 +1,29 @@
 .orders-page { display: grid; gap: 18px; }
 
+:root[data-theme="dark"] .orders-secondary-action,
+:root[data-theme="dark"] .orders-list-pane,
+:root[data-theme="dark"] .orders-filter-button,
+:root[data-theme="dark"] .mes-page .orders-table thead {
+  color: var(--wara-text);
+  background: var(--wara-surface) !important;
+}
+
+:root[data-theme="dark"] .orders-filter-bar,
+:root[data-theme="dark"] .orders-filter-button:hover,
+:root[data-theme="dark"] .orders-filter-button.is-active {
+  background: var(--wara-surface-subtle);
+}
+
+:root[data-theme="dark"] .orders-row__name,
+:root[data-theme="dark"] .orders-col-product strong {
+  color: var(--wara-text);
+}
+
+:root[data-theme="dark"] .mes-page .orders-table tbody tr.is-selected,
+:root[data-theme="dark"] .mes-page .orders-table tbody tr.is-selected:hover {
+  background: #352117 !important;
+}
+
 .orders-primary-action {
   display: inline-flex; min-height: 40px; align-items: center; justify-content: center;
   border: 1px solid var(--wara-accent); padding: 0 16px; color: #fff; background: var(--wara-accent);

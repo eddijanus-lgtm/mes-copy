@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api } from "../api/client.js";
+import PageInfo from "../components/PageInfo.jsx";
 import { useAuth } from "../providers/AuthProvider.jsx";
 import { hasRole, ROLES } from "../utils/roles.js";
 
@@ -71,7 +72,10 @@ export default function CarriersPage() {
     <div className="mes-page min-h-screen bg-neutral-50 p-6 space-y-6">
       <div className="mes-page-header">
         <div>
-          <h1 className="text-2xl font-bold text-neutral-900">Werkstückträger</h1>
+          <div className="mes-title-row">
+            <h1 className="text-2xl font-bold text-neutral-900">Werkstückträger</h1>
+            <PageInfo page="carriers" />
+          </div>
           <p className="mt-1 text-sm text-neutral-500">Carrier-Position, Auftragszuordnung und aktueller Arbeitsschritt der angebundenen Anlage.</p>
         </div>
         <button onClick={load} className="w-fit rounded-lg border border-neutral-200 bg-white px-4 py-2 text-sm font-medium text-neutral-700 hover:border-brand-primary hover:text-brand-primary">Aktualisieren</button>

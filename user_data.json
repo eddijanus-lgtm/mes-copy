@@ -1,0 +1,13 @@
+{
+  "users": [
+    {
+      "id": "2aeb9358-cdcd-40db-8ba9-80e92974bfd6",
+      "username": "admin",
+      "password": "admin123",
+      "role": "admin",
+      "last_logon_at": "2026-07-27T08:02:51.639Z",
+      "created_at": "2026-07-27T05:15:06.437Z",
+      "updated_at": "2026-07-27T05:15:06.437Z"
+    }
+  ]
+}

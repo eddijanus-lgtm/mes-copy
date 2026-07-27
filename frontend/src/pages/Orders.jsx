@@ -12,6 +12,7 @@ import { PencilSimpleIcon } from "@phosphor-icons/react/PencilSimple";
 import { XIcon } from "@phosphor-icons/react/X";
 import { api } from "../api/client.js";
 import ExecutionStepCard from "../components/ExecutionStepCard.jsx";
+import PageInfo from "../components/PageInfo.jsx";
 import { useAuth } from "../providers/AuthProvider.jsx";
 import {
   isActiveExecutionStep,
@@ -232,7 +233,10 @@ export default function OrdersPage() {
     <div className="mes-page orders-page min-h-screen bg-neutral-50">
       <header className="mes-page-header">
         <div>
-          <h1>Produktionsaufträge</h1>
+          <div className="mes-title-row">
+            <h1>Produktionsaufträge</h1>
+            <PageInfo page="orders" />
+          </div>
           <p>Ein Auftrag erzeugt Route, Carrier-Zuordnung und stMES-Freigaben für die Anlage.</p>
         </div>
         <div className="orders-page-actions">

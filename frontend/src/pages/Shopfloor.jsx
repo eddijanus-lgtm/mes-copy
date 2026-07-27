@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { api } from "../api/client.js";
 import ExecutionStepCard from "../components/ExecutionStepCard.jsx";
+import PageInfo from "../components/PageInfo.jsx";
 import { useShopfloorTelemetry } from "../hooks/useShopfloorTelemetry.js";
 import {
   activeExecutionForResource,
@@ -115,7 +116,10 @@ export default function ShopfloorPage() {
       <main className="p-6 space-y-6">
         <div className="mes-page-header">
           <div>
-            <h1 className="text-2xl font-bold text-neutral-900">Shopfloor Gateway</h1>
+            <div className="mes-title-row">
+              <h1 className="text-2xl font-bold text-neutral-900">Shopfloor Gateway</h1>
+              <PageInfo page="shopfloor" />
+            </div>
             <p className="text-sm text-neutral-500 mt-0.5">OT/IT-Vermittlung: OPC-UA-Handshake, MQTT-Eingang und Live-Telemetrie</p>
           </div>
           <div className="flex items-center gap-2 text-xs text-neutral-500">

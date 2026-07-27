@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { api } from "../api/client.js";
+import PageInfo from "../components/PageInfo.jsx";
 import { useToasts } from "../providers/ToastProvider.jsx";
 
 export default function AlarmsPage() {
@@ -145,7 +146,10 @@ export default function AlarmsPage() {
       <main className="p-6 space-y-6">
         <div className="mes-page-header">
           <div>
-            <h1 className="text-2xl font-bold text-neutral-900">Alarme</h1>
+            <div className="mes-title-row">
+              <h1 className="text-2xl font-bold text-neutral-900">Alarme</h1>
+              <PageInfo page="alarms" />
+            </div>
             <p className="text-sm text-neutral-500 mt-0.5">
               Übersicht aller Alarme {activeCount > 0 && <span>({activeCount} offen)</span>}
             </p>

@@ -3,6 +3,7 @@ import { CheckCircleIcon } from "@phosphor-icons/react/CheckCircle";
 import { StackIcon } from "@phosphor-icons/react/Stack";
 import { WarningCircleIcon } from "@phosphor-icons/react/WarningCircle";
 import StatCard from "../components/StatCard";
+import PageInfo from "../components/PageInfo.jsx";
 import { api } from "../api/client.js";
 import { useAuth } from "../providers/AuthProvider.jsx";
 import { canDeleteMachines, canManageMachines } from "../utils/roles.js";
@@ -132,7 +133,10 @@ export default function MachinesPage() {
 
         <div className="mes-page-header">
           <div>
-          <h1 className="text-2xl font-bold text-neutral-900">Stationen</h1>
+          <div className="mes-title-row">
+            <h1 className="text-2xl font-bold text-neutral-900">Stationen</h1>
+            <PageInfo page="machines" />
+          </div>
           <p className="text-sm text-neutral-500 mt-0.5">Maschinen, Work Units und Komponenten mit ihrer tatsächlichen Hierarchie.</p>
           </div>
         </div>

@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { api } from "../api/client.js";
+import PageInfo from "../components/PageInfo.jsx";
 import { useAuth } from "../providers/AuthProvider.jsx";
 import Modal from "../components/Modal.jsx";
 
@@ -71,7 +72,10 @@ export default function NotificationsPage() {
     <div className="mes-page p-6 max-w-7xl mx-auto">
       <div className="mes-page-header mb-6">
         <div>
-        <h1 className="text-2xl font-bold">Benachrichtigungen</h1>
+        <div className="mes-title-row">
+          <h1 className="text-2xl font-bold">Benachrichtigungen</h1>
+          <PageInfo page="notifications" />
+        </div>
         <p>Alert-Regeln, Auslieferungsverlauf und angebundene Kanäle.</p>
         </div>
       </div>

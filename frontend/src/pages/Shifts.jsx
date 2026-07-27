@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { api } from "../api/client.js";
+import PageInfo from "../components/PageInfo.jsx";
 
 export default function ShiftsPage() {
   const [activeTab, setActiveTab] = useState("shifts");
@@ -51,7 +52,10 @@ export default function ShiftsPage() {
     <div className="mes-page p-6 max-w-7xl mx-auto">
       <div className="mes-page-header mb-6">
         <div>
-        <h1 className="text-2xl font-bold">Schichtmanagement</h1>
+        <div className="mes-title-row">
+          <h1 className="text-2xl font-bold">Schichtmanagement</h1>
+          <PageInfo page="shifts" />
+        </div>
         <p>Schichten planen, abschließen und nachvollziehbar auswerten.</p>
         </div>
       </div>

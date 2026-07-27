@@ -39,6 +39,29 @@
    --color-status-error-dark:  #b91c1c;
 }
 
+:root[data-theme="dark"] {
+  --color-neutral-50: #11161c;
+  --color-neutral-100: #1a2027;
+  --color-neutral-200: #303944;
+  --color-neutral-300: #46515e;
+  --color-neutral-400: #8f9aa7;
+  --color-neutral-500: #aab3bd;
+  --color-neutral-600: #c3cad2;
+  --color-neutral-700: #d8dde3;
+  --color-neutral-800: #e9edf1;
+  --color-neutral-900: #f8f9fa;
+  --color-status-success-bg: #13291d;
+  --color-status-warning-bg: #302713;
+  --color-status-error-bg: #321817;
+  --color-status-info-bg: #14243a;
+  --color-status-bg-success: #13291d;
+  --color-status-bg-warning: #302713;
+  --color-status-bg-error: #321817;
+  --color-status-bg-info: #14243a;
+  --color-accent-pink: #2f1724;
+  --color-accent-lilac-bg: #261d31;
+}
+
 @utility shadow-card {
   box-shadow: 0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
 }
@@ -218,6 +241,59 @@
   background: #fff2eb;
 }
 
+.app-sidebar__theme-button {
+  display: grid;
+  place-items: center;
+}
+
+:root[data-theme="dark"] .app-sidebar {
+  border-color: var(--wara-border);
+  color: var(--wara-text);
+  background: var(--wara-surface);
+}
+
+:root[data-theme="dark"] .app-sidebar__brand,
+:root[data-theme="dark"] .app-sidebar__footer,
+:root[data-theme="dark"] .app-sidebar__group + .app-sidebar__group {
+  border-color: var(--wara-border);
+}
+
+:root[data-theme="dark"] .app-sidebar__wordmark,
+:root[data-theme="dark"] .app-sidebar__group a:hover {
+  color: var(--wara-text);
+}
+
+:root[data-theme="dark"] .app-sidebar__product,
+:root[data-theme="dark"] .app-sidebar__account {
+  border-color: var(--wara-border-strong);
+}
+
+:root[data-theme="dark"] .app-sidebar__group a:hover,
+:root[data-theme="dark"] .app-sidebar__account > button:hover {
+  background: var(--wara-surface-subtle);
+}
+
+:root[data-theme="dark"] .app-sidebar__group a.is-active,
+:root[data-theme="dark"] .app-sidebar__languages button.is-active {
+  color: #ff8a4c;
+  background: #352117;
+}
+
+:root[data-theme="dark"] .app-sidebar__avatar {
+  color: #15191e;
+  background: #eef1f4;
+}
+
+:root[data-theme="dark"] .mes-page [class~="bg-white"],
+:root[data-theme="dark"] .mes-page [class*="bg-white/"] {
+  background: var(--wara-surface) !important;
+}
+
+:root[data-theme="dark"] .mes-page [class*="text-gray-"],
+:root[data-theme="dark"] .mes-page [class*="text-slate-"] {
+  color: var(--wara-text-muted) !important;
+}
+
 .app-sidebar__account {
   display: grid;
   grid-template-columns: 2rem minmax(0, 1fr) 2rem;
@@ -302,7 +378,7 @@
   .app-sidebar__group h2,
   .app-sidebar__nav-label,
   .app-sidebar__user,
-  .app-sidebar__languages {
+  .app-sidebar__language-button {
     display: none;
   }
 

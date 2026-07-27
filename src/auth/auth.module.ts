@@ -8,6 +8,7 @@ import { AuthService } from './auth.service';
 import { JwtStrategy } from './jwt.strategy';
 import { RolesGuard } from './roles.guard';
 import { UserEntity } from '../users/user.entity';
+import { UsersModule } from '../users/users.module';
 import { APP_GUARD } from '@nestjs/core';
 import { JwtAuthGuard } from './jwt.auth.guard';
 
@@ -23,6 +24,7 @@ import { JwtAuthGuard } from './jwt.auth.guard';
       }),
       inject: [ConfigService],
     }),
+    UsersModule,
   ],
   controllers: [AuthController],
   providers: [

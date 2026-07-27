@@ -5,6 +5,25 @@
   background: #f7f8f9;
 }
 
+:root[data-theme="dark"] .dashboard-page {
+  color: var(--wara-text);
+  background: var(--wara-bg);
+}
+
+:root[data-theme="dark"] .dashboard-page__header p,
+:root[data-theme="dark"] .dashboard-page__controls label {
+  color: var(--wara-text-muted);
+}
+
+:root[data-theme="dark"] .dashboard-page__controls select,
+:root[data-theme="dark"] .trend-widget select,
+:root[data-theme="dark"] .dashboard-button.secondary,
+:root[data-theme="dark"] .dashboard-page :where(section, article, .widget-frame, .widget-catalog) {
+  border-color: var(--wara-border);
+  color: var(--wara-text);
+  background: var(--wara-surface);
+}
+
 .dashboard-page__header {
   display: flex;
   align-items: flex-end;

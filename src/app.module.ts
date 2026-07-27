@@ -20,6 +20,7 @@ import { NotificationsModule } from './notifications/notifications.module';
 import { ShiftsModule } from './shifts/shifts.module';
 import { ScheduleModule } from '@nestjs/schedule';
 import { ProductsModule } from './products/products.module';
+import { UsersModule } from './users/users.module';
 
 @Module({
   imports: [
@@ -51,6 +52,7 @@ import { ProductsModule } from './products/products.module';
     NotificationsModule,
     ShiftsModule,
     ProductsModule,
+    UsersModule,
     ScheduleModule.forRoot(),
   ],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],

@@ -3,6 +3,7 @@ import { FloppyDiskIcon } from "@phosphor-icons/react/FloppyDisk";
 import { PencilSimpleIcon } from "@phosphor-icons/react/PencilSimple";
 import { SlidersHorizontalIcon } from "@phosphor-icons/react/SlidersHorizontal";
 import { XIcon } from "@phosphor-icons/react/X";
+import PageInfo from "../components/PageInfo.jsx";
 import { ResponsiveGridLayout, useContainerWidth } from "react-grid-layout";
 import "react-grid-layout/css/styles.css";
 import "react-resizable/css/styles.css";
@@ -109,7 +110,10 @@ function DashboardHeader({ layoutState }) {
   return (
     <header className="dashboard-page__header">
       <div>
-        <h1>{layoutState.profiles[layoutState.activeProfileId]?.name || "Leitstand"}</h1>
+        <div className="mes-title-row">
+          <h1>{layoutState.profiles[layoutState.activeProfileId]?.name || "Leitstand"}</h1>
+          <PageInfo page="dashboard" />
+        </div>
         <p>Produktion, Kennzahlen und Anlagenstatus auf einen Blick.</p>
       </div>
 

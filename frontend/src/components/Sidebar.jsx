@@ -7,12 +7,15 @@ import { MegaphoneIcon } from "@phosphor-icons/react/Megaphone";
 import { PackageIcon } from "@phosphor-icons/react/Package";
 import { PlugsConnectedIcon } from "@phosphor-icons/react/PlugsConnected";
 import { SignOutIcon } from "@phosphor-icons/react/SignOut";
+import { MoonIcon } from "@phosphor-icons/react/Moon";
+import { SunIcon } from "@phosphor-icons/react/Sun";
 import { SquaresFourIcon } from "@phosphor-icons/react/SquaresFour";
 import { TimerIcon } from "@phosphor-icons/react/Timer";
 import { UsersThreeIcon } from "@phosphor-icons/react/UsersThree";
 import { useTranslation } from "../i18n/I18nProvider.jsx";
 import { useAuth } from "../providers/AuthProvider.jsx";
 import { hasRole, ROLES } from "../utils/roles.js";
+import { useTheme } from "../providers/ThemeProvider.jsx";
 
 const navGroups = [
   {
@@ -46,6 +49,8 @@ export default function Sidebar() {
   const location = useLocation();
   const { logout, user } = useAuth();
   const { t, locale, changeLocale } = useTranslation();
+  const { theme, toggleTheme } = useTheme();
+  const ThemeIcon = theme === "dark" ? SunIcon : MoonIcon;
 
   return (
     <aside className="app-sidebar" aria-label="Hauptnavigation">
@@ -98,12 +103,22 @@ export default function Sidebar() {
               type="button"
               key={language}
               onClick={() => changeLocale(language)}
-              className={language === locale ? "is-active" : ""}
+              className={`app-sidebar__language-button${language === locale ? " is-active" : ""}`}
               aria-pressed={language === locale}
             >
               {language.toUpperCase()}
             </button>
           ))}
+          <button
+            type="button"
+            className="app-sidebar__theme-button"
+            onClick={toggleTheme}
+            aria-label={theme === "dark" ? "Helles Design aktivieren" : "Dunkles Design aktivieren"}
+            title={theme === "dark" ? "Helles Design" : "Dunkles Design"}
+            aria-pressed={theme === "dark"}
+          >
+            <ThemeIcon size={15} weight="bold" />
+          </button>
         </div>
 
         <div className="app-sidebar__account">
