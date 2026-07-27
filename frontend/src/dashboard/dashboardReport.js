@@ -11,6 +11,10 @@ function reportCard(label, value) {
   return `<div class="card"><div class="label">${escapeHtml(label)}</div><div class="value">${escapeHtml(value)}</div></div>`;
 }
 
+function formatPercent(value) {
+  return Number.isFinite(value) ? `${value}%` : "Nicht verfügbar";
+}
+
 export function openDashboardReport({ scope, stats, machines, carriers, kpis }) {
   const title = scope === "day" ? "MES Tagesbericht" : "MES Schichtbericht";
   const status = kpis?.machines?.status || {};
@@ -36,10 +40,10 @@ export function openDashboardReport({ scope, stats, machines, carriers, kpis }) 
       <button onclick="window.print()" style="float:right;padding:8px 12px">Als PDF speichern</button>
       <h1>${escapeHtml(title)}</h1><div class="meta">Erstellt: ${new Date().toLocaleString("de-DE")}</div>
       <div class="grid">
-        ${reportCard("OEE", `${kpis?.oee?.total ?? 0}%`)}
-        ${reportCard("Verfügbarkeit", `${kpis?.oee?.availability ?? 0}%`)}
-        ${reportCard("Leistung", `${kpis?.oee?.performance ?? 0}%`)}
-        ${reportCard("Qualität", `${kpis?.oee?.quality ?? 0}%`)}
+        ${reportCard("OEE", formatPercent(kpis?.oee?.total))}
+        ${reportCard("Verfügbarkeit", formatPercent(kpis?.oee?.availability))}
+        ${reportCard("Leistung", formatPercent(kpis?.oee?.performance))}
+        ${reportCard("Qualität", formatPercent(kpis?.oee?.quality))}
         ${reportCard("Durchsatz", `${kpis?.throughput?.unitsPerHour ?? 0} /h`)}
         ${reportCard("Aktive Alarme", stats.alarms)}
         ${reportCard("Gateway", stats.health ? "Online" : "Inaktiv")}

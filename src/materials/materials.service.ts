@@ -58,7 +58,12 @@ export class MaterialsService {
   }
 
   async findLowStock(): Promise<MaterialEntity[]> {
-    return this.materialsRepo.find({ where: {} });
+    return this.materialsRepo
+      .createQueryBuilder('material')
+      .where('material.minimum_stock IS NOT NULL')
+      .andWhere('material.stock_quantity <= material.minimum_stock')
+      .orderBy('material.stock_quantity', 'ASC')
+      .getMany();
   }
 
   async registerConsumption(dto: RegisterConsumptionDto): Promise<MaterialConsumptionEntity> {

@@ -1,4 +1,9 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 const dayjs = require('dayjs');
@@ -118,9 +123,14 @@ export class ShiftsService {
     return this.batchRepo.save(batch);
   }
 
-  async completeBatch(batchId: string, completedQty?: number): Promise<ProductionBatchEntity> {
+  async completeBatch(batchId: string, completedQty: number): Promise<ProductionBatchEntity> {
+    if (!Number.isInteger(completedQty) || completedQty < 0) {
+      throw new BadRequestException(
+        'completed_quantity must be provided as a non-negative integer',
+      );
+    }
     const batch = await this.getBatch(batchId);
-    batch.completed_quantity = completedQty ?? batch.target_quantity;
+    batch.completed_quantity = completedQty;
     batch.finished_at = new Date();
     return this.batchRepo.save(batch);
   }

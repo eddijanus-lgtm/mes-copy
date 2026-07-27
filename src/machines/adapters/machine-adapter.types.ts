@@ -1,4 +1,5 @@
 import { ShopfloorTelemetryEvent } from '../../opcua/shopfloor-telemetry';
+import type { RoutingOutcome } from '../../orders/routing-outcome';
 
 export type MachineControlCommand =
   | 'start'
@@ -20,7 +21,7 @@ export interface MachineStationRequest {
   readonly requestedResourceId: number;
 }
 
-export interface MachineRoutingResponse {
+export interface MachineAcceptedRoutingResponse {
   readonly orderNo: string;
   readonly partNo: string;
   readonly operationNo: number;
@@ -28,8 +29,17 @@ export interface MachineRoutingResponse {
   readonly nextResourceId: number;
   readonly parameters: Readonly<Record<string, number>>;
   readonly resultCode: number;
-  readonly accepted: boolean;
+  readonly accepted: true;
 }
+
+export interface MachineRejectedRoutingResponse {
+  readonly resultCode: number;
+  readonly accepted: false;
+}
+
+export type MachineRoutingResponse =
+  | MachineAcceptedRoutingResponse
+  | MachineRejectedRoutingResponse;
 
 export interface MachineRecoverySnapshot {
   readonly carrierNumber: number;
@@ -75,13 +85,14 @@ export interface MachineStationDescriptor {
   readonly routeSequence?: number;
   readonly operationNo?: number;
   readonly operation?: string;
-  readonly resourceType?: 'production' | 'inventory' | 'storage' | 'hybrid';
+  readonly resourceType: 'production' | 'inventory' | 'storage' | 'hybrid';
   readonly capabilities?: readonly (
     | 'production'
     | 'routing'
     | 'control'
     | 'inventory'
     | 'storage'
+    | 'telemetry'
   )[];
   readonly availableCommands: readonly MachineControlCommand[];
 }
@@ -90,6 +101,7 @@ export interface MachineOrderParameterDefinition {
   readonly key: string;
   readonly sourceKey?: string;
   readonly signalKey?: string;
+  readonly targetResourceIds?: readonly number[];
   readonly required?: boolean;
   readonly label: string;
   readonly type: 'number' | 'select';
@@ -108,6 +120,7 @@ export interface MachineOrderParameterDefinition {
 export interface MachineAdapter {
   isConnected(): boolean;
   getConnectionStatus(): Promise<MachineConnectionStatus>;
+  routingResultCode(outcome: RoutingOutcome): number;
 
   onTelemetry(
     callback: (event: ShopfloorTelemetryEvent) => void,

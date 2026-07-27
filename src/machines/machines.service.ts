@@ -8,6 +8,10 @@ import { Repository } from 'typeorm';
 import { MachineEntity, MachineStatusEnum } from './machine.entity';
 import type { CreateMachineDto, UpdateMachineDto } from './machine.dto';
 
+export type MachineHierarchyNode = MachineEntity & {
+  children: MachineHierarchyNode[];
+};
+
 @Injectable()
 export class MachinesService {
   constructor(
@@ -24,6 +28,10 @@ export class MachinesService {
       model: dto.model,
       serial_number: dto.serial_number,
       resource_id: dto.resource_id,
+      parent_resource_id: dto.parent_resource_id,
+      equipment_level: dto.equipment_level,
+      execution_model: dto.execution_model,
+      job_interface: dto.job_interface,
       opcua_endpoint_url: dto.opcua_endpoint_url,
       opcua_node_prefix: dto.opcua_node_prefix,
       opcua_enabled: dto.opcua_enabled || false,
@@ -34,6 +42,33 @@ export class MachinesService {
 
   async findAll(): Promise<MachineEntity[]> {
     return this.machinesRepo.find({ order: { name: 'ASC' } });
+  }
+
+  async findHierarchy(): Promise<MachineHierarchyNode[]> {
+    const machines = await this.machinesRepo.find({
+      order: { resource_id: 'ASC', name: 'ASC' },
+    });
+    const nodes = new Map<number, MachineHierarchyNode>();
+    for (const machine of machines) {
+      if (machine.resource_id !== undefined) {
+        nodes.set(machine.resource_id, { ...machine, children: [] });
+      }
+    }
+
+    const roots: MachineHierarchyNode[] = [];
+    for (const machine of machines) {
+      const node =
+        machine.resource_id === undefined
+          ? { ...machine, children: [] }
+          : nodes.get(machine.resource_id)!;
+      const parent =
+        machine.parent_resource_id == null
+          ? undefined
+          : nodes.get(machine.parent_resource_id);
+      if (parent) parent.children.push(node);
+      else roots.push(node);
+    }
+    return roots;
   }
 
   async findOne(id: string): Promise<MachineEntity> {
@@ -85,25 +120,26 @@ export class MachinesService {
   generateCsvTemplate(): string {
     return [
       'name,type,status,location,model,serial_number,resource_id,opcua_endpoint_url,opcua_node_prefix,opcua_enabled',
-      '',
-      '# Beispiele (Zeilen mit # werden ignoriert):',
-      'Station-1,CNC,online,Halle A,M800,SN001,1,opc.tcp://localhost:26598,,true',
-      'Station-2,PLC,offline,Halle B,P300,SN002,2,,,false',
-      'Roboter-A,Roboter,maintenance,Halle C,RB2000,SN003,3,,,true',
+      '# Eine Maschine pro Zeile eintragen. Kommentarzeilen werden ignoriert.',
     ].join('\n');
   }
 
   async importFromCsv(csv: string): Promise<{ imported: number; errors: Array<{ row: number; message: string }> }> {
-    const lines = csv.trim().split('\n').map((l) => l.trim()).filter(Boolean);
+    const lines = csv
+      .replace(/^\uFEFF/, '')
+      .split(/\r?\n/)
+      .map((line, index) => ({ line, row: index + 1 }))
+      .filter(({ line }) => line.trim() && !line.trimStart().startsWith('#'));
     if (lines.length === 0) return { imported: 0, errors: [] };
 
-    const headerLine = lines[0];
-    const headers = headerLine.split(',').map((h) => h.toLowerCase().replace(/\s/g, '_'));
+    const headers = parseCsvRow(lines[0].line).map((header) =>
+      header.toLowerCase().replace(/\s/g, '_'),
+    );
     const errors: Array<{ row: number; message: string }> = [];
     let imported = 0;
 
     for (let i = 1; i < lines.length; i++) {
-      const cols = lines[i].split(',');
+      const cols = parseCsvRow(lines[i].line);
       if (cols.length === 0) continue;
 
       try {
@@ -131,7 +167,7 @@ export class MachinesService {
         const dto: CreateMachineDto & { type?: string; opcua_enabled?: boolean } = {
           name,
           status: validStatus as any,
-          type: get('type') || 'CNC',
+          type: get('type'),
           location,
           model: get('model'),
           serial_number: get('serial_number'),
@@ -147,10 +183,39 @@ export class MachinesService {
         await this.machinesRepo.save(this.machinesRepo.create(dto as any));
         imported++;
       } catch (err: any) {
-        errors.push({ row: i + 1, message: err.message || 'Unknown error' });
+        errors.push({
+          row: lines[i].row,
+          message: err.message || 'Unknown error',
+        });
       }
     }
 
     return { imported, errors };
   }
+}
+
+function parseCsvRow(line: string): string[] {
+  const values: string[] = [];
+  let value = '';
+  let quoted = false;
+
+  for (let index = 0; index < line.length; index += 1) {
+    const character = line[index];
+    if (character === '"') {
+      if (quoted && line[index + 1] === '"') {
+        value += '"';
+        index += 1;
+      } else {
+        quoted = !quoted;
+      }
+    } else if (character === ',' && !quoted) {
+      values.push(value);
+      value = '';
+    } else {
+      value += character;
+    }
+  }
+  if (quoted) throw new Error('Unclosed quoted CSV value');
+  values.push(value);
+  return values;
 }

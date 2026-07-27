@@ -5,6 +5,7 @@ import { DataCollectionService } from './data-collection.service';
 
 describe('DataCollectionService', () => {
   let service: DataCollectionService;
+  let mockRepo: any;
 
   beforeEach(async () => {
     jest.clearAllMocks();
@@ -50,7 +51,7 @@ describe('DataCollectionService', () => {
       return qb;
     };
 
-    const mockRepo = {
+    mockRepo = {
       create: jest.fn((v: any) => v),
       save: jest.fn(async (v: any) => ({ ...dp1, ...v })),
       find: jest.fn().mockResolvedValue([dp1]),
@@ -66,10 +67,11 @@ describe('DataCollectionService', () => {
   it('should be defined', () => { expect(service).toBeDefined(); });
 
   describe('create', () => {
-    it('creates a data point with defaults', async () => {
+    it('marks a data point without machine quality as uncertain', async () => {
       await service.create({ machine_id: 'm1' as any, node_id: 'ns=2;s=Temp', value: 80 });
-      expect(service['dataPointsRepo'].create).toHaveBeenCalled();
-      expect(true).toBeDefined();
+      expect(service['dataPointsRepo'].create).toHaveBeenCalledWith(
+        expect.objectContaining({ quality: 'uncertain' }),
+      );
     });
   });
 
@@ -90,7 +92,9 @@ describe('DataCollectionService', () => {
   describe('bulkCreate', () => {
     it('saves an array of data points', async () => {
       await service.bulkCreate([{ machine_id: 'm1' as any, node_id: 'ns=a', value: 10 }]);
-      expect(true).toBeDefined();
+      expect(service['dataPointsRepo'].create).toHaveBeenCalledWith(
+        expect.objectContaining({ quality: 'uncertain' }),
+      );
     });
   });
 
@@ -105,6 +109,27 @@ describe('DataCollectionService', () => {
     it.each(['min', 'max', 'avg', 'count'] as const)('returns %s stat as number', async (statName: any) => {
       const stats = await service.getStatsByMachine('m1');
       expect(typeof (stats as any)[statName]).toBe('number');
+    });
+
+    it('returns null measurements when no data points exist', async () => {
+      mockRepo.createQueryBuilder.mockReturnValue({
+        select: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        getRawOne: jest.fn().mockResolvedValue({
+          'MIN(dp5.value)': null,
+          'MAX(dp5.value)': null,
+          'AVG(dp5.value)': null,
+          'COUNT(dp5.id)': '0',
+        }),
+      });
+
+      await expect(service.getStatsByMachine('m1')).resolves.toEqual({
+        min: null,
+        max: null,
+        avg: null,
+        count: 0,
+      });
     });
   });
 });

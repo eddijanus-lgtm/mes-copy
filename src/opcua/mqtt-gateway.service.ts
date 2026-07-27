@@ -3,12 +3,11 @@ import { ConfigService } from '@nestjs/config';
 import { ShopfloorTelemetryEvent } from './shopfloor-telemetry';
 const mqtt = require('mqtt');
 
-const SUBSCRIPTION_TOPICS = [
+const BASE_SUBSCRIPTION_TOPICS = [
   'mes/production/+/#',
   'mes/machines/+/telemetry',
   'mes/alarms/+/+',
   'mes/orders/+/+',
-  'i4.0/production/orders',
 ];
 
 @Injectable()
@@ -20,6 +19,7 @@ export class MqttGatewayService implements OnModuleInit, OnModuleDestroy {
   private startupTimer?: NodeJS.Timeout;
   private readonly telemetryCallbacks = new Set<(event: ShopfloorTelemetryEvent) => void>();
   private readonly recentTelemetry: Array<{ topic: string; payload: Record<string, unknown>; timestamp: string }> = [];
+  private readonly dynamicSubscriptionTopics = new Set<string>();
 
   constructor(private readonly configService: ConfigService) {}
 
@@ -41,11 +41,7 @@ export class MqttGatewayService implements OnModuleInit, OnModuleDestroy {
       this.client.on('connect', () => {
         this.reconnectAttempts = 0;
         this.logger.log('Connected to MQTT broker at ' + brokerUrl);
-        for (const topic of SUBSCRIPTION_TOPICS) {
-          this.client.subscribe(topic, (error: Error | null) => {
-            if (error) this.logger.error(`MQTT subscription failed for ${topic}: ${error.message}`);
-          });
-        }
+        for (const topic of this.subscriptionTopics()) this.subscribeClient(topic);
       });
       this.client.on('error', (error: Error) => this.logger.error('MQTT client error: ' + error.message));
       this.client.on('offline', () => this.logger.warn('MQTT client is offline'));
@@ -58,7 +54,15 @@ export class MqttGatewayService implements OnModuleInit, OnModuleDestroy {
       this.client.on('message', (topic: string, payload: Buffer) => {
         try {
           const data = JSON.parse(payload.toString());
-          const callbacks = this.subscriptionCallbacks.get(topic) || [];
+          const callbacks = [
+            ...new Set(
+              [...this.subscriptionCallbacks.entries()]
+                .filter(([subscription]) =>
+                  mqttTopicMatches(subscription, topic),
+                )
+                .flatMap(([, registered]) => registered),
+            ),
+          ];
           if (callbacks.length) {
             for (const callback of callbacks) {
               try { callback(data); } catch (error) { this.logger.error('MQTT subscriber failed', error); }
@@ -86,14 +90,34 @@ export class MqttGatewayService implements OnModuleInit, OnModuleDestroy {
   }
 
   onMessage(topic: string, callback: (data: any) => void): () => void {
-    if (!this.subscriptionCallbacks.has(topic)) {
-      this.subscriptionCallbacks.set(topic, []);
+    const normalizedTopic = topic.trim();
+    if (!normalizedTopic) throw new Error('MQTT subscription topic must not be empty');
+    if (!this.subscriptionCallbacks.has(normalizedTopic)) {
+      this.subscriptionCallbacks.set(normalizedTopic, []);
+      this.dynamicSubscriptionTopics.add(normalizedTopic);
+      if (this.client?.connected) this.subscribeClient(normalizedTopic);
     }
-    const cbs = this.subscriptionCallbacks.get(topic)!;
+    const cbs = this.subscriptionCallbacks.get(normalizedTopic)!;
     cbs.push(callback);
     return () => {
-      const found = this.subscriptionCallbacks.get(topic);
-      if (found) this.subscriptionCallbacks.set(topic, found.filter((cb) => cb !== callback));
+      const found = this.subscriptionCallbacks.get(normalizedTopic);
+      if (!found) return;
+      const remaining = found.filter((cb) => cb !== callback);
+      if (remaining.length > 0) {
+        this.subscriptionCallbacks.set(normalizedTopic, remaining);
+        return;
+      }
+      this.subscriptionCallbacks.delete(normalizedTopic);
+      this.dynamicSubscriptionTopics.delete(normalizedTopic);
+      if (this.client?.connected) {
+        this.client.unsubscribe(normalizedTopic, (error: Error | null) => {
+          if (error) {
+            this.logger.error(
+              `MQTT unsubscribe failed for ${normalizedTopic}: ${error.message}`,
+            );
+          }
+        });
+      }
     };
   }
 
@@ -121,6 +145,23 @@ export class MqttGatewayService implements OnModuleInit, OnModuleDestroy {
     return [...this.recentTelemetry];
   }
 
+  private subscriptionTopics(): Set<string> {
+    return new Set([
+      ...BASE_SUBSCRIPTION_TOPICS,
+      ...this.dynamicSubscriptionTopics,
+    ]);
+  }
+
+  private subscribeClient(topic: string): void {
+    this.client.subscribe(topic, (error: Error | null) => {
+      if (error) {
+        this.logger.error(
+          `MQTT subscription failed for ${topic}: ${error.message}`,
+        );
+      }
+    });
+  }
+
   private emitTelemetry(topic: string, payload: Record<string, unknown>, timestamp = new Date().toISOString()) {
     const event: ShopfloorTelemetryEvent = {
       type: 'shopfloor.telemetry',
@@ -133,4 +174,17 @@ export class MqttGatewayService implements OnModuleInit, OnModuleDestroy {
       try { callback(event); } catch (error) { this.logger.error('MQTT telemetry callback failed', error); }
     }
   }
+}
+
+function mqttTopicMatches(subscription: string, topic: string): boolean {
+  const subscriptionLevels = subscription.split('/');
+  const topicLevels = topic.split('/');
+
+  for (let index = 0; index < subscriptionLevels.length; index += 1) {
+    const expected = subscriptionLevels[index];
+    if (expected === '#') return index === subscriptionLevels.length - 1;
+    if (topicLevels[index] === undefined) return false;
+    if (expected !== '+' && expected !== topicLevels[index]) return false;
+  }
+  return subscriptionLevels.length === topicLevels.length;
 }

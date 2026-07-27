@@ -4,7 +4,10 @@
   "displayName": "YOUR_MACHINE_DISPLAY_NAME",
   "description": "Production template. Replace every YOUR_* value with commissioning results.",
   "transport": "opcua",
-  "operatingMode": "control",
+  "operatingMode": "validate",
+  "routing": {
+    "terminalResourceId": 0
+  },
   "connection": {
     "endpointUrl": "opc.tcp://YOUR_ENDPOINT:4840",
     "applicationName": "YOUR_APPLICATION_NAME",
@@ -42,6 +45,8 @@
       "displayName": "YOUR_STATION_DISPLAY_NAME",
       "description": "Replace identifiers with the nodes discovered during commissioning.",
       "enabled": true,
+      "resourceType": "production",
+      "capabilities": ["production", "routing", "control"],
       "routing": {
         "sequence": 1,
         "operationNo": 10,
@@ -63,6 +68,9 @@
         { "key": "processBusy", "role": "processActive", "direction": "machineToMes", "namespace": "main", "identifier": "YOUR_PROCESS_ACTIVE_IDENTIFIER", "dataType": "Boolean", "access": "read", "required": true },
         { "key": "completedCarrier", "role": "completedCarrierId", "direction": "machineToMes", "namespace": "main", "identifier": "YOUR_COMPLETED_CARRIER_IDENTIFIER", "dataType": "UInt32", "access": "read", "required": true },
         { "key": "completion", "role": "processCompleted", "direction": "machineToMes", "namespace": "main", "identifier": "YOUR_PROCESS_COMPLETED_IDENTIFIER", "dataType": "Boolean", "access": "read", "required": true, "event": { "trigger": "rising" } },
+        { "key": "idealCycleTimeMs", "role": "idealCycleTimeMs", "direction": "machineToMes", "namespace": "main", "identifier": "YOUR_IDEAL_CYCLE_TIME_IDENTIFIER", "dataType": "UInt32", "access": "read", "required": true },
+        { "key": "goodCount", "role": "goodCount", "direction": "machineToMes", "namespace": "main", "identifier": "YOUR_GOOD_COUNT_IDENTIFIER", "dataType": "UInt32", "access": "read", "required": true },
+        { "key": "rejectCount", "role": "rejectCount", "direction": "machineToMes", "namespace": "main", "identifier": "YOUR_REJECT_COUNT_IDENTIFIER", "dataType": "UInt32", "access": "read", "required": true },
         { "key": "startCommand", "role": "controlStart", "direction": "mesToMachine", "namespace": "main", "identifier": "YOUR_START_IDENTIFIER", "dataType": "Boolean", "access": "write", "required": false },
         { "key": "stopCommand", "role": "controlStop", "direction": "mesToMachine", "namespace": "main", "identifier": "YOUR_STOP_IDENTIFIER", "dataType": "Boolean", "access": "write", "required": false },
         { "key": "resetCommand", "role": "controlReset", "direction": "mesToMachine", "namespace": "main", "identifier": "YOUR_RESET_IDENTIFIER", "dataType": "Boolean", "access": "write", "required": false },
@@ -74,9 +82,6 @@
       }
     }
   ],
-  "resultCodes": {
-    "0": "OK"
-  },
   "metadata": {
     "manufacturer": "YOUR_MANUFACTURER",
     "model": "YOUR_MODEL",

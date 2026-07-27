@@ -20,6 +20,7 @@ describe('MaterialsService', () => {
         findOne: jest.fn(),
         delete: jest.fn().mockResolvedValue({ affected: 1 }),
         count: jest.fn(),
+        createQueryBuilder: jest.fn(),
       },
       consumption: {
         create: jest.fn((v: any) => v),
@@ -106,11 +107,24 @@ describe('MaterialsService', () => {
   });
 
   describe('findLowStock', () => {
-    it('returns all materials (empty where)', async () => {
-      mockMaterials.find.mockResolvedValue([{ id: 'mat1' }, { id: 'mat2' }]);
+    it('returns only materials at or below their configured minimum', async () => {
+      const query = {
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        orderBy: jest.fn().mockReturnThis(),
+        getMany: jest.fn().mockResolvedValue([{ id: 'mat1' }]),
+      };
+      mockMaterials.createQueryBuilder.mockReturnValue(query);
+
       const result = await service.findLowStock();
-      expect(result).toHaveLength(2);
-      expect(mockMaterials.find).toHaveBeenLastCalledWith({ where: {} });
+
+      expect(result).toHaveLength(1);
+      expect(query.where).toHaveBeenCalledWith(
+        'material.minimum_stock IS NOT NULL',
+      );
+      expect(query.andWhere).toHaveBeenCalledWith(
+        'material.stock_quantity <= material.minimum_stock',
+      );
     });
   });
 

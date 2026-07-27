@@ -252,6 +252,8 @@
 }
 .orders-route-timeline li.is-complete .orders-route-timeline__marker,
 .orders-route-timeline li.is-current .orders-route-timeline__marker { color: var(--wara-accent); }
+.orders-route-timeline li.is-failed .orders-route-timeline__marker,
+.orders-route-timeline li.is-failed small { color: var(--wara-error); }
 .orders-route-timeline li > div { display: grid; gap: 3px; }
 .orders-route-timeline strong { color: #343c45; font-size: .69rem; }
 .orders-route-timeline small { color: #89919a; font-size: .63rem; }

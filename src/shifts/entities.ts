@@ -67,17 +67,17 @@ export class ShiftReportEntity {
   @Column({ default: 0 })
   cancelled_orders: number;
 
-  @Column({ default: 0.0 })
-  oee_availability: number;
+  @Column({ type: 'float', nullable: true })
+  oee_availability: number | null;
 
-  @Column({ default: 0.0 })
-  oee_performance: number;
+  @Column({ type: 'float', nullable: true })
+  oee_performance: number | null;
 
-  @Column({ default: 0.0 })
-  oee_quality: number;
+  @Column({ type: 'float', nullable: true })
+  oee_quality: number | null;
 
-  @Column({ default: 0.0 })
-  oee_total: number;
+  @Column({ type: 'float', nullable: true })
+  oee_total: number | null;
 
   @Column({ default: 0 })
   throughput_units: number;

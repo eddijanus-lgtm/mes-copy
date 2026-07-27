@@ -61,6 +61,7 @@ function createValidProfile(overrides?: Record<string, unknown>): Record<string,
         displayName: 'Station 1',
         description: 'First station',
         enabled: true,
+        resourceType: 'production',
         signals: [
           {
             key: 'workRequest',
@@ -229,7 +230,7 @@ describe('MachineProfileService', () => {
         baseDirectory: PROJECT_ROOT,
       });
 
-      expect(profile.operatingMode).toBe('control');
+      expect(profile.operatingMode).toBe('validate');
     });
 
     it('works with an absolute path', () => {

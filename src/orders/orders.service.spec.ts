@@ -109,8 +109,18 @@ describe('OrdersService', () => {
   it('creates an order', async () => {
     const dto: any = { name: 'Order 1', priority: 2, machine_id: 'm1', operation: 'assemble', quantity: 5 };
 
-    await expect(service.create(dto)).resolves.toMatchObject(dto);
-    expect(ordersRepo.create).toHaveBeenCalledWith(expect.objectContaining(dto));
+    await expect(service.create(dto)).resolves.toMatchObject({
+      ...dto,
+      status: 'pending',
+      start_time: undefined,
+    });
+    expect(ordersRepo.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        ...dto,
+        status: 'pending',
+        start_time: undefined,
+      }),
+    );
   });
 
   it('assigns only physically available machine-managed carriers', async () => {
@@ -162,6 +172,38 @@ describe('OrdersService', () => {
       'managed-ready',
       'legacy-ready',
     ]);
+  });
+
+  it('rejects an order for an observe-only machine before persisting or assigning it', async () => {
+    profiles.getProfile.mockReturnValueOnce({
+      stations: [
+        {
+          stationId: 'nx9000-press-cell',
+          resourceId: 71,
+          displayName: 'NX-9000 Press Cell',
+          enabled: true,
+        },
+      ],
+    });
+    machinesRepo.findOne.mockResolvedValueOnce({
+      id: 'nova-machine',
+      resource_id: 71,
+    });
+
+    await expect(
+      service.create({
+        name: 'NovaPress order',
+        priority: 1,
+        machine_id: 'nova-machine',
+        operation: 'press',
+        quantity: 1,
+      } as any),
+    ).rejects.toThrow(
+      'Selected start station is not part of the configured profile route',
+    );
+
+    expect(ordersRepo.save).not.toHaveBeenCalled();
+    expect(carriersRepo.save).not.toHaveBeenCalled();
   });
 
   it('returns all orders sorted by creation date', async () => {

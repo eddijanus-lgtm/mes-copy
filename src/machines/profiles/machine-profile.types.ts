@@ -1,3 +1,5 @@
+import type { RoutingOutcome } from '../../orders/routing-outcome';
+
 export type MachineProfileVersion = string;
 
 export type MachineProfileTransport = 'opcua';
@@ -72,6 +74,9 @@ export type MachineSignalRole =
   | 'inventoryCapacity'
   | 'availableCarrierCount'
   | 'totalCarrierCount'
+  | 'idealCycleTimeMs'
+  | 'goodCount'
+  | 'rejectCount'
   | 'slotOccupied'
   | 'slotId'
   | 'rfidUid'
@@ -92,7 +97,22 @@ export type MachineResourceCapability =
   | 'routing'
   | 'control'
   | 'inventory'
-  | 'storage';
+  | 'storage'
+  | 'telemetry';
+
+export type MachineEquipmentLevel =
+  | 'machine'
+  | 'work_unit'
+  | 'component';
+
+export type MachineExecutionModel =
+  | 'machine_job'
+  | 'work_unit_jobs';
+
+export type MachineJobInterface =
+  | 'signal_handshake'
+  | 'job_control'
+  | 'telemetry_only';
 
 export type MachineSignalTrigger =
   | 'change'
@@ -185,10 +205,14 @@ export interface MachineCarrierInventoryProfile {
 export interface MachineStationProfile {
   readonly stationId: string;
   readonly resourceId: number;
+  readonly parentResourceId?: number;
   readonly displayName: string;
   readonly description?: string;
   readonly enabled: boolean;
-  readonly resourceType?: MachineResourceType;
+  readonly equipmentLevel?: MachineEquipmentLevel;
+  readonly executionModel?: MachineExecutionModel;
+  readonly jobInterface?: MachineJobInterface;
+  readonly resourceType: MachineResourceType;
   readonly capabilities?: readonly MachineResourceCapability[];
   readonly signals: readonly MachineSignalProfile[];
   readonly routing?: MachineStationRoutingProfile;
@@ -206,6 +230,7 @@ export interface MachineOrderParameterDefinitionProfile {
   readonly key: string;
   readonly sourceKey?: string;
   readonly signalKey?: string;
+  readonly targetResourceIds?: readonly number[];
   readonly required?: boolean;
   readonly label: string;
   readonly type: 'number' | 'select';
@@ -227,6 +252,10 @@ export interface MachineConnectionProfile {
   readonly reconnect: MachineReconnectProfile;
 }
 
+export interface MachineRoutingProfile {
+  readonly terminalResourceId: number;
+}
+
 export interface MachineProfile {
   readonly profileVersion: MachineProfileVersion;
   readonly machineId: string;
@@ -236,8 +265,10 @@ export interface MachineProfile {
   readonly operatingMode: MachineProfileOperatingMode;
   readonly connection: MachineConnectionProfile;
   readonly namespaces: readonly MachineNamespaceProfile[];
+  readonly routing?: MachineRoutingProfile;
   readonly orderParameterDefinitions?: readonly MachineOrderParameterDefinitionProfile[];
   readonly resultCodes?: Readonly<Record<string, string>>;
+  readonly routingResultCodes?: Readonly<Record<RoutingOutcome, number>>;
   readonly stations: readonly MachineStationProfile[];
   readonly metadata?: Readonly<Record<string, string>>;
 }

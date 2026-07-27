@@ -1,4 +1,10 @@
-import { Injectable, Logger, NotFoundException, ServiceUnavailableException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  Logger,
+  NotFoundException,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import * as nodemailer from 'nodemailer';
@@ -75,7 +81,6 @@ export class NotificationsService {
         channels.push('mqtt');
         delivered = true;
       } catch (e) {
-        const machineName2 = rule.machine_id || 'unknown';
         if (!error) error = String(e.message || e);
       }
     }
@@ -101,11 +106,22 @@ export class NotificationsService {
   private async sendEmail(rule: AlertRuleEntity, message: string, machineId?: string): Promise<void> {
     if (!this.transporter) throw new ServiceUnavailableException('SMTP transport not configured');
 
-    const to = process.env.ALERT_EMAIL_TARGETS || 'admin@localhost';
+    const to = process.env.ALERT_EMAIL_TARGETS?.trim();
+    const from = (process.env.SMTP_FROM || process.env.SMTP_USER)?.trim();
+    if (!to) {
+      throw new ServiceUnavailableException(
+        'ALERT_EMAIL_TARGETS is not configured',
+      );
+    }
+    if (!from) {
+      throw new ServiceUnavailableException(
+        'SMTP_FROM or SMTP_USER is not configured',
+      );
+    }
     const subject = `[MES Alert ${rule.severity.toUpperCase()}] ${rule.name}`;
 
     await this.transporter.sendMail({
-      from: `"wara-mes Alerts" <${process.env.SMTP_USER || 'noreply@mes.local'}>`,
+      from,
       to,
       subject,
       html: `<h3>${rule.name}</h3><p>${message}</p><p>Maschine: ${machineId || 'N/A'}</p><p>Zeit: ${new Date().toLocaleString('de-DE')}</p>`,
@@ -122,7 +138,12 @@ export class NotificationsService {
 
   private async sendMqtt(rule: AlertRuleEntity, messageText: string): Promise<void> {
     if (!this.mqttGateway) throw new ServiceUnavailableException('MQTT gateway not available');
-    const topic = process.env.ALERT_MQTT_TOPIC || 'mes/alerts';
+    const topic = process.env.ALERT_MQTT_TOPIC?.trim();
+    if (!topic) {
+      throw new ServiceUnavailableException(
+        'ALERT_MQTT_TOPIC is not configured',
+      );
+    }
     const payload = {
       rule_id: rule.id,
       rule_name: rule.name,
@@ -132,7 +153,7 @@ export class NotificationsService {
       timestamp: new Date().toISOString(),
     };
 
-    await this.mqttGateway['client'].publish(topic, JSON.stringify(payload));
+    await this.mqttGateway.publish(topic, payload);
     this.logger.log(`MQTT alert dispatched for ${rule.id} on topic ${topic}`);
   }
 
@@ -148,20 +169,14 @@ export class NotificationsService {
           await this.ruleRepo.save(rule);
           const message = rule.message_template
             .replace('{machine_id}', telemetryData.machine_id || rule.machine_id || '')
-            .replace('{value}', String(telemetryData.value || ''))
-            .replace('{threshold}', String(telemetryData.threshold || rule.params?.threshold || ''));
+            .replace('{value}', String(telemetryData.value ?? ''))
+            .replace('{threshold}', String(telemetryData.threshold ?? rule.params?.threshold ?? ''));
 
-          let history: AlertHistoryEntity;
-          try {
-            history = await this.sendToChannels(rule, message, telemetryData.machine_id);
-          } catch (e) {
-            const msg2 = rule.message_template
-              .replace('{machine_id}', telemetryData.machine_id || rule.machine_id || '')
-              .replace('{value}', String(telemetryData.value || ''))
-              .replace('{threshold}', String(telemetryData.threshold || rule.params?.threshold || ''));
-
-            history = await this.sendToChannels(rule, msg2, telemetryData.machine_id);
-          }
+          const history = await this.sendToChannels(
+            rule,
+            message,
+            telemetryData.machine_id,
+          );
 
           rule.last_triggered_at = new Date();
           rule.status = history.delivered ? 'resolved' : 'firing';
@@ -173,25 +188,50 @@ export class NotificationsService {
     }
   }
 
-  private parseCondition(condition: string, params: Record<string, any>): Function {
-    const parts = condition.split(/\s+/);
-    const metric = parts[0] || 'value';
-    const op = parts[1] || '>=';
-    const threshold = parseFloat(String(params.threshold ?? params[metric] ?? 0));
+  private parseCondition(
+    condition: string,
+    params: Record<string, any>,
+  ): (data: Record<string, any>) => boolean {
+    const match = condition
+      .trim()
+      .match(/^([A-Za-z_][A-Za-z0-9_.-]*)\s*(>=|<=|==|!=|>|<)(?:\s*(-?(?:\d+(?:\.\d+)?|\.\d+)))?$/);
+    if (!match) {
+      throw new BadRequestException(
+        'condition must use "<metric> <operator> <number>"',
+      );
+    }
+    const [, metric, op, inlineThreshold] = match;
+    const rawThreshold =
+      inlineThreshold ?? params.threshold ?? params[metric];
+    const threshold = Number(rawThreshold);
+    if (
+      rawThreshold === undefined ||
+      rawThreshold === null ||
+      rawThreshold === '' ||
+      !Number.isFinite(threshold)
+    ) {
+      throw new BadRequestException(
+        `condition for ${metric} requires a finite numeric threshold`,
+      );
+    }
 
     const operators: Record<string, (a: number, b: number) => boolean> = {
       '>=': (a, b) => a >= b,
       '<=': (a, b) => a <= b,
       '>': (a, b) => a > b,
       '<': (a, b) => a < b,
-      '==': (a, b) => a == b,
-      '!=': (a, b) => a != b,
+      '==': (a, b) => a === b,
+      '!=': (a, b) => a !== b,
     };
 
-    const fn = operators[op] || operators['>='];
+    const fn = operators[op];
     return (data: Record<string, any>) => {
-      const currentValue = parseFloat(String(data[metric] ?? data.value ?? 0));
-      if (isNaN(currentValue)) return false;
+      const rawValue = data[metric];
+      if (rawValue === undefined || rawValue === null || rawValue === '') {
+        return false;
+      }
+      const currentValue = Number(rawValue);
+      if (!Number.isFinite(currentValue)) return false;
       return fn(currentValue, threshold);
     };
   }
@@ -217,6 +257,7 @@ export class NotificationsService {
   }
 
   async createRule(dto: Partial<AlertRuleEntity>): Promise<AlertRuleEntity> {
+    this.parseCondition(dto.condition ?? '', dto.params ?? {});
     const rule = this.ruleRepo.create({ ...dto, is_active: false });
     this.logger.log(`Alert rule created: ${dto.name} (inactive by default)`);
     return this.ruleRepo.save(rule);
@@ -224,6 +265,10 @@ export class NotificationsService {
 
   async updateRule(id: string, dto: Partial<AlertRuleEntity>): Promise<AlertRuleEntity> {
     const rule = await this.getRule(id);
+    this.parseCondition(
+      dto.condition ?? rule.condition,
+      dto.params ?? rule.params ?? {},
+    );
     Object.assign(rule, dto);
     if (dto.is_active && !rule.last_triggered_at) rule.status = 'active';
     return this.ruleRepo.save(rule);
@@ -231,6 +276,9 @@ export class NotificationsService {
 
   async toggleRule(id: string): Promise<AlertRuleEntity> {
     const rule = await this.getRule(id);
+    if (!rule.is_active) {
+      this.parseCondition(rule.condition, rule.params ?? {});
+    }
     rule.is_active = !rule.is_active;
     if (rule.is_active) {
       rule.status = 'active';
@@ -282,6 +330,23 @@ export class NotificationsService {
     }
 
     return { total, delivered, not_delivered: notDelivered, by_severity: bySeverity };
+  }
+
+  async getDeliveryRate(): Promise<{
+    rate: number | null;
+    total_sent: number;
+    total_failed: number;
+  }> {
+    const [totalSent, totalFailed] = await Promise.all([
+      this.historyRepo.count({ where: { delivered: true } }),
+      this.historyRepo.count({ where: { delivered: false } }),
+    ]);
+    const total = totalSent + totalFailed;
+    return {
+      rate: total > 0 ? Math.round((totalSent / total) * 1000) / 10 : null,
+      total_sent: totalSent,
+      total_failed: totalFailed,
+    };
   }
 
   async deleteRule(id: string): Promise<void> {

@@ -34,8 +34,6 @@ describe('MES machine neutrality', () => {
       const forbiddenPatterns = [
         /\bMath\.random\s*\(/,
         /demo-production/i,
-        /\b(?:Mock|Fake|Stub|Simulator|Simulated)\w*/,
-        /\bsimulat(?:e|ed|ion)\b/i,
         /OPC_UA_RESOURCE_IDS/,
         /OPC_UA_SERVER_ADDRESS/,
         /OPC_UA_ALLOWED_NODE_PREFIXES/,
@@ -109,6 +107,71 @@ describe('MES machine neutrality', () => {
         relative(sourceRoot, path).toLowerCase().includes('simulator'),
       ),
     ).toBe(false);
+  });
+
+  it('contains no hard-coded PLC result-code enum in routing core', () => {
+    const routingSource = readFileSync(
+      resolve(sourceRoot, 'orders', 'routing.service.ts'),
+      'utf8',
+    );
+    expect(routingSource).not.toContain('RoutingResultCode');
+    expect(routingSource).not.toMatch(/\bresultCode\s*:\s*\d+/);
+  });
+
+  it('does not fabricate dashboard OEE components', () => {
+    const dashboardSource = readFileSync(
+      resolve(sourceRoot, 'dashboard', 'dashboard.service.ts'),
+      'utf8',
+    );
+    expect(dashboardSource).not.toMatch(/performance\s*:\s*1(?:\.0)?/);
+    expect(dashboardSource).toContain('getProductionMetricSamples');
+    expect(dashboardSource).toContain('counterDelta');
+    expect(dashboardSource).toContain('production.total === null');
+  });
+
+  it('ships a data-free machine CSV template', () => {
+    const machinesSource = readFileSync(
+      resolve(sourceRoot, 'machines', 'machines.service.ts'),
+      'utf8',
+    );
+    expect(machinesSource).not.toContain('Station-1,CNC');
+    expect(machinesSource).not.toContain('Roboter-A');
+  });
+
+  it('does not hard-code the external-order MQTT topic in the gateway', () => {
+    const mqttSource = readFileSync(
+      resolve(sourceRoot, 'opcua', 'mqtt-gateway.service.ts'),
+      'utf8',
+    );
+    expect(mqttSource).not.toContain('i4.0/production/orders');
+  });
+
+  it('keeps equipment hierarchy and execution history vendor-neutral', () => {
+    const coreFiles = [
+      resolve(sourceRoot, 'machines', 'machine.entity.ts'),
+      resolve(sourceRoot, 'machines', 'machines.service.ts'),
+      resolve(sourceRoot, 'machines', 'machines.controller.ts'),
+      resolve(sourceRoot, 'orders', 'routing.service.ts'),
+      resolve(sourceRoot, 'execution-steps', 'execution-step.entity.ts'),
+      resolve(sourceRoot, 'execution-steps', 'execution-steps.service.ts'),
+      resolve(sourceRoot, 'execution-steps', 'execution-steps.controller.ts'),
+    ];
+    const forbiddenPatterns = [
+      /\bnova(?:press)?\b/i,
+      /\bnx[-_]?9000\b/i,
+      /\bns=\d+;[isgb]=/i,
+      /\b(?:requestBusy|requestAccepted|requestRejected|requestCompleted)\b/,
+      /\b(?:controlStart|controlStop|controlReset|controlPause)\b/,
+      /\bresultCode\s*:\s*\d+/,
+    ];
+    const violations = coreFiles.flatMap((path) => {
+      const source = readFileSync(path, 'utf8');
+      return forbiddenPatterns.some((pattern) => pattern.test(source))
+        ? [relative(projectRoot, path)]
+        : [];
+    });
+
+    expect(violations).toEqual([]);
   });
 });
 

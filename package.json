@@ -20,13 +20,16 @@
     "seed:test-machine": "node test-machines/opcua-simulator/seed-line.js",
     "seed:test-machine-alarms": "node test-machines/opcua-simulator/seed-alarms.js",
     "phase3:apply": "node tools/phase3-apply.js",
+    "migrate:oee-nullable": "node tools/migrate-oee-nullable.js",
     "benchmark:timescale": "node tools/benchmark-write-throughput.js",
     "lint": "eslint \"{src,apps,libs,test}/**/*.ts\" --fix",
     "test": "jest",
     "test:watch": "jest --watch",
     "test:cov": "jest --coverage",
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
-    "test:e2e": "node tools/run-e2e.js"
+    "test:e2e": "node tools/run-e2e.js system.e2e-spec.ts",
+    "test:e2e:alternate-machine": "node tools/run-e2e.js --profile-source test-machines/alternate-opcua-machine/profile.json alternate-machine.e2e-spec.ts",
+    "test:e2e:alternate-machine-control": "node tools/run-e2e.js --profile-source test-machines/alternate-opcua-machine/control-profile.json alternate-machine-control.e2e-spec.ts"
   },
   "dependencies": {
     "@nestjs/common": "^11.0.1",

@@ -1,6 +1,16 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { api } from "../api/client.js";
+import ExecutionStepCard from "../components/ExecutionStepCard.jsx";
 import { useShopfloorTelemetry } from "../hooks/useShopfloorTelemetry.js";
+import {
+  activeExecutionForResource,
+  buildEquipmentTree,
+  equipmentJobInterface,
+  equipmentLevelLabel,
+  isControllableEquipment,
+  isRoutableEquipment,
+  normalizeExecutionSteps,
+} from "../utils/equipmentModel.js";
 
 export default function ShopfloorPage() {
   const [health, setHealth] = useState(null);
@@ -10,6 +20,8 @@ export default function ShopfloorPage() {
   const [mqttHistory, setMqttHistory] = useState([]);
   const [webshopOrders, setWebshopOrders] = useState([]);
   const [routesByOrder, setRoutesByOrder] = useState({});
+  const [equipment, setEquipment] = useState([]);
+  const [executionSteps, setExecutionSteps] = useState([]);
   const [now, setNow] = useState(Date.now());
   const [controlLoading, setControlLoading] = useState(null);
   const { status, telemetryByResource, handshakeByResource, eventsByResource, changedAtByResource, mqttEvents, lastMessageAt, logs } = useShopfloorTelemetry();
@@ -27,14 +39,25 @@ export default function ShopfloorPage() {
 
   useEffect(() => {
     const loadStatus = () => api.getSilent("/shopfloor/health").then(setHealth).catch(() => setHealth(null));
-    const loadFlow = () => Promise.all([api.getSilent("/carriers"), api.getSilent("/orders"), api.getSilent("/shopfloor/stmes/handshakes"), api.getSilent("/shopfloor/mqtt/messages"), api.getSilent("/shopfloor/webshop/orders")])
-      .then(([carrierData, orderData, journalData, mqttData, webshopData]) => {
-        setCarriers(carrierData);
-        setOrders(orderData);
-        setHandshakeJournal(journalData);
-        setMqttHistory(mqttData);
+    const loadFlow = () => Promise.all([
+      api.getSilent("/carriers"),
+      api.getSilent("/orders"),
+      api.getSilent("/shopfloor/stmes/handshakes"),
+      api.getSilent("/shopfloor/mqtt/messages"),
+      api.getSilent("/shopfloor/webshop/orders"),
+      api.getSilent("/machines").catch(() => []),
+      api.getSilent("/shopfloor/execution-steps/current").catch(() => ({ items: [] })),
+    ])
+      .then(([carrierData, orderData, journalData, mqttData, webshopData, equipmentData, executionData]) => {
+        const safeOrders = Array.isArray(orderData) ? orderData : [];
+        setCarriers(Array.isArray(carrierData) ? carrierData : []);
+        setOrders(safeOrders);
+        setHandshakeJournal(Array.isArray(journalData) ? journalData : []);
+        setMqttHistory(Array.isArray(mqttData) ? mqttData : []);
         setWebshopOrders(Array.isArray(webshopData) ? webshopData : []);
-        const activeOrders = orderData.filter((order) => order.status === "in_progress");
+        setEquipment(Array.isArray(equipmentData) ? equipmentData : []);
+        setExecutionSteps(normalizeExecutionSteps(executionData));
+        const activeOrders = safeOrders.filter((order) => order.status === "in_progress");
         return Promise.all(
           activeOrders.map(async (order) => [
             order.id,
@@ -58,15 +81,31 @@ export default function ShopfloorPage() {
   const connected = status === "connected";
   const stations = Object.values(telemetryByResource).sort((a, b) => a.payload.resourceId - b.payload.resourceId);
   const profileStations = health?.machine?.stations || [];
-  const controlStations = profileStations.map((station) => {
+  const equipmentByResource = useMemo(
+    () => new Map(equipment.map((item) => [String(item.resource_id ?? item.resourceId), item])),
+    [equipment],
+  );
+  const profileEquipment = profileStations.map((station) => {
     const telemetry = telemetryByResource[station.resourceId]?.payload;
+    const persisted = equipmentByResource.get(String(station.resourceId)) || {};
     return {
+      ...persisted,
       ...station,
       displayName: station.displayName || telemetry?.displayName,
       signals: telemetry?.signals || {},
       roles: telemetry?.roles || {},
     };
   });
+  const profileResourceIds = new Set(profileEquipment.map((item) => String(item.resourceId ?? item.resource_id)));
+  const allEquipment = [
+    ...equipment.filter((item) => !profileResourceIds.has(String(item.resource_id ?? item.resourceId))),
+    ...profileEquipment,
+  ];
+  const equipmentTree = useMemo(() => buildEquipmentTree(allEquipment), [equipment, health, telemetryByResource]);
+  const resourceNames = useMemo(
+    () => Object.fromEntries(allEquipment.map((item) => [item.resource_id ?? item.resourceId, item.name ?? item.displayName])),
+    [equipment, health, telemetryByResource],
+  );
   const activeShopfloorOrder = orders.find((order) => order.status === "in_progress");
   const trackedCarriers = activeShopfloorOrder ? carriers.filter((carrier) => carrier.order_id === activeShopfloorOrder.id) : [];
   const resultCodes = health?.machine?.resultCodes || {};
@@ -95,20 +134,14 @@ export default function ShopfloorPage() {
 
         <CarrierFlow order={activeShopfloorOrder} carriers={trackedCarriers} route={routesByOrder[activeShopfloorOrder?.id] || []} />
 
-        <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
-          {controlStations.map((station) => (
-            <MachineControlPanel
-              key={station.resourceId}
-              resourceId={station.resourceId}
-              displayName={station.displayName}
-              signals={station.signals}
-              roles={station.roles}
-              commands={station.availableCommands || []}
-              loading={controlLoading === station.resourceId}
-              onControl={(command) => handleMachineControl(station.resourceId, command)}
-            />
-          ))}
-        </div>
+        <ExecutionOverview steps={executionSteps} resourceNames={resourceNames} />
+
+        <EquipmentControlTree
+          nodes={equipmentTree}
+          executionSteps={executionSteps}
+          loadingResourceId={controlLoading}
+          onControl={handleMachineControl}
+        />
 
         <WebshopOrdersPanel orders={webshopOrders} />
 
@@ -130,6 +163,8 @@ export default function ShopfloorPage() {
                 </div>
                 <HandshakeStatus snapshot={handshakeSnapshot(roles)} lastEvent={handshakeByResource[resourceId]} resultCodes={resultCodes} />
               </div>
+
+              <ExecutionStepCard step={activeExecutionForResource(executionSteps, resourceId)} resourceName={payload.displayName || payload.stationId} compact />
 
               <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
                 {Object.entries(signals).map(([key, value]) => (
@@ -157,6 +192,97 @@ export default function ShopfloorPage() {
           </pre>
         </details>
       </main>
+    </div>
+  );
+}
+
+function ExecutionOverview({ steps, resourceNames }) {
+  return (
+    <section className="rounded-xl border border-neutral-200 bg-white shadow-sm">
+      <div className="border-b border-neutral-100 px-5 py-4">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-amber-700">Live-Ausführung</p>
+        <h2 className="font-semibold text-neutral-900">Aktuelle Arbeitsschritte</h2>
+      </div>
+      <div className="grid gap-3 p-4 md:grid-cols-2 xl:grid-cols-3">
+        {steps.length === 0 ? <p className="text-sm text-neutral-400">Aktuell wird kein Arbeitsschritt ausgeführt.</p> : null}
+        {steps.map((step, index) => (
+          <ExecutionStepCard
+            key={step.id || `${step.order_id}-${step.resource_id}-${step.started_at || index}`}
+            step={step}
+            resourceName={resourceNames[step.resource_id]}
+          />
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function EquipmentControlTree({ nodes, executionSteps, loadingResourceId, onControl }) {
+  if (nodes.length === 0) return null;
+  return (
+    <section className="space-y-3" aria-label="Maschinenhierarchie">
+      <div>
+        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-brand-primary">Equipment-Hierarchie</p>
+        <h2 className="font-semibold text-neutral-900">Maschinen und Work Units</h2>
+      </div>
+      {nodes.map((node) => (
+        <EquipmentControlNode
+          key={node.id || node.resource_id || node.resourceId}
+          node={node}
+          depth={0}
+          executionSteps={executionSteps}
+          loadingResourceId={loadingResourceId}
+          onControl={onControl}
+        />
+      ))}
+    </section>
+  );
+}
+
+function EquipmentControlNode({ node, depth, executionSteps, loadingResourceId, onControl }) {
+  const resourceId = node.resourceId ?? node.resource_id;
+  const displayName = node.displayName || node.name || (resourceId != null ? `Ressource ${resourceId}` : "Maschine");
+  const commands = node.availableCommands || node.available_commands || [];
+  const step = activeExecutionForResource(executionSteps, resourceId);
+  const showControl = resourceId != null && (commands.length > 0 || isControllableEquipment(node));
+  return (
+    <div className={depth === 0 ? "rounded-xl border border-neutral-200 bg-white p-4 shadow-sm" : "ml-4 border-l border-neutral-200 pl-4"}>
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-neutral-400">{equipmentLevelLabel(node)}{resourceId != null ? ` · R${resourceId}` : ""}</p>
+          <h3 className="text-sm font-semibold text-neutral-900">{displayName}</h3>
+        </div>
+        <div className="flex flex-wrap gap-1.5 text-[10px]">
+          {isRoutableEquipment(node) ? <span className="rounded bg-sky-50 px-2 py-1 text-sky-700">routbar</span> : <span className="rounded bg-neutral-100 px-2 py-1 text-neutral-500">nur Telemetrie</span>}
+          {equipmentJobInterface(node) ? <span className="rounded bg-violet-50 px-2 py-1 text-violet-700">{formatJobInterface(equipmentJobInterface(node))}</span> : null}
+        </div>
+      </div>
+      {step ? <div className="mb-3"><ExecutionStepCard step={step} resourceName={displayName} compact /></div> : null}
+      {showControl ? (
+        <MachineControlPanel
+          resourceId={resourceId}
+          displayName={displayName}
+          signals={node.signals || {}}
+          roles={node.roles || {}}
+          commands={commands}
+          loading={loadingResourceId === resourceId}
+          onControl={(command) => onControl(resourceId, command)}
+        />
+      ) : null}
+      {(node.children || []).length > 0 ? (
+        <div className="mt-3 space-y-3">
+          {node.children.map((child) => (
+            <EquipmentControlNode
+              key={child.id || child.resource_id || child.resourceId}
+              node={child}
+              depth={depth + 1}
+              executionSteps={executionSteps}
+              loadingResourceId={loadingResourceId}
+              onControl={onControl}
+            />
+          ))}
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -454,7 +580,7 @@ function MachineControlPanel({ resourceId, displayName, signals, roles, commands
         <h3 className="font-mono text-sm font-semibold text-neutral-800">{displayName || `Station ${resourceId}`}</h3>
         <span className={`rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider ${stateColor}`}>{stateLabel}</span>
       </div>
-      <p className="mb-3 text-xs leading-5 text-neutral-500">Sendet MES-Steuerbefehle an den OPC-UA-Control-Block der Station.</p>
+      <p className="mb-3 text-xs leading-5 text-neutral-500">Sendet den freigegebenen Steuerbefehl über die konfigurierte Maschinenschnittstelle.</p>
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
         {CONTROL_COMMANDS.filter((cmd) => commands.includes(cmd.command)).map((cmd) => (
           <button
@@ -470,4 +596,12 @@ function MachineControlPanel({ resourceId, displayName, signals, roles, commands
       </div>
     </section>
   );
+}
+
+function formatJobInterface(jobInterface) {
+  return ({
+    signal_handshake: "Signal-Handshake",
+    job_control: "Job Control",
+    telemetry_only: "Nur Telemetrie",
+  })[jobInterface] || jobInterface;
 }

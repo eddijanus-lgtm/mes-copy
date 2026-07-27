@@ -1,6 +1,11 @@
 import { Transform } from 'class-transformer';
 import { IsBoolean, IsDateString, IsInt, IsNotEmpty, IsString, IsEnum, IsOptional, Min } from 'class-validator';
-import { MachineStatusEnum } from './machine.entity';
+import {
+  EquipmentLevelEnum,
+  ExecutionModelEnum,
+  JobInterfaceEnum,
+  MachineStatusEnum,
+} from './machine.entity';
 
 export type MachineStatus = 'online' | 'offline' | 'maintenance' | 'error' | 'idle';
 
@@ -35,6 +40,23 @@ export class CreateMachineDto {
   @IsInt()
   @Min(1)
   resource_id?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  parent_resource_id?: number;
+
+  @IsOptional()
+  @IsEnum(EquipmentLevelEnum)
+  equipment_level?: EquipmentLevelEnum;
+
+  @IsOptional()
+  @IsEnum(ExecutionModelEnum)
+  execution_model?: ExecutionModelEnum;
+
+  @IsOptional()
+  @IsEnum(JobInterfaceEnum)
+  job_interface?: JobInterfaceEnum;
 
   @IsOptional()
   @IsString()
@@ -79,6 +101,23 @@ export class UpdateMachineDto {
   @IsInt()
   @Min(1)
   resource_id?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  parent_resource_id?: number;
+
+  @IsOptional()
+  @IsEnum(EquipmentLevelEnum)
+  equipment_level?: EquipmentLevelEnum;
+
+  @IsOptional()
+  @IsEnum(ExecutionModelEnum)
+  execution_model?: ExecutionModelEnum;
+
+  @IsOptional()
+  @IsEnum(JobInterfaceEnum)
+  job_interface?: JobInterfaceEnum;
 
   @IsOptional()
   @IsString()

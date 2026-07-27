@@ -42,6 +42,9 @@ const EXPECTED_SIMULATOR_ROLES: ReadonlyArray<string> = [
   'resourceId',
   'processCompleted',
   'processResult',
+  'idealCycleTimeMs',
+  'goodCount',
+  'rejectCount',
 ];
 
 const SCHEMA_DEF_NAMES: ReadonlyArray<string> = [
@@ -191,6 +194,17 @@ describe('MachineProfile Contract', () => {
       expect(profile.operatingMode).toBe('control');
     });
 
+    it('keeps demo PLC result codes in the simulator profile only', () => {
+      expect(profile.routingResultCodes).toEqual({
+        accepted: 0,
+        carrier_unknown: 1,
+        order_missing: 2,
+        wrong_resource: 3,
+        already_completed: 4,
+        internal_error: 9,
+      });
+    });
+
     it('has a connection block', () => {
       expect(isRecord(profile.connection)).toBe(true);
     });
@@ -232,8 +246,8 @@ describe('MachineProfile Contract', () => {
       expect((conn.endpointUrl as string).includes('YOUR_')).toBe(true);
     });
 
-    it('has operatingMode "control"', () => {
-      expect(profile.operatingMode).toBe('control');
+    it('stays in validate mode until real result codes are commissioned', () => {
+      expect(profile.operatingMode).toBe('validate');
     });
 
     it('has authentication type "username"', () => {
@@ -737,7 +751,6 @@ describe('MachineProfile Contract', () => {
         assertRecord(station as Record<string, unknown>);
         const candidate = station as Record<string, unknown>;
         return (
-          candidate.resourceType === undefined ||
           candidate.resourceType === 'production' ||
           candidate.resourceType === 'hybrid' ||
           (Array.isArray(candidate.capabilities) &&
@@ -758,7 +771,6 @@ describe('MachineProfile Contract', () => {
         assertRecord(station as Record<string, unknown>);
         const candidate = station as Record<string, unknown>;
         return (
-          candidate.resourceType === undefined ||
           candidate.resourceType === 'production' ||
           candidate.resourceType === 'hybrid' ||
           (Array.isArray(candidate.capabilities) &&

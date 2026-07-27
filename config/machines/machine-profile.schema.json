@@ -37,6 +37,17 @@
       },
       "minItems": 1
     },
+    "routing": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "terminalResourceId": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "required": ["terminalResourceId"]
+    },
     "stations": {
       "type": "array",
       "items": {
@@ -55,6 +66,26 @@
       "additionalProperties": {
         "type": "string"
       }
+    },
+    "routingResultCodes": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "accepted": { "type": "integer", "minimum": 0 },
+        "carrier_unknown": { "type": "integer", "minimum": 0 },
+        "order_missing": { "type": "integer", "minimum": 0 },
+        "wrong_resource": { "type": "integer", "minimum": 0 },
+        "already_completed": { "type": "integer", "minimum": 0 },
+        "internal_error": { "type": "integer", "minimum": 0 }
+      },
+      "required": [
+        "accepted",
+        "carrier_unknown",
+        "order_missing",
+        "wrong_resource",
+        "already_completed",
+        "internal_error"
+      ]
     },
     "metadata": {
       "type": "object",
@@ -122,7 +153,12 @@
         },
         "policy": {
           "type": "string",
-          "enum": ["None", "Basic256Sha256", "Aes128_Sha256_RsaOaep", "Aes256_Sha256_RsaPss"]
+          "enum": [
+            "None",
+            "Basic256Sha256",
+            "Aes128_Sha256_RsaOaep",
+            "Aes256_Sha256_RsaPss"
+          ]
         },
         "certificatePathEnv": {
           "type": "string"
@@ -131,10 +167,7 @@
           "type": "string"
         }
       },
-      "required": [
-        "mode",
-        "policy"
-      ],
+      "required": ["mode", "policy"],
       "additionalProperties": false
     },
     "authentication": {
@@ -154,9 +187,7 @@
           "type": "string"
         }
       },
-      "required": [
-        "type"
-      ],
+      "required": ["type"],
       "additionalProperties": false
     },
     "reconnect": {
@@ -198,10 +229,7 @@
           "minLength": 1
         }
       },
-      "required": [
-        "key",
-        "uri"
-      ],
+      "required": ["key", "uri"],
       "additionalProperties": false
     },
     "station": {
@@ -215,6 +243,10 @@
           "type": "integer",
           "minimum": 1
         },
+        "parentResourceId": {
+          "type": "integer",
+          "minimum": 1
+        },
         "displayName": {
           "type": "string",
           "minLength": 1
@@ -225,6 +257,18 @@
         "enabled": {
           "type": "boolean"
         },
+        "equipmentLevel": {
+          "type": "string",
+          "enum": ["machine", "work_unit", "component"]
+        },
+        "executionModel": {
+          "type": "string",
+          "enum": ["machine_job", "work_unit_jobs"]
+        },
+        "jobInterface": {
+          "type": "string",
+          "enum": ["signal_handshake", "job_control", "telemetry_only"]
+        },
         "resourceType": {
           "type": "string",
           "enum": ["production", "inventory", "storage", "hybrid"]
@@ -233,7 +277,7 @@
           "type": "array",
           "items": {
             "type": "string",
-            "enum": ["production", "routing", "control", "inventory", "storage"]
+            "enum": ["production", "routing", "control", "inventory", "storage", "telemetry"]
           },
           "uniqueItems": true
         },
@@ -262,6 +306,7 @@
         "resourceId",
         "displayName",
         "enabled",
+        "resourceType",
         "signals"
       ],
       "additionalProperties": false
@@ -325,6 +370,12 @@
         "key": { "type": "string", "minLength": 1 },
         "sourceKey": { "type": "string", "minLength": 1 },
         "signalKey": { "type": "string", "minLength": 1 },
+        "targetResourceIds": {
+          "type": "array",
+          "items": { "type": "integer", "minimum": 1 },
+          "minItems": 1,
+          "uniqueItems": true
+        },
         "required": { "type": "boolean" },
         "label": { "type": "string", "minLength": 1 },
         "type": { "type": "string", "enum": ["number", "select"] },
@@ -388,6 +439,9 @@
             "inventoryCapacity",
             "availableCarrierCount",
             "totalCarrierCount",
+            "idealCycleTimeMs",
+            "goodCount",
+            "rejectCount",
             "slotOccupied",
             "slotId",
             "rfidUid",
@@ -481,10 +535,7 @@
           "type": "number"
         }
       },
-      "required": [
-        "factor",
-        "offset"
-      ],
+      "required": ["factor", "offset"],
       "additionalProperties": false
     },
     "envReference": {
@@ -498,9 +549,7 @@
           "type": "boolean"
         }
       },
-      "required": [
-        "env"
-      ],
+      "required": ["env"],
       "additionalProperties": false
     }
   }

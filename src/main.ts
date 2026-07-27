@@ -10,8 +10,10 @@ import * as correlationId from 'crypto';
 import { createDocument } from './swagger';
 import { ApiExceptionFilter } from './common/api-exception.filter';
 import { configureApiVersioning } from './api-versioning';
+import { validateProductionEnvironment } from './config/production-environment';
 
 async function bootstrap() {
+  validateProductionEnvironment();
   const app = await NestFactory.create(AppModule);
   const logger = new Logger('Bootstrap');
 

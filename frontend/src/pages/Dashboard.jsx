@@ -188,8 +188,9 @@ function WidgetContent({ id, dashboardData }) {
 }
 
 function formatNumber(value) {
+  if (value === null || value === undefined || value === "") return "–";
   const number = Number(value);
   return Number.isFinite(number)
     ? new Intl.NumberFormat("de-DE", { maximumFractionDigits: 1 }).format(number)
-    : "0";
+    : "–";
 }

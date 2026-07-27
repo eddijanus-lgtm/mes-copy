@@ -127,9 +127,9 @@ function durationBetween(start?: string, end?: string): number | undefined {
   return Number.isFinite(duration) ? Math.max(0, duration) : undefined;
 }
 
-function classifyExecution(status: string, resultCode?: number, errorMessage?: string): 'OK' | 'ERROR' | 'UNKNOWN' {
-  if (errorMessage || status === 'error' || (resultCode !== undefined && resultCode !== 0)) return 'ERROR';
-  if (resultCode === 0 || status === 'acknowledged') return 'OK';
+function classifyExecution(status: string, _resultCode?: number, errorMessage?: string): 'OK' | 'ERROR' | 'UNKNOWN' {
+  if (errorMessage || status === 'error') return 'ERROR';
+  if (status === 'acknowledged' || status === 'responded') return 'OK';
   return 'UNKNOWN';
 }
 

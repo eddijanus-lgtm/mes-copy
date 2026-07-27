@@ -27,6 +27,17 @@ Der Scanner und die Profilprüfung führen **keine OPC-UA-Schreiboperationen** a
 - [ ] externe Testmaschine startet mit `npm run start:test-machine`
 - [ ] Backend- und Frontend-Build sind erfolgreich
 
+Der vollständige Ablauf kann vorab mit einer zweiten, herstellerfremden
+OPC-UA-Gegenstelle geprobt werden:
+
+```powershell
+npm run test:e2e:alternate-machine
+```
+
+Dieser Test startet das MES zunächst ohne erreichbare Maschine, führt danach
+Scan und Profilprüfung im Read-only-Modus aus, prüft Telemetrie, Persistierung
+und OEE und simuliert abschließend Netzwerktrennung und Wiederverbindung.
+
 ## Montag: ein lesender Scan
 
 Zuerst den OPC-UA-Endpoint in der lokalen `.env` oder nur für den Prozess setzen. Zugangsdaten dürfen nicht in Git gespeichert werden.

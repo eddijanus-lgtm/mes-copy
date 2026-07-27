@@ -25,6 +25,11 @@ const invalidInventorySlots = new Set(
 // The node contract is a test-machine stMES/DB151 contract, while the MES connects
 // through the same production OpcUaMachineAdapter used for a physical PLC.
 // now reflects the configured webshop product: lid color plus red/green/blue balls.
+function simulatedRate(envName) {
+  const value = Number(process.env[envName] || 0);
+  return Number.isFinite(value) ? Math.max(0, Math.min(value, 1)) : 0;
+}
+
 const stationConfigs = [
   {
     resourceId: 1,
@@ -33,7 +38,7 @@ const stationConfigs = [
     operationNo: 10,
     operation: 'Deckelfarbe bereitstellen',
     cycleTimeMs: 5000,
-    scrapRate: 0,
+    scrapRate: simulatedRate('SIMULATOR_SCRAP_RATE_S01'),
   },
   {
     resourceId: 2,
@@ -42,7 +47,7 @@ const stationConfigs = [
     operationNo: 20,
     operation: 'Kugeln dosieren',
     cycleTimeMs: 6000,
-    scrapRate: 0,
+    scrapRate: simulatedRate('SIMULATOR_SCRAP_RATE_S02'),
   },
   {
     resourceId: 3,
@@ -51,7 +56,7 @@ const stationConfigs = [
     operationNo: 30,
     operation: 'Deckel und Kugeln pruefen',
     cycleTimeMs: 4000,
-    scrapRate: 0,
+    scrapRate: simulatedRate('SIMULATOR_SCRAP_RATE_Q01'),
   },
 ];
 const stations = stationConfigs.map(createStationState);
@@ -671,7 +676,7 @@ async function start() {
   );
   console.log('Stations:');
   for (const station of stations) {
-    console.log(`- Resource ${station.resourceId}: ${station.name}, operation=${station.operation}, cycle=${station.cycleTimeMs} ms`);
+    console.log(`- Resource ${station.resourceId}: ${station.name}, operation=${station.operation}, cycle=${station.cycleTimeMs} ms, scrapRate=${station.scrapRate}`);
     simulatePlc(station);
   }
   await refreshCarriers();

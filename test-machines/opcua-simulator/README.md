@@ -7,6 +7,22 @@ damit über denselben produktiven `OpcUaMachineAdapter` und denselben
 
 Es gibt keinen Simulator- oder Mock-Adapter im MES.
 
+Jede Produktionsstation stellt außerdem kumulative Gut- und Ausschusszähler
+sowie ihre ideale Zykluszeit als OPC-UA-Knoten bereit. Das Maschinenprofil
+ordnet diese Knoten den neutralen Rollen `goodCount`, `rejectCount` und
+`idealCycleTimeMs` zu. Das MES speichert Änderungen über den normalen
+Adapter-Telemetriepfad und berechnet daraus OEE. Optionale Ausschussraten werden
+ausschließlich auf der simulierten Maschinenseite konfiguriert:
+
+```env
+SIMULATOR_SCRAP_RATE_S01=0
+SIMULATOR_SCRAP_RATE_S02=0
+SIMULATOR_SCRAP_RATE_Q01=0
+```
+
+Die Werte liegen zwischen `0` und `1`; zum Beispiel entspricht `0.03` einer
+simulierten Ausschusswahrscheinlichkeit von drei Prozent je Stationszyklus.
+
 Zusätzlich zu den Produktionsstationen stellt die Testmaschine ein neutrales
 RFID-Carrier-Inventar bereit. Es enthält einen gültigen Snapshot mit Revision,
 Kapazität, Gesamt-/Verfügbar-Zähler und primitive OPC-UA-Signale je Lagerplatz.

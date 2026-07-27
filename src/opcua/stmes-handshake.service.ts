@@ -1,9 +1,10 @@
 import { Injectable, Logger, OnModuleInit, Inject } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { RoutingResultCode, RoutingService } from '../orders/routing.service';
+import { RoutingService } from '../orders/routing.service';
 import { MACHINE_ADAPTER } from '../machines/adapters/machine-adapter.token';
 import type { MachineAdapter } from '../machines/adapters/machine-adapter.types';
+import type { MachineRoutingResponse } from '../machines/adapters/machine-adapter.types';
 import { StMesHandshakeEntity, StMesHandshakeStatusEnum } from './stmes-handshake.entity';
 
 @Injectable()
@@ -36,10 +37,12 @@ export class StMesHandshakeService implements OnModuleInit {
 
     try {
       const request = await this.machine.readStationRequest(resourceId);
+      const requestedAt = new Date();
       journal = await this.handshakes.save(this.handshakes.create({
         resource_id: resourceId,
         carrier_number: request.carrierNumber,
         request_payload: { carrierNumber: request.carrierNumber, requestedResourceId: request.requestedResourceId },
+        created_at: requestedAt,
       }));
       this.machine.publishHandshakeEvent({
         resourceId,
@@ -57,24 +60,45 @@ export class StMesHandshakeService implements OnModuleInit {
       });
 
       const decision = await this.routing.resolveStationRequest(resourceId, request.carrierNumber);
-      const ok = decision.resultCode === RoutingResultCode.OK;
-      const parameters = decision.parameters || {};
-      const response = {
-        orderNo: decision.orderNo ?? '',
-        partNo: decision.partNo ?? '',
-        operationNo: decision.operationNo ?? 0,
-        stepNo: decision.stepNo ?? 0,
-        nextResourceId: decision.nextResourceId ?? 0,
-        parameters,
-        resultCode: decision.resultCode,
-      };
+      const ok = decision.outcome === 'accepted';
+      const resultCode = this.machine.routingResultCode(decision.outcome);
+      if (
+        ok &&
+        (typeof decision.orderNo !== 'string' ||
+          !decision.orderNo ||
+          typeof decision.partNo !== 'string' ||
+          !decision.partNo ||
+          !Number.isInteger(decision.operationNo) ||
+          !Number.isInteger(decision.stepNo) ||
+          !Number.isInteger(decision.nextResourceId) ||
+          typeof decision.parameters !== 'object' ||
+          decision.parameters === null ||
+          Array.isArray(decision.parameters))
+      ) {
+        throw new Error('Accepted routing decision is incomplete');
+      }
+      const response: MachineRoutingResponse = ok
+        ? {
+            orderNo: decision.orderNo!,
+            partNo: decision.partNo!,
+            operationNo: decision.operationNo!,
+            stepNo: decision.stepNo!,
+            nextResourceId: decision.nextResourceId!,
+            parameters: decision.parameters!,
+            resultCode,
+            accepted: true,
+          }
+        : {
+            resultCode,
+            accepted: false,
+          };
 
-      await this.machine.writeRoutingResponse(resourceId, { ...response, accepted: ok });
+      await this.machine.writeRoutingResponse(resourceId, response);
 
       Object.assign(journal, {
         carrier_id: decision.carrierId,
         order_id: decision.orderId,
-        result_code: decision.resultCode,
+        result_code: resultCode,
         response_payload: response,
         responded_at: new Date(),
         status: ok ? StMesHandshakeStatusEnum.RESPONDED : StMesHandshakeStatusEnum.ERROR,
@@ -84,29 +108,50 @@ export class StMesHandshakeService implements OnModuleInit {
         resourceId,
         phase: ok ? 'done' : 'error',
         carrierNumber: request.carrierNumber,
-        resultCode: decision.resultCode,
-        orderNo: response.orderNo,
-        operationNo: response.operationNo,
-        nextResourceId: response.nextResourceId,
-        message: ok ? `Auftrag ${response.orderNo} an SPS uebergeben` : `Anfrage mit Resultcode ${decision.resultCode} abgewiesen`,
+        resultCode,
+        ...(response.accepted
+          ? {
+              orderNo: response.orderNo,
+              operationNo: response.operationNo,
+              nextResourceId: response.nextResourceId,
+            }
+          : {}),
+        message: response.accepted
+          ? `Auftrag ${response.orderNo} an SPS uebergeben`
+          : `Anfrage mit Resultcode ${resultCode} abgewiesen`,
       });
     } catch (error) {
       this.logger.error(`stMES dispatch failed for resource ${resourceId}: ${(error as Error).message}`);
+      let internalErrorCode: number | undefined;
       try {
-        await this.machine.writeInternalError(resourceId, RoutingResultCode.INTERNAL_ERROR);
+        internalErrorCode = this.machine.routingResultCode('internal_error');
+        await this.machine.writeInternalError(resourceId, internalErrorCode);
       } catch (writeError) {
         this.logger.error(`stMES error response failed: ${(writeError as Error).message}`);
       }
       if (journal) {
+        try {
+          await this.routing.failStationStep(
+            resourceId,
+            journal.carrier_number,
+            new Date(),
+          );
+        } catch (executionError) {
+          this.logger.error(
+            `Execution-step failure update failed: ${(executionError as Error).message}`,
+          );
+        }
         journal.status = StMesHandshakeStatusEnum.ERROR;
-        journal.result_code = RoutingResultCode.INTERNAL_ERROR;
+        journal.result_code = internalErrorCode;
         journal.error_message = (error as Error).message;
         await this.handshakes.save(journal);
       }
       this.machine.publishHandshakeEvent({
         resourceId,
         phase: 'error',
-        resultCode: RoutingResultCode.INTERNAL_ERROR,
+        ...(internalErrorCode === undefined
+          ? {}
+          : { resultCode: internalErrorCode }),
         message: 'Interner Fehler bei der Stationsanfrage',
       });
     }

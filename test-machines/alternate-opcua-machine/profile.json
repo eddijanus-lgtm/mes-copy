@@ -1,0 +1,123 @@
+{
+  "profileVersion": "1.0",
+  "machineId": "nova-nx9000",
+  "displayName": "NovaPress NX-9000",
+  "description": "Read-only commissioning profile for an autonomous servo press with a vendor-specific OPC UA contract.",
+  "transport": "opcua",
+  "operatingMode": "observe",
+  "connection": {
+    "endpointUrl": "opc.tcp://127.0.0.1:4841/UA/NovaPress",
+    "applicationName": "WARA MES NovaPress Observer",
+    "security": {
+      "mode": "None",
+      "policy": "None"
+    },
+    "authentication": {
+      "type": "anonymous"
+    },
+    "connectionTimeoutMs": 2000,
+    "sessionTimeoutMs": 30000,
+    "reconnect": {
+      "enabled": true,
+      "initialDelayMs": 250,
+      "maximumDelayMs": 2000,
+      "backoffMultiplier": 1.5
+    }
+  },
+  "namespaces": [
+    {
+      "key": "nova",
+      "uri": "urn:nova-automation:machines:nx9000:v2"
+    }
+  ],
+  "stations": [
+    {
+      "stationId": "nx9000-press-cell",
+      "resourceId": 71,
+      "displayName": "NX-9000 Press Cell",
+      "description": "Autonomous press onboarded read-only during commissioning.",
+      "enabled": true,
+      "resourceType": "production",
+      "capabilities": [
+        "production"
+      ],
+      "signals": [
+        {
+          "key": "machineRunning",
+          "role": "custom",
+          "direction": "machineToMes",
+          "namespace": "nova",
+          "identifier": "s=NX9000.Status.Run",
+          "dataType": "Boolean",
+          "access": "read",
+          "required": true
+        },
+        {
+          "key": "faultActive",
+          "role": "custom",
+          "direction": "machineToMes",
+          "namespace": "nova",
+          "identifier": "s=NX9000.Status.Fault",
+          "dataType": "Boolean",
+          "access": "read",
+          "required": true
+        },
+        {
+          "key": "idealCycleTime",
+          "role": "idealCycleTimeMs",
+          "direction": "machineToMes",
+          "namespace": "nova",
+          "identifier": "s=NX9000.Production.IdealCycleMs",
+          "dataType": "UInt32",
+          "access": "read",
+          "required": true
+        },
+        {
+          "key": "acceptedParts",
+          "role": "goodCount",
+          "direction": "machineToMes",
+          "namespace": "nova",
+          "identifier": "s=NX9000.Production.Accepted",
+          "dataType": "UInt32",
+          "access": "read",
+          "required": true
+        },
+        {
+          "key": "rejectedParts",
+          "role": "rejectCount",
+          "direction": "machineToMes",
+          "namespace": "nova",
+          "identifier": "s=NX9000.Production.Rejected",
+          "dataType": "UInt32",
+          "access": "read",
+          "required": true
+        },
+        {
+          "key": "hydraulicPressure",
+          "role": "custom",
+          "direction": "machineToMes",
+          "namespace": "nova",
+          "identifier": "s=NX9000.Process.PressureBar",
+          "dataType": "Double",
+          "access": "read",
+          "required": false,
+          "metadata": {
+            "unit": "bar"
+          }
+        }
+      ],
+      "metadata": {
+        "manufacturer": "Nova Automation",
+        "model": "NX-9000",
+        "location": "Alternate machine test cell",
+        "machineType": "servo_press"
+      }
+    }
+  ],
+  "metadata": {
+    "manufacturer": "Nova Automation",
+    "model": "NX-9000",
+    "version": "2.4.0",
+    "commissioningStage": "read-only"
+  }
+}

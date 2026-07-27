@@ -17,9 +17,12 @@ import { CarrierEntity } from '../carriers/carrier.entity';
 import { MACHINE_ADAPTER } from '../machines/adapters/machine-adapter.token';
 import { CarriersModule } from '../carriers/carriers.module';
 import { CarrierInventoryBridgeService } from './carrier-inventory-bridge.service';
+import { DataPointEntity } from '../data-collection/data-point.entity';
+import { MachineEntity } from '../machines/machine.entity';
+import { MachineTelemetryIngestionService } from './machine-telemetry-ingestion.service';
 
 @Module({
-  imports: [ConfigModule, OrdersModule, AlarmsModule, CarriersModule, MachineProfilesModule, TypeOrmModule.forFeature([StMesHandshakeEntity, OrderEntity, OrderRouteStepEntity, CarrierEntity])],
+  imports: [ConfigModule, OrdersModule, AlarmsModule, CarriersModule, MachineProfilesModule, TypeOrmModule.forFeature([StMesHandshakeEntity, OrderEntity, OrderRouteStepEntity, CarrierEntity, DataPointEntity, MachineEntity])],
   providers: [
     OpcUaService,
     { provide: MACHINE_ADAPTER, useClass: OpcUaMachineAdapter },
@@ -28,6 +31,7 @@ import { CarrierInventoryBridgeService } from './carrier-inventory-bridge.servic
     WebshopOrdersService,
     ConnectionRecoveryService,
     CarrierInventoryBridgeService,
+    MachineTelemetryIngestionService,
   ],
   exports: [MACHINE_ADAPTER, MqttGatewayService, StMesHandshakeService, WebshopOrdersService, ConnectionRecoveryService],
 })

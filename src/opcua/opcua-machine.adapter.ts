@@ -1,4 +1,9 @@
-import { Inject, Injectable, Logger } from '@nestjs/common';
+import {
+  Inject,
+  Injectable,
+  Logger,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import type {
   MachineAdapter,
   MachineAddressWrite,
@@ -14,10 +19,8 @@ import type {
 } from '../machines/adapters/machine-adapter.types';
 import { MachineProfileService } from '../machines/profiles/machine-profile.service';
 import { ShopfloorTelemetryEvent } from './shopfloor-telemetry';
-import {
-  OpcUaConfiguredSignal,
-  OpcUaService,
-} from './opcua.service';
+import { OpcUaConfiguredSignal, OpcUaService } from './opcua.service';
+import type { RoutingOutcome } from '../orders/routing-outcome';
 
 @Injectable()
 export class OpcUaMachineAdapter implements MachineAdapter {
@@ -38,9 +41,18 @@ export class OpcUaMachineAdapter implements MachineAdapter {
     return status;
   }
 
-  onTelemetry(
-    callback: (event: ShopfloorTelemetryEvent) => void,
-  ): () => void {
+  routingResultCode(outcome: RoutingOutcome): number {
+    const resultCode =
+      this.machineProfileService.getProfile().routingResultCodes?.[outcome];
+    if (!Number.isInteger(resultCode) || resultCode! < 0) {
+      throw new Error(
+        `Machine profile does not define routingResultCodes.${outcome}`,
+      );
+    }
+    return resultCode!;
+  }
+
+  onTelemetry(callback: (event: ShopfloorTelemetryEvent) => void): () => void {
     return this.opcUa.onTelemetry(callback);
   }
 
@@ -99,9 +111,7 @@ export class OpcUaMachineAdapter implements MachineAdapter {
     };
   }
 
-  async readStationRequest(
-    resourceId: number,
-  ): Promise<MachineStationRequest> {
+  async readStationRequest(resourceId: number): Promise<MachineStationRequest> {
     const [carrierNumber, requestedResourceId] = await Promise.all([
       this.readRole(resourceId, 'carrierId'),
       this.readRole(resourceId, 'resourceId'),
@@ -124,24 +134,51 @@ export class OpcUaMachineAdapter implements MachineAdapter {
     resourceId: number,
     response: MachineRoutingResponse,
   ): Promise<void> {
+    const acceptedWrites = response.accepted
+      ? this.acceptedRoutingWrites(resourceId, response)
+      : [];
+    await this.writeSignals([
+      ...acceptedWrites,
+      [this.role(resourceId, 'processResult'), response.resultCode],
+      [this.role(resourceId, 'requestBusy'), false],
+      [this.role(resourceId, 'requestAccepted'), response.accepted],
+      [this.role(resourceId, 'requestRejected'), !response.accepted],
+    ]);
+  }
+
+  private acceptedRoutingWrites(
+    resourceId: number,
+    response: Extract<MachineRoutingResponse, { accepted: true }>,
+  ) {
     const parameterDefinitions =
       this.machineProfileService.getProfile().orderParameterDefinitions || [];
-    const parameterWrites = parameterDefinitions.map((definition) => [
-      this.signal(resourceId, definition.signalKey || definition.key),
-      response.parameters[definition.key] ?? definition.default_value ?? 0,
-    ] as const);
-    await this.writeSignals([
+    const parameterWrites = parameterDefinitions
+      .filter(
+        (definition) =>
+          !definition.targetResourceIds ||
+          definition.targetResourceIds.includes(resourceId),
+      )
+      .map((definition) => {
+        const value =
+          response.parameters[definition.key] ?? definition.default_value;
+        if (value === undefined) {
+          throw new ServiceUnavailableException(
+            `Routing parameter ${definition.key} has neither an order value nor a configured default_value`,
+          );
+        }
+        return [
+          this.signal(resourceId, definition.signalKey || definition.key),
+          value,
+        ] as const;
+      });
+    return [
       [this.role(resourceId, 'orderId'), response.orderNo],
       [this.role(resourceId, 'partNumber'), response.partNo],
       [this.role(resourceId, 'operationId'), response.operationNo],
       [this.role(resourceId, 'stepNumber'), response.stepNo],
       [this.role(resourceId, 'nextStationId'), response.nextResourceId],
       ...parameterWrites,
-      [this.role(resourceId, 'processResult'), response.resultCode],
-      [this.role(resourceId, 'requestBusy'), false],
-      [this.role(resourceId, 'requestAccepted'), response.accepted],
-      [this.role(resourceId, 'requestRejected'), !response.accepted],
-    ]);
+    ] as const;
   }
 
   async writeInternalError(
@@ -189,8 +226,7 @@ export class OpcUaMachineAdapter implements MachineAdapter {
     const station = this.machineProfileService
       .getProfile()
       .stations.find(
-        (candidate) =>
-          candidate.enabled && candidate.resourceId === resourceId,
+        (candidate) => candidate.enabled && candidate.resourceId === resourceId,
       );
     if (!station?.inventory) {
       throw new Error(
@@ -210,17 +246,24 @@ export class OpcUaMachineAdapter implements MachineAdapter {
         return undefined;
       }
     };
-    const [valid, revision, capacity, availableCount, totalCount, observations] =
-      await Promise.all([
-        readSignal(inventory.validSignalKey),
-        readSignal(inventory.revisionSignalKey),
-        inventory.capacitySignalKey
-          ? readSignal(inventory.capacitySignalKey)
-          : Promise.resolve(undefined),
-        readSignal(inventory.availableCountSignalKey),
-        readSignal(inventory.totalCountSignalKey),
-        Promise.all(
-          inventory.slots.map(async (slot): Promise<MachineCarrierObservation> => {
+    const [
+      valid,
+      revision,
+      capacity,
+      availableCount,
+      totalCount,
+      observations,
+    ] = await Promise.all([
+      readSignal(inventory.validSignalKey),
+      readSignal(inventory.revisionSignalKey),
+      inventory.capacitySignalKey
+        ? readSignal(inventory.capacitySignalKey)
+        : Promise.resolve(undefined),
+      readSignal(inventory.availableCountSignalKey),
+      readSignal(inventory.totalCountSignalKey),
+      Promise.all(
+        inventory.slots.map(
+          async (slot): Promise<MachineCarrierObservation> => {
             const [
               present,
               carrierNumber,
@@ -284,9 +327,10 @@ export class OpcUaMachineAdapter implements MachineAdapter {
                 : {}),
               ...(parsedLastSeenAt ? { lastSeenAt: parsedLastSeenAt } : {}),
             };
-          }),
+          },
         ),
-      ]);
+      ),
+    ]);
 
     return {
       resourceId,
@@ -322,7 +366,9 @@ export class OpcUaMachineAdapter implements MachineAdapter {
       reset: 'controlReset',
       pause: 'controlPause',
     };
-    await this.writeSignals([[this.role(resourceId, signalRole[command]), true]]);
+    await this.writeSignals([
+      [this.role(resourceId, signalRole[command]), true],
+    ]);
   }
 
   async readDiagnosticAddress(address: string): Promise<unknown> {
@@ -359,7 +405,10 @@ export class OpcUaMachineAdapter implements MachineAdapter {
           controlPause: 'pause',
         } as const;
         const availableCommands = station.signals
-          .map((signal) => roleToCommand[signal.role as keyof typeof roleToCommand])
+          .map(
+            (signal) =>
+              roleToCommand[signal.role as keyof typeof roleToCommand],
+          )
           .filter(
             (command): command is MachineControlCommand =>
               command !== undefined,
@@ -372,9 +421,7 @@ export class OpcUaMachineAdapter implements MachineAdapter {
           routeSequence: station.routing?.sequence,
           operationNo: station.routing?.operationNo,
           operation: station.routing?.operation,
-          ...(station.resourceType
-            ? { resourceType: station.resourceType }
-            : {}),
+          resourceType: station.resourceType,
           ...(station.capabilities
             ? { capabilities: station.capabilities }
             : {}),
@@ -384,7 +431,9 @@ export class OpcUaMachineAdapter implements MachineAdapter {
   }
 
   getOrderParameterDefinitions(): readonly MachineOrderParameterDefinition[] {
-    return this.machineProfileService.getProfile().orderParameterDefinitions || [];
+    return (
+      this.machineProfileService.getProfile().orderParameterDefinitions || []
+    );
   }
 
   private async read(resourceId: number, signalKey: string): Promise<unknown> {
@@ -407,13 +456,19 @@ export class OpcUaMachineAdapter implements MachineAdapter {
 
   private async write(
     resourceId: number,
-    values: readonly (readonly [signal: OpcUaConfiguredSignal, value: unknown])[],
+    values: readonly (readonly [
+      signal: OpcUaConfiguredSignal,
+      value: unknown,
+    ])[],
   ): Promise<void> {
     await this.writeSignals(values, resourceId);
   }
 
   private async writeSignals(
-    values: readonly (readonly [signal: OpcUaConfiguredSignal, value: unknown])[],
+    values: readonly (readonly [
+      signal: OpcUaConfiguredSignal,
+      value: unknown,
+    ])[],
     resourceId?: number,
   ): Promise<void> {
     const nodes = values.map(([signal, value]) => {
@@ -427,10 +482,7 @@ export class OpcUaMachineAdapter implements MachineAdapter {
     await this.opcUa.writeNodes(nodes);
   }
 
-  private signal(
-    resourceId: number,
-    signalKey: string,
-  ): OpcUaConfiguredSignal {
+  private signal(resourceId: number, signalKey: string): OpcUaConfiguredSignal {
     return this.opcUa.getConfiguredSignal(resourceId, signalKey);
   }
 
@@ -477,7 +529,9 @@ export class OpcUaMachineAdapter implements MachineAdapter {
   ): unknown {
     if (!signal.scaling || typeof value !== 'number') return value;
     if (signal.scaling.factor === 0) {
-      throw new Error(`Signal ${signal.key} has an invalid scaling factor of 0`);
+      throw new Error(
+        `Signal ${signal.key} has an invalid scaling factor of 0`,
+      );
     }
     return (value - signal.scaling.offset) / signal.scaling.factor;
   }

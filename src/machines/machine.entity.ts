@@ -8,6 +8,23 @@ export enum MachineStatusEnum {
   IDLE = 'idle',
 }
 
+export enum EquipmentLevelEnum {
+  MACHINE = 'machine',
+  WORK_UNIT = 'work_unit',
+  COMPONENT = 'component',
+}
+
+export enum ExecutionModelEnum {
+  MACHINE_JOB = 'machine_job',
+  WORK_UNIT_JOBS = 'work_unit_jobs',
+}
+
+export enum JobInterfaceEnum {
+  SIGNAL_HANDSHAKE = 'signal_handshake',
+  JOB_CONTROL = 'job_control',
+  TELEMETRY_ONLY = 'telemetry_only',
+}
+
 @Entity('machines')
 export class MachineEntity {
   @PrimaryGeneratedColumn('uuid')
@@ -33,6 +50,33 @@ export class MachineEntity {
 
   @Column({ type: 'int', nullable: true, unique: true })
   resource_id?: number;
+
+  @Column({ type: 'int', nullable: true })
+  parent_resource_id?: number | null;
+
+  @Column({
+    type: 'enum',
+    enum: EquipmentLevelEnum,
+    default: EquipmentLevelEnum.WORK_UNIT,
+  })
+  equipment_level: EquipmentLevelEnum;
+
+  @Column({
+    type: 'enum',
+    enum: ExecutionModelEnum,
+    default: ExecutionModelEnum.WORK_UNIT_JOBS,
+  })
+  execution_model: ExecutionModelEnum;
+
+  @Column({
+    type: 'enum',
+    enum: JobInterfaceEnum,
+    default: JobInterfaceEnum.SIGNAL_HANDSHAKE,
+  })
+  job_interface: JobInterfaceEnum;
+
+  @Column({ type: 'jsonb', default: [] })
+  capabilities: string[];
 
   @Column({ type: 'varchar', nullable: true })
   opcua_endpoint_url?: string | null;

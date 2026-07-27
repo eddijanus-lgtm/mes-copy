@@ -41,7 +41,7 @@ export class CreateAlertRuleDto {
 
   @IsOptional()
   @IsObject()
-  config?: Record<string, any>;
+  params?: Record<string, any>;
 }
 
 export class UpdateAlertRuleDto {
@@ -76,7 +76,7 @@ export class UpdateAlertRuleDto {
 
   @IsOptional()
   @IsObject()
-  config?: Record<string, any>;
+  params?: Record<string, any>;
 }
 
 export class TriggerAlertRuleDto {

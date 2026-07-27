@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { CheckCircleIcon } from "@phosphor-icons/react/CheckCircle";
 import { StackIcon } from "@phosphor-icons/react/Stack";
 import { WarningCircleIcon } from "@phosphor-icons/react/WarningCircle";
@@ -6,10 +6,25 @@ import StatCard from "../components/StatCard";
 import { api } from "../api/client.js";
 import { useAuth } from "../providers/AuthProvider.jsx";
 import { canDeleteMachines, canManageMachines } from "../utils/roles.js";
+import {
+  buildEquipmentTree,
+  activeExecutionForResource,
+  equipmentExecutionModel,
+  equipmentJobInterface,
+  equipmentLevel,
+  equipmentLevelLabel,
+  executionStateLabel,
+  filterEquipmentTree,
+  flattenEquipmentTree,
+  isControllableEquipment,
+  isRoutableEquipment,
+  normalizeExecutionSteps,
+} from "../utils/equipmentModel.js";
 
 export default function MachinesPage() {
   const { user } = useAuth();
   const [machines, setMachines] = useState([]);
+  const [executionSteps, setExecutionSteps] = useState([]);
   const [showModal, setShowModal] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
   const [deleteCandidate, setDeleteCandidate] = useState(null);
@@ -23,9 +38,16 @@ export default function MachinesPage() {
   const canDelete = canDeleteMachines(user);
 
   useEffect(() => {
-    api.get("/machines").then((d) => {
-      setMachines(Array.isArray(d) ? d : []);
-    }).catch(() => setMachines([]));
+    const load = () => Promise.all([
+      api.getSilent("/machines"),
+      api.getSilent("/shopfloor/execution-steps/current").catch(() => ({ items: [] })),
+    ]).then(([machineData, executionData]) => {
+      setMachines(Array.isArray(machineData) ? machineData : []);
+      setExecutionSteps(normalizeExecutionSteps(executionData));
+    }).catch(() => {});
+    void load();
+    const timer = window.setInterval(load, 10_000);
+    return () => window.clearInterval(timer);
   }, []);
 
   function requestDelete(machine) {
@@ -95,7 +117,14 @@ export default function MachinesPage() {
     }
   }
 
-  const onlineCount = machines.filter((m) => ["online", "running"].includes(m.status)).length;
+  const equipmentTree = useMemo(() => buildEquipmentTree(machines), [machines]);
+  const visibleEquipment = useMemo(
+    () => flattenEquipmentTree(filterEquipmentTree(equipmentTree, search)),
+    [equipmentTree, search],
+  );
+  const machineCount = machines.filter((machine) => equipmentLevel(machine) === "machine").length;
+  const workUnitCount = machines.filter((machine) => equipmentLevel(machine) === "work_unit").length;
+  const onlineCount = machines.filter((m) => ["online", "running", "idle"].includes(m.status)).length;
 
   return (
     <div className="mes-page min-h-screen bg-neutral-50">
@@ -104,14 +133,14 @@ export default function MachinesPage() {
         <div className="mes-page-header">
           <div>
           <h1 className="text-2xl font-bold text-neutral-900">Stationen</h1>
-          <p className="text-sm text-neutral-500 mt-0.5">Status, Konfiguration und Anbindung aller Produktionsstationen.</p>
+          <p className="text-sm text-neutral-500 mt-0.5">Maschinen, Work Units und Komponenten mit ihrer tatsächlichen Hierarchie.</p>
           </div>
         </div>
 
         {/* Status-Karten */}
         <div className="mes-metric-strip grid grid-cols-3">
-          <StatCard label="Alle" value={String(machines.length)} icon={<StackIcon size={24} weight="thin" />} />
-          <StatCard label="Online" value={String(onlineCount)} icon={<CheckCircleIcon size={24} weight="thin" />} />
+          <StatCard label="Maschinen" value={String(machineCount || equipmentTree.length)} icon={<StackIcon size={24} weight="thin" />} />
+          <StatCard label="Work Units" value={String(workUnitCount)} icon={<CheckCircleIcon size={24} weight="thin" />} />
           <StatCard label="Offline" value={String(machines.length - onlineCount)} icon={<WarningCircleIcon size={24} weight="thin" />} />
         </div>
 
@@ -146,32 +175,54 @@ export default function MachinesPage() {
         />
 
         {/* Tabelle */}
-        {machines.filter((m) => !search || (m.name||"").toLowerCase().includes(search.toLowerCase())).length > 0 ? (
+        {visibleEquipment.length > 0 ? (
           <div className="mes-panel">
             <table className="w-full">
               <thead>
                 <tr className="border-b border-neutral-200">
-                  <th className="px-5 py-3 text-left text-xs font-semibold text-neutral-500 uppercase tracking-wider">ID</th>
-                  <th className="px-5 py-3 text-left text-xs font-semibold text-neutral-500 uppercase tracking-wider">Name</th>
-                  <th className="px-5 py-3 text-left text-xs font-semibold text-neutral-500 uppercase tracking-wider">Typ</th>
+                  <th className="px-5 py-3 text-left text-xs font-semibold text-neutral-500 uppercase tracking-wider">Ressource</th>
+                  <th className="px-5 py-3 text-left text-xs font-semibold text-neutral-500 uppercase tracking-wider">Equipment</th>
+                  <th className="px-5 py-3 text-left text-xs font-semibold text-neutral-500 uppercase tracking-wider">Ausführung</th>
+                  <th className="px-5 py-3 text-left text-xs font-semibold text-neutral-500 uppercase tracking-wider">Aktueller Schritt</th>
                   <th className="px-5 py-3 text-left text-xs font-semibold text-neutral-500 uppercase tracking-wider">Status</th>
                   {canManage && <th className="px-5 py-3 text-right text-xs font-semibold text-neutral-500 uppercase tracking-wider">Aktionen</th>}
                 </tr>
               </thead>
               <tbody className="divide-y divide-neutral-100">
-                {machines.filter((m) => !search || (m.name||"").toLowerCase().includes(search.toLowerCase())).map((m, i) => {
-                  const statusOk = ["online", "running"].includes(m.status);
+                {visibleEquipment.map((m) => {
+                  const statusOk = ["online", "running", "idle"].includes(m.status);
+                  const currentStep = activeExecutionForResource(executionSteps, m.resource_id ?? m.resourceId);
                   return (
                     <tr key={m.id} className="hover:bg-neutral-50 transition-colors">
-                      <td className="px-5 py-3.5 text-xs font-mono text-neutral-500">{(m.id||"").substring(0, 8)}</td>
+                      <td className="px-5 py-3.5 text-xs font-mono text-neutral-500">{m.resource_id != null ? `R${m.resource_id}` : (m.id || "").substring(0, 8)}</td>
                       <td className="px-5 py-3.5">
-                        <span className="inline-flex items-center gap-2 text-sm text-neutral-800">
-                          <span className={`w-2 h-2 rounded-full ${statusOk ? "bg-status-success" : "bg-status-error"}`} />
-                          {m.name || m.machineName || "-"}
-                          {m.profile_managed ? <small className="rounded bg-brand-primary/10 px-2 py-0.5 text-brand-primary">Maschinenprofil</small> : null}
-                        </span>
+                        <div className="flex items-start gap-2 text-sm text-neutral-800" style={{ paddingLeft: `${m.depth * 24}px` }}>
+                          <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${statusOk ? "bg-status-success" : "bg-status-error"}`} />
+                          <div>
+                            <div className="flex flex-wrap items-center gap-2">
+                              <strong className={equipmentLevel(m) === "machine" ? "font-semibold" : "font-medium"}>{m.name || m.machineName || "-"}</strong>
+                              <small className="rounded bg-neutral-100 px-2 py-0.5 text-[10px] uppercase tracking-wide text-neutral-500">{equipmentLevelLabel(m)}</small>
+                            </div>
+                            <p className="mt-1 flex flex-wrap gap-1.5 text-[10px] text-neutral-500">
+                              {isRoutableEquipment(m) ? <span className="rounded bg-sky-50 px-2 py-0.5 text-sky-700">routbar</span> : <span className="rounded bg-neutral-50 px-2 py-0.5">nur Telemetrie</span>}
+                              {isControllableEquipment(m) ? <span className="rounded bg-violet-50 px-2 py-0.5 text-violet-700">steuerbar</span> : null}
+                              {m.profile_managed ? <span className="rounded bg-brand-primary/10 px-2 py-0.5 text-brand-primary">Profil</span> : null}
+                            </p>
+                          </div>
+                        </div>
                       </td>
-                      <td className="px-5 py-3.5 text-sm text-neutral-600">{m.type || "CNC"}</td>
+                      <td className="px-5 py-3.5 text-xs text-neutral-600">
+                        <p className="font-medium text-neutral-700">{formatExecutionModel(equipmentExecutionModel(m))}</p>
+                        <p className="mt-1 text-neutral-400">{formatJobInterface(equipmentJobInterface(m))}</p>
+                      </td>
+                      <td className="px-5 py-3.5 text-xs text-neutral-600">
+                        {currentStep ? (
+                          <>
+                            <p className="font-medium text-neutral-800">{currentStep.operation}</p>
+                            <p className="mt-1 text-neutral-400">{executionStateLabel(currentStep.state)}{currentStep.carrier_number != null ? ` · C-${String(currentStep.carrier_number).padStart(4, "0")}` : ""}</p>
+                          </>
+                        ) : <span className="text-neutral-400">Kein aktiver Schritt</span>}
+                      </td>
                       <td className="px-5 py-3.5">
                         <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-xs font-medium ${statusOk ? "bg-status-bg-success text-status-success" : "bg-status-bg-error text-status-error"}` }>
                           {m.status ? m.status.charAt(0).toUpperCase() + m.status.slice(1) : "-"}
@@ -325,4 +376,19 @@ export default function MachinesPage() {
       </main>
     </div>
   );
+}
+
+function formatExecutionModel(model) {
+  return ({
+    machine_job: "Maschinenauftrag",
+    work_unit_jobs: "Work-Unit-Jobs",
+  })[model] || "Bestandsprofil";
+}
+
+function formatJobInterface(jobInterface) {
+  return ({
+    signal_handshake: "Signal-Handshake",
+    job_control: "Job Control",
+    telemetry_only: "Nur Telemetrie",
+  })[jobInterface] || "Schnittstelle nicht angegeben";
 }

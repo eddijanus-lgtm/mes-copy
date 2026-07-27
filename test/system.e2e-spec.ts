@@ -13,6 +13,7 @@ import { DataSource } from 'typeorm';
 import { configureApiVersioning } from '../src/api-versioning';
 import { AppModule } from '../src/app.module';
 import { ApiExceptionFilter } from '../src/common/api-exception.filter';
+import { DataPointEntity } from '../src/data-collection/data-point.entity';
 import {
   MachineEntity,
   MachineStatusEnum,
@@ -461,6 +462,67 @@ describe('WARA MES real system (e2e)', () => {
     expect(csv.headers['content-type']).toMatch(/text\/csv/);
     expect(csv.text).toContain('WARA_MES_PRODUCTION_RUN,1.0,RUN_SUMMARY');
     expect(csv.text).toContain(String(carrierNumber));
+
+    const adapterMetrics = await poll(
+      () =>
+        app
+          .get(DataSource)
+          .getRepository(DataPointEntity)
+          .find({ order: { timestamp: 'ASC' } }),
+      (points) =>
+        points.filter(
+          (point) =>
+            point.node_id === 'production.goodCount' && point.value === 1,
+        ).length === 3,
+      'The final station counter was not persisted by the telemetry poll',
+      10_000,
+    );
+    expect(
+      adapterMetrics.filter(
+        (point) =>
+          point.node_id === 'production.idealCycleTimeMs' &&
+          point.value > 0,
+      ),
+    ).toHaveLength(3);
+    expect(
+      adapterMetrics.filter(
+        (point) =>
+          point.node_id === 'production.goodCount' && point.value === 1,
+      ),
+    ).toHaveLength(3);
+    expect(
+      adapterMetrics.filter(
+        (point) =>
+          point.node_id === 'production.rejectCount' && point.value === 0,
+      ),
+    ).toHaveLength(3);
+
+    const machineKpis = await poll(
+      async () => {
+        const response = await authenticatedGet('/api/v1/dashboard/kpis');
+        return jsonBody<{
+          oee: {
+            available: boolean;
+            performance: number | null;
+            quality: number | null;
+            total: number | null;
+            productionCounts: { good: number; reject: number };
+          };
+        }>(response);
+      },
+      (kpis) =>
+        kpis.oee.available &&
+        kpis.oee.productionCounts.good === 3,
+      'Adapter metrics did not produce an OEE result',
+      10_000,
+    );
+    expect(machineKpis.oee).toMatchObject({
+      available: true,
+      quality: 100,
+      productionCounts: { good: 3, reject: 0 },
+    });
+    expect(machineKpis.oee.performance).not.toBeNull();
+    expect(machineKpis.oee.total).not.toBeNull();
   });
 
   function authenticatedGet(path: string) {

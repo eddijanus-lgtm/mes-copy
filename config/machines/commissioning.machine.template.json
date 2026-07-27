@@ -38,6 +38,8 @@
       "displayName": "YOUR_STATION_DISPLAY_NAME",
       "description": "Start with only the read signals required for the dashboard.",
       "enabled": true,
+      "resourceType": "production",
+      "capabilities": ["production"],
       "signals": [
         {
           "key": "machineState",
@@ -51,15 +53,37 @@
           "description": "Replace with the actual machine state signal from the scan."
         },
         {
-          "key": "cycleCounter",
-          "role": "custom",
+          "key": "idealCycleTimeMs",
+          "role": "idealCycleTimeMs",
           "direction": "machineToMes",
           "namespace": "machine",
-          "identifier": "YOUR_CYCLE_COUNTER_IDENTIFIER",
+          "identifier": "YOUR_IDEAL_CYCLE_TIME_IDENTIFIER",
           "dataType": "UInt32",
           "access": "read",
           "required": false,
-          "description": "Optional production counter for the first read-only integration."
+          "description": "Ideal cycle time reported by the machine in milliseconds."
+        },
+        {
+          "key": "goodCount",
+          "role": "goodCount",
+          "direction": "machineToMes",
+          "namespace": "machine",
+          "identifier": "YOUR_GOOD_COUNT_IDENTIFIER",
+          "dataType": "UInt32",
+          "access": "read",
+          "required": false,
+          "description": "Cumulative good-part counter from the machine."
+        },
+        {
+          "key": "rejectCount",
+          "role": "rejectCount",
+          "direction": "machineToMes",
+          "namespace": "machine",
+          "identifier": "YOUR_REJECT_COUNT_IDENTIFIER",
+          "dataType": "UInt32",
+          "access": "read",
+          "required": false,
+          "description": "Cumulative reject counter from the machine."
         }
       ]
     }

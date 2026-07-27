@@ -26,7 +26,8 @@ Ein Maschinenprofil (`MachineProfile`) besteht aus folgenden Hauptbereichen:
 | `operatingMode` | enum | `observe`, `validate` oder `control` |
 | `connection` | object | Verbindungsparameter (Endpoint, Security, Auth, Reconnect) |
 | `namespaces` | array | Liste der Namespace-Definitionen |
-| `stations` | array | Liste der Stationen mit eindeutiger `resourceId`, optionalem Routing und Signalen |
+| `routing` | object (bei gesteuertem Routing erforderlich) | Enthält `terminalResourceId`, den maschinenspezifischen Folgeressourcen-Wert am Routenende |
+| `stations` | array | Liste der Stationen mit eindeutiger `resourceId`, verpflichtendem `resourceType`, optionalem Routing und Signalen |
 | `orderParameterDefinitions` | array (optional) | Mapping externer Auftragsfelder auf neutrale Parameter- und Signalschlüssel |
 | `resultCodes` | object (optional) | Maschinenspezifische Resultcodes für die Anzeige |
 | `metadata` | object (optional) | Hersteller, Modell, Version |
@@ -34,6 +35,13 @@ Ein Maschinenprofil (`MachineProfile`) besteht aus folgenden Hauptbereichen:
 ### connection
 
 Enthält `endpointUrl`, `applicationName`, `security` (Mode, Policy, Zertifikatsreferenzen), `authentication` (Typ, Env-Referenzen), Timeouts und `reconnect`-Konfiguration.
+
+### routing
+
+`terminalResourceId` ist der Wert, den der Adapter bei einem akzeptierten
+letzten Routenschritt an die Maschine schreibt. Das MES nimmt nicht an, dass
+`0` diese Bedeutung hat; jedes steuernde Maschinenprofil legt den Wert selbst
+fest.
 
 ### signals
 
@@ -64,6 +72,13 @@ Signale sind neutral modelliert:
 
 Konkrete Maschinenbezeichnungen gehören nur in Profilwerte, nicht in die MES-Fachlogik oder die neutralen Contract-Typen. Die MES-Fachlogik arbeitet ausschließlich gegen Rollen und logische Schlüssel.
 
+Für OEE liefern Produktionsstationen die Rollen `idealCycleTimeMs`,
+`goodCount` und `rejectCount`. Die Zähler sind kumulative Maschinenzähler.
+Das MES speichert nur Änderungen, berücksichtigt Zähler-Resets und berechnet
+Performance und Produktqualität aus den Differenzen im angefragten Zeitraum.
+Fehlt eine Rolle oder gibt es keinen abgeschlossenen Zyklus, bleibt OEE
+explizit nicht verfügbar.
+
 ## 6. Security und Secrets
 
 - Profile enthalten keine echten Passwörter, Private Keys oder Zertifikatsinhalte.
@@ -80,12 +95,15 @@ Konkrete Maschinenbezeichnungen gehören nur in Profilwerte, nicht in die MES-Fa
 - Anonyme Authentifizierung
 - Drei Stationen: `station-a`, `station-b`, `station-c`
 - Vollständiger Handshake, Routingparameter, Prozessabschluss, Telemetrie und optionale Bedienkommandos werden über Signalrollen beschrieben.
+- Ideale Zykluszeit sowie Gut- und Ausschusszähler kommen als echte
+  OPC-UA-Signale aus dem externen Simulator.
 
 ### wara.machine.template.json
 
 - Vorlage für die reale Lernfabrik (WARA)
 - Enthält ausschließlich Platzhalter (`YOUR_MACHINE_ID`, `YOUR_ENDPOINT`, ...)
-- `operatingMode: control`
+- `operatingMode: validate`, bis der reale SPS-Vertrag einschließlich
+  Resultcodes bestätigt wurde
 - `username`-Authentifizierung über Env-Referenzen (`OPCUA_USERNAME`, `OPCUA_PASSWORD`)
 - Keine echten Zugangsdaten
 - Keine bestätigten Node-Identifier (müssen durch reale Werte ersetzt werden)
@@ -126,4 +144,6 @@ Konfigurationsquelle über die Maschinen-CRUD-API verändert oder gelöscht werd
 
 Die simulierte Maschine liegt ausschließlich unter
 `test-machines/opcua-simulator/`. Sie benutzt denselben echten OPC-UA-Adapter wie
-eine physische Maschine.
+eine physische Maschine. Auch Produktionszähler, Maschinenstatus,
+Persistierung und OEE durchlaufen denselben Runtime-Pfad; simuliert ist nur die
+externe SPS-Gegenstelle.

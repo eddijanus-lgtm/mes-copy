@@ -1,10 +1,10 @@
 import type { MachineOrderParameterDefinition } from '../machines/adapters/machine-adapter.types';
-import type { WebshopProductionPayload } from '../orders/routing.service';
+import type { ExternalProductionOrderPayload } from '../orders/routing.service';
 
 export function translateWebshopOrder(
   rawPayload: unknown,
   definitions: readonly MachineOrderParameterDefinition[] = [],
-): WebshopProductionPayload {
+): ExternalProductionOrderPayload {
   if (!isRecord(rawPayload)) {
     throw new Error('Webshop payload must be an object');
   }

@@ -16,6 +16,10 @@ import type {
   MachineStationProfile,
 } from '../machines/profiles/machine-profile.types';
 import { ShopfloorTelemetryEvent } from './shopfloor-telemetry';
+import {
+  OpcUaDataQuality,
+  opcUaDataQuality,
+} from './opcua-data-quality';
 
 const nodeOpcua = require('node-opcua');
 
@@ -147,6 +151,11 @@ export class OpcUaService implements OnModuleInit, OnModuleDestroy {
   }
 
   async readNode(nodeId: string): Promise<any> {
+    const dataValue = await this.readNodeDataValue(nodeId);
+    return dataValue?.value?.value;
+  }
+
+  private async readNodeDataValue(nodeId: string): Promise<any> {
     if (!this.isNodeAllowed(nodeId)) {
       throw new ForbiddenException('OPC UA node is not allowed');
     }
@@ -157,7 +166,7 @@ export class OpcUaService implements OnModuleInit, OnModuleDestroy {
       const dataValue = await this.session.readVariableValue(
         nodeOpcua.resolveNodeId(nodeId),
       );
-      return dataValue?.value?.value;
+      return dataValue;
     } catch (error) {
       throw new BadGatewayException(
         'OPC UA read failed: ' + (error as Error).message,
@@ -471,11 +480,17 @@ export class OpcUaService implements OnModuleInit, OnModuleDestroy {
             (signal.access === 'read' || signal.access === 'readWrite'),
         );
         const values: Array<[string, unknown]> = [];
+        const qualities: Array<[string, OpcUaDataQuality]> = [];
         const signalErrors: Record<string, string> = {};
         for (const signal of readableSignals) {
           try {
-            const rawValue = await this.readNode(signal.nodeId);
+            const dataValue = await this.readNodeDataValue(signal.nodeId);
+            const rawValue = dataValue?.value?.value;
             values.push([signal.key, this.fromMachineValue(signal, rawValue)]);
+            qualities.push([
+              signal.key,
+              opcUaDataQuality(dataValue?.statusCode),
+            ]);
           } catch (error) {
             if (signal.required) throw error;
             signalErrors[signal.key] = (error as Error).message;
@@ -487,6 +502,7 @@ export class OpcUaService implements OnModuleInit, OnModuleDestroy {
           stationId: station.stationId,
           displayName: station.displayName,
           signals: Object.fromEntries(values),
+          signalQualities: Object.fromEntries(qualities),
           roles: Object.fromEntries(
             readableSignals
               .filter(
@@ -497,6 +513,19 @@ export class OpcUaService implements OnModuleInit, OnModuleDestroy {
               .map((signal) => [
                 signal.role,
                 values.find(([key]) => key === signal.key)?.[1],
+              ]),
+          ),
+          roleQualities: Object.fromEntries(
+            readableSignals
+              .filter(
+                (signal) =>
+                  signal.role !== 'custom' &&
+                  signal.role !== 'routingParameter',
+              )
+              .map((signal) => [
+                signal.role,
+                qualities.find(([key]) => key === signal.key)?.[1] ??
+                  'uncertain',
               ]),
           ),
           ...(Object.keys(signalErrors).length ? { signalErrors } : {}),

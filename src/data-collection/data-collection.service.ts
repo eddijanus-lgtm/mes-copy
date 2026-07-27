@@ -16,7 +16,7 @@ export class DataCollectionService {
       machine_id: dto.machine_id,
       node_id: dto.node_id,
       value: dto.value,
-      quality: dto.quality || 'good',
+      quality: dto.quality ?? 'uncertain',
       timestamp: dto.timestamp || new Date(),
     });
     return this.dataPointsRepo.save(dp);
@@ -36,7 +36,12 @@ export class DataCollectionService {
   }
 
   async bulkCreate(points: CreateDataPointDto[]): Promise<DataPointEntity[]> {
-    const entities = points.map((dto) => this.dataPointsRepo.create(dto));
+    const entities = points.map((dto) =>
+      this.dataPointsRepo.create({
+        ...dto,
+        quality: dto.quality ?? 'uncertain',
+      }),
+    );
     return this.dataPointsRepo.save(entities);
   }
 
@@ -54,16 +59,34 @@ export class DataCollectionService {
       .getMany();
   }
 
-  async getStatsByMachine(machineId: string, nodeId?: string): Promise<{ min: number; max: number; avg: number; count: number }> {
+  async getStatsByMachine(
+    machineId: string,
+    nodeId?: string,
+  ): Promise<{
+    min: number | null;
+    max: number | null;
+    avg: number | null;
+    count: number;
+  }> {
     const qb = this.dataPointsRepo.createQueryBuilder('dp5').select(['MIN(dp5.value)', 'MAX(dp5.value)', 'AVG(dp5.value)', 'COUNT(dp5.id)']);
     qb.where('dp5.machine_id = :machineId', { machineId });
     if (nodeId) qb.andWhere('dp5.node_id = :nodeId', { nodeId });
     const stats = await qb.getRawOne();
+    const min = finiteNumber(stats?.['MIN(dp5.value)']);
+    const max = finiteNumber(stats?.['MAX(dp5.value)']);
+    const avg = finiteNumber(stats?.['AVG(dp5.value)']);
+    const count = Number.parseInt(String(stats?.['COUNT(dp5.id)'] ?? '0'), 10);
     return {
-      min: parseFloat(stats['MIN(dp5.value)'] || '0'),
-      max: parseFloat(stats['MAX(dp5.value)'] || '0'),
-      avg: parseFloat((stats['AVG(dp5.value)'] || '0').toFixed(4)),
-      count: parseInt(stats['COUNT(dp5.id)'] || '0', 10),
+      min,
+      max,
+      avg: avg === null ? null : Math.round(avg * 10_000) / 10_000,
+      count: Number.isInteger(count) && count >= 0 ? count : 0,
     };
   }
+}
+
+function finiteNumber(value: unknown): number | null {
+  if (value === null || value === undefined || value === '') return null;
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
 }

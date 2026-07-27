@@ -50,8 +50,7 @@ export class CreateProductionBatchDto {
 }
 
 export class CompleteProductionBatchDto {
-  @IsOptional()
   @IsInt()
   @Min(0)
-  completed_quantity?: number;
+  completed_quantity: number;
 }

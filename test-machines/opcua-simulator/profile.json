@@ -5,6 +5,9 @@
   "description": "External simulated OPC UA machine for development and testing",
   "transport": "opcua",
   "operatingMode": "control",
+  "routing": {
+    "terminalResourceId": 0
+  },
   "connection": {
     "endpointUrl": "opc.tcp://localhost:4840/UA/WaraMesTest",
     "applicationName": "WaraSimulator",
@@ -58,6 +61,14 @@
     "4": "Bereits abgeschlossen",
     "9": "Interner Fehler"
   },
+  "routingResultCodes": {
+    "accepted": 0,
+    "carrier_unknown": 1,
+    "order_missing": 2,
+    "wrong_resource": 3,
+    "already_completed": 4,
+    "internal_error": 9
+  },
   "stations": [
     {
       "stationId": "station-a",
@@ -65,6 +76,8 @@
       "displayName": "Station A",
       "description": "First assembly station",
       "enabled": true,
+      "resourceType": "production",
+      "capabilities": ["production", "routing", "control"],
       "metadata": {
         "dashboardImage": "/assets/dashboard/station-feed.png"
       },
@@ -319,13 +332,33 @@
         },
         {
           "key": "cycleTimeMs",
-          "role": "custom",
+          "role": "idealCycleTimeMs",
           "direction": "machineToMes",
           "namespace": "station",
           "identifier": "ns=1;s=Station1.LineInfo.uiCycleTimeMs",
           "dataType": "UInt32",
           "access": "read",
-          "required": false
+          "required": true
+        },
+        {
+          "key": "producedCount",
+          "role": "goodCount",
+          "direction": "machineToMes",
+          "namespace": "station",
+          "identifier": "ns=1;s=Station1.LineInfo.uiProducedCount",
+          "dataType": "UInt32",
+          "access": "read",
+          "required": true
+        },
+        {
+          "key": "failedCount",
+          "role": "rejectCount",
+          "direction": "machineToMes",
+          "namespace": "station",
+          "identifier": "ns=1;s=Station1.LineInfo.uiFailedCount",
+          "dataType": "UInt32",
+          "access": "read",
+          "required": true
         },
         {
           "key": "stateAuto",
@@ -385,6 +418,8 @@
       "displayName": "Station B",
       "description": "Inspection station",
       "enabled": true,
+      "resourceType": "production",
+      "capabilities": ["production", "routing", "control"],
       "metadata": {
         "dashboardImage": "/assets/dashboard/station-dose.png"
       },
@@ -639,13 +674,33 @@
         },
         {
           "key": "cycleTimeMs",
-          "role": "custom",
+          "role": "idealCycleTimeMs",
           "direction": "machineToMes",
           "namespace": "station",
           "identifier": "ns=1;s=Station2.LineInfo.uiCycleTimeMs",
           "dataType": "UInt32",
           "access": "read",
-          "required": false
+          "required": true
+        },
+        {
+          "key": "producedCount",
+          "role": "goodCount",
+          "direction": "machineToMes",
+          "namespace": "station",
+          "identifier": "ns=1;s=Station2.LineInfo.uiProducedCount",
+          "dataType": "UInt32",
+          "access": "read",
+          "required": true
+        },
+        {
+          "key": "failedCount",
+          "role": "rejectCount",
+          "direction": "machineToMes",
+          "namespace": "station",
+          "identifier": "ns=1;s=Station2.LineInfo.uiFailedCount",
+          "dataType": "UInt32",
+          "access": "read",
+          "required": true
         },
         {
           "key": "stateAuto",
@@ -705,6 +760,8 @@
       "displayName": "Station C",
       "description": "Packing station",
       "enabled": true,
+      "resourceType": "production",
+      "capabilities": ["production", "routing", "control"],
       "metadata": {
         "dashboardImage": "/assets/dashboard/station-inspect.png"
       },
@@ -959,13 +1016,33 @@
         },
         {
           "key": "cycleTimeMs",
-          "role": "custom",
+          "role": "idealCycleTimeMs",
           "direction": "machineToMes",
           "namespace": "station",
           "identifier": "ns=1;s=Station3.LineInfo.uiCycleTimeMs",
           "dataType": "UInt32",
           "access": "read",
-          "required": false
+          "required": true
+        },
+        {
+          "key": "producedCount",
+          "role": "goodCount",
+          "direction": "machineToMes",
+          "namespace": "station",
+          "identifier": "ns=1;s=Station3.LineInfo.uiProducedCount",
+          "dataType": "UInt32",
+          "access": "read",
+          "required": true
+        },
+        {
+          "key": "failedCount",
+          "role": "rejectCount",
+          "direction": "machineToMes",
+          "namespace": "station",
+          "identifier": "ns=1;s=Station3.LineInfo.uiFailedCount",
+          "dataType": "UInt32",
+          "access": "read",
+          "required": true
         },
         {
           "key": "stateAuto",

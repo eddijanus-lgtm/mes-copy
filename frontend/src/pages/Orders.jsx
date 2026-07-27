@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { CaretLeftIcon } from "@phosphor-icons/react/CaretLeft";
 import { CaretRightIcon } from "@phosphor-icons/react/CaretRight";
 import { CheckCircleIcon } from "@phosphor-icons/react/CheckCircle";
@@ -11,7 +11,13 @@ import { MagnifyingGlassIcon } from "@phosphor-icons/react/MagnifyingGlass";
 import { PencilSimpleIcon } from "@phosphor-icons/react/PencilSimple";
 import { XIcon } from "@phosphor-icons/react/X";
 import { api } from "../api/client.js";
+import ExecutionStepCard from "../components/ExecutionStepCard.jsx";
 import { useAuth } from "../providers/AuthProvider.jsx";
+import {
+  isActiveExecutionStep,
+  isRoutableEquipment,
+  normalizeExecutionSteps,
+} from "../utils/equipmentModel.js";
 import { canDeleteOrders, canManageOrders } from "../utils/roles.js";
 import "../orders.css";
 
@@ -27,6 +33,7 @@ export default function OrdersPage() {
   const [carriers, setCarriers] = useState([]);
   const [routes, setRoutes] = useState({});
   const [productionLogs, setProductionLogs] = useState({});
+  const [executionStepsByOrder, setExecutionStepsByOrder] = useState({});
   const [form, setForm] = useState(EMPTY_FORM);
   const [modalOpen, setModalOpen] = useState(false);
   const [search, setSearch] = useState("");
@@ -50,6 +57,42 @@ export default function OrdersPage() {
       setSelectedOrderId(null);
     }
   }, [orders, selectedOrderId]);
+  useEffect(() => {
+    if (!selectedOrderId) return undefined;
+    let cancelled = false;
+
+    async function refreshSelectedOrder() {
+      try {
+        const [order, executionSteps, carrierData] = await Promise.all([
+          api.get(`/orders/${selectedOrderId}`),
+          api.get(`/orders/${selectedOrderId}/execution-steps`),
+          api.get("/carriers"),
+        ]);
+        if (cancelled) return;
+        setOrders((current) => current.map((entry) => entry.id === order.id ? order : entry));
+        setCarriers(Array.isArray(carrierData) ? carrierData : []);
+        setExecutionStepsByOrder((current) => ({
+          ...current,
+          [selectedOrderId]: normalizeExecutionSteps(executionSteps),
+        }));
+        if (order.status === "completed") {
+          const productionLog = await api.get(`/orders/${selectedOrderId}/production-log`).catch(() => null);
+          if (!cancelled) {
+            setProductionLogs((current) => ({ ...current, [selectedOrderId]: productionLog }));
+          }
+        }
+      } catch {
+        // The regular page refresh remains the authoritative error surface.
+      }
+    }
+
+    void refreshSelectedOrder();
+    const timer = window.setInterval(refreshSelectedOrder, 2_000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [selectedOrderId]);
 
   async function refresh() {
     try {
@@ -60,19 +103,23 @@ export default function OrdersPage() {
       setProducts(Array.isArray(productData) ? productData : []);
       setOrderParameterDefinitions(Array.isArray(parameterData) ? parameterData : Array.isArray(parameterData?.parameters) ? parameterData.parameters : []);
       setCarriers(Array.isArray(carrierData) ? carrierData : []);
-      const routeEntries = await Promise.all(safeOrders.map((order) => api.get(`/orders/${order.id}/route`).then((route) => [order.id, route]).catch(() => [order.id, []])));
-      setRoutes(Object.fromEntries(routeEntries));
       const completedOrders = safeOrders.filter((order) => order.status === "completed");
-      const logEntries = await Promise.all(completedOrders.map((order) => api.get(`/orders/${order.id}/production-log`).then((log) => [order.id, log]).catch(() => [order.id, null])));
+      const [routeEntries, logEntries, executionEntries] = await Promise.all([
+        Promise.all(safeOrders.map((order) => api.get(`/orders/${order.id}/route`).then((route) => [order.id, route]).catch(() => [order.id, []]))),
+        Promise.all(completedOrders.map((order) => api.get(`/orders/${order.id}/production-log`).then((log) => [order.id, log]).catch(() => [order.id, null]))),
+        Promise.all(safeOrders.map((order) => api.get(`/orders/${order.id}/execution-steps`).then((steps) => [order.id, normalizeExecutionSteps(steps)]).catch(() => [order.id, []]))),
+      ]);
+      setRoutes(Object.fromEntries(routeEntries));
       setProductionLogs(Object.fromEntries(logEntries));
+      setExecutionStepsByOrder(Object.fromEntries(executionEntries));
     } catch (requestError) {
       setError(requestError.message);
     }
   }
 
   function openCreate() {
-    const product = products.find((entry) => entry.is_active);
-    const startMachine = startMachineForProduct(machines, product) || machines[0];
+    const product = products.find((entry) => entry.is_active && startMachineForProduct(routableMachines, entry));
+    const startMachine = startMachineForProduct(routableMachines, product) || routableMachines[0];
     setError("");
     setForm({ ...EMPTY_FORM, name: nextOrderName(orders), machine_id: startMachine?.id || "", product_id: product?.id || "", operation: product?.name || EMPTY_FORM.operation, production_parameters: defaultParameters(orderParameterDefinitions) });
     setModalOpen(true);
@@ -151,6 +198,10 @@ export default function OrdersPage() {
     }
   }
 
+  const routableMachines = useMemo(() => {
+    const configured = machines.filter(isRoutableEquipment);
+    return configured.length > 0 ? configured : machines;
+  }, [machines]);
   const machineNames = Object.fromEntries(machines.map((machine) => [machine.id, machine.name]));
   const productNames = Object.fromEntries(products.map((product) => [product.id, product.name]));
   const resourceNames = Object.fromEntries(machines.map((machine) => [machine.resource_id, machine.name]));
@@ -167,6 +218,7 @@ export default function OrdersPage() {
   const selectedOrder = orders.find((order) => order.id === selectedOrderId) || null;
   const selectedCarriers = selectedOrder ? carriersByOrder[selectedOrder.id] || [] : [];
   const selectedRoute = selectedOrder ? routes[selectedOrder.id] || [] : [];
+  const pendingCount = orders.filter((order) => order.status === "pending").length;
   const activeCount = orders.filter((order) => order.status === "in_progress").length;
   const completedCount = orders.filter((order) => order.status === "completed").length;
 
@@ -199,7 +251,7 @@ export default function OrdersPage() {
             <button
               type="button"
               onClick={openCreate}
-              disabled={machines.length === 0}
+              disabled={routableMachines.length === 0}
               className="orders-primary-action bg-brand-primary"
             >
               + Neuer Auftrag
@@ -208,7 +260,7 @@ export default function OrdersPage() {
         </div>
       </header>
 
-      {machines.length === 0 && <p className="orders-warning">Vor dem ersten Auftrag muss mindestens eine Station angelegt werden.</p>}
+      {routableMachines.length === 0 && <p className="orders-warning">Vor dem ersten Auftrag muss mindestens eine routbare Work Unit konfiguriert werden.</p>}
       {error && <p role="alert" className="orders-error">{error}</p>}
 
       <section className={`orders-workspace${selectedOrder ? " orders-workspace--open" : ""}`}>
@@ -216,6 +268,7 @@ export default function OrdersPage() {
           <div className="orders-toolbar">
             <div className="orders-status-tabs" role="tablist" aria-label="Aufträge nach Status filtern">
               <StatusTab label="Alle" count={orders.length} active={statusFilter === "all"} onClick={() => setStatusFilter("all")} />
+              <StatusTab label="Ausstehend" count={pendingCount} active={statusFilter === "pending"} onClick={() => setStatusFilter("pending")} />
               <StatusTab label="In Arbeit" count={activeCount} active={statusFilter === "in_progress"} onClick={() => setStatusFilter("in_progress")} />
               <StatusTab label="Abgeschlossen" count={completedCount} active={statusFilter === "completed"} onClick={() => setStatusFilter("completed")} />
             </div>
@@ -293,6 +346,8 @@ export default function OrdersPage() {
                     order={order}
                     selected={selectedOrderId === order.id}
                     carriers={carriersByOrder[order.id] || []}
+                    productionLog={productionLogs[order.id]}
+                    executionSteps={executionStepsByOrder[order.id] || []}
                     machineName={machineNames[order.machine_id]}
                     productName={productNames[order.product_id]}
                     onToggle={() => toggleInspector(order)}
@@ -320,6 +375,7 @@ export default function OrdersPage() {
               order={selectedOrder}
               route={selectedRoute}
               productionLog={productionLogs[selectedOrder.id]}
+              executionSteps={executionStepsByOrder[selectedOrder.id] || []}
               carriers={selectedCarriers}
               machineName={machineNames[selectedOrder.machine_id]}
               productName={productNames[selectedOrder.product_id]}
@@ -338,7 +394,7 @@ export default function OrdersPage() {
         )}
       </section>
 
-      {modalOpen && <OrderModal form={form} setForm={setForm} machines={machines} products={products} orderParameterDefinitions={orderParameterDefinitions} carriers={carriers} saving={saving} onSubmit={submit} onClose={() => { setModalOpen(false); setForm(EMPTY_FORM); }} />}
+      {modalOpen && <OrderModal form={form} setForm={setForm} machines={routableMachines} products={products} orderParameterDefinitions={orderParameterDefinitions} carriers={carriers} saving={saving} onSubmit={submit} onClose={() => { setModalOpen(false); setForm(EMPTY_FORM); }} />}
       {deleteCandidate && <DeleteOrderDialog order={deleteCandidate} deleting={deleting} onCancel={() => setDeleteCandidate(null)} onConfirm={remove} />}
     </div>
   );
@@ -374,18 +430,20 @@ function StatusTab({ label, count, active, onClick }) {
   );
 }
 
-function OrderRow({ order, selected, carriers, machineName, productName, onToggle }) {
+function OrderRow({ order, selected, carriers, productionLog, executionSteps, machineName, productName, onToggle }) {
   const orderProgress = progress(order);
   const primaryCarrier = carriers[0];
+  const historicalCarrier = productionLog?.snapshot?.carriers?.[0];
+  const activeStep = executionSteps.find(isActiveExecutionStep);
   return (
     <tr className={selected ? "is-selected" : ""}>
       <td>
         <strong className="orders-row__name">{order.name}</strong>
-        <span className="orders-row__mobile-product">{productName || order.operation}<br />{machineName || "Startstation unbekannt"}</span>
+        <span className="orders-row__mobile-product">{productName || order.operation}<br />{activeStep?.operation || machineName || "Startstation unbekannt"}</span>
       </td>
       <td className="orders-col-product">
         <strong>{productName || order.operation}</strong>
-        <span>{machineName || "Startstation unbekannt"}</span>
+        <span>{activeStep ? `Aktuell: ${activeStep.operation}` : machineName || "Startstation unbekannt"}</span>
       </td>
       <td><OrderStatus status={order.status} /></td>
       <td className="orders-col-quantity">{order.completed_quantity} / {order.quantity}</td>
@@ -395,7 +453,13 @@ function OrderRow({ order, selected, carriers, machineName, productName, onToggl
           <div><i style={{ width: `${orderProgress}%` }} /></div>
         </div>
       </td>
-      <td className="orders-col-carrier">{primaryCarrier ? formatCarrier(primaryCarrier) : "–"}</td>
+      <td className="orders-col-carrier">
+        {primaryCarrier
+          ? formatCarrier(primaryCarrier)
+          : historicalCarrier
+            ? formatCarrierNumber(historicalCarrier)
+            : "–"}
+      </td>
       <td className="orders-row__toggle">
         <button
           type="button"
@@ -410,10 +474,16 @@ function OrderRow({ order, selected, carriers, machineName, productName, onToggl
   );
 }
 
-function OrderInspector({ order, route, productionLog, carriers, machineName, productName, resourceNames, activeTab, onTabChange, canManage, canDelete, downloading, onEdit, onDelete, onDownload, onClose }) {
+function OrderInspector({ order, route, productionLog, executionSteps, carriers, machineName, productName, resourceNames, activeTab, onTabChange, canManage, canDelete, downloading, onEdit, onDelete, onDownload, onClose }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [copied, setCopied] = useState(false);
   const primaryCarrier = carriers[0];
+  const historicalCarrierNumbers = productionLog?.snapshot?.carriers || [];
+  const carrierSummary = primaryCarrier
+    ? formatCarrier(primaryCarrier)
+    : historicalCarrierNumbers.length
+      ? historicalCarrierNumbers.map(formatCarrierNumber).join(", ")
+      : "Kein Carrier";
   const orderProgress = progress(order);
 
   async function copyOrderId() {
@@ -444,7 +514,7 @@ function OrderInspector({ order, route, productionLog, carriers, machineName, pr
           <div><i style={{ width: `${orderProgress}%` }} /></div>
         </div>
         <span>{order.completed_quantity} / {order.quantity}</span>
-        <span>{primaryCarrier ? formatCarrier(primaryCarrier) : "Kein Carrier"}</span>
+        <span>{carrierSummary}</span>
         {(order.status === "completed" || canManage) && (
           <div className="orders-inspector__actions">
             {order.status === "completed" && (
@@ -487,6 +557,8 @@ function OrderInspector({ order, route, productionLog, carriers, machineName, pr
             order={order}
             route={route}
             carriers={carriers}
+            productionLog={productionLog}
+            executionSteps={executionSteps}
             machineName={machineName}
             productName={productName}
             resourceNames={resourceNames}
@@ -494,8 +566,8 @@ function OrderInspector({ order, route, productionLog, carriers, machineName, pr
             onCopy={copyOrderId}
           />
         )}
-        {activeTab === "route" && <InspectorRoute order={order} route={route} carriers={carriers} resourceNames={resourceNames} />}
-        {activeTab === "history" && <InspectorHistory order={order} log={productionLog} resourceNames={resourceNames} />}
+        {activeTab === "route" && <InspectorRoute order={order} route={route} executionSteps={executionSteps} carriers={carriers} productionLog={productionLog} resourceNames={resourceNames} />}
+        {activeTab === "history" && <InspectorHistory order={order} log={productionLog} executionSteps={executionSteps} resourceNames={resourceNames} />}
       </div>
     </aside>
   );
@@ -505,8 +577,10 @@ function InspectorTab({ id, label, active, onClick }) {
   return <button type="button" role="tab" aria-selected={active} className={active ? "is-active" : ""} onClick={() => onClick(id)}>{label}</button>;
 }
 
-function InspectorOverview({ order, route, carriers, machineName, productName, resourceNames, copied, onCopy }) {
+function InspectorOverview({ order, route, carriers, productionLog, executionSteps, machineName, productName, resourceNames, copied, onCopy }) {
   const primaryCarrier = carriers[0];
+  const historicalCarrierNumbers = productionLog?.snapshot?.carriers || [];
+  const activeStep = executionSteps.find(isActiveExecutionStep);
   return (
     <>
       <section className="orders-inspector__section">
@@ -528,19 +602,32 @@ function InspectorOverview({ order, route, carriers, machineName, productName, r
       </section>
 
       <section className="orders-inspector__section">
+        <h3>Aktueller Arbeitsschritt</h3>
+        {activeStep
+          ? <ExecutionStepCard step={activeStep} resourceName={activeStep.resource_name || resourceNames[activeStep.resource_id]} compact />
+          : <p className="orders-inspector__empty">{order.status === "completed" ? "Auftrag abgeschlossen." : "Noch kein Arbeitsschritt aktiv."}</p>}
+      </section>
+
+      <section className="orders-inspector__section">
         <h3>Arbeitsplan / Route</h3>
-        <RouteTimeline order={order} route={route} carriers={carriers} resourceNames={resourceNames} />
+        <RouteTimeline order={order} route={route} executionSteps={executionSteps} carriers={carriers} resourceNames={resourceNames} />
       </section>
 
       <section className="orders-inspector__section">
         <h3>Carrier-Zuordnung</h3>
-        {carriers.length === 0 ? (
+        {carriers.length === 0 && historicalCarrierNumbers.length === 0 ? (
           <p className="orders-inspector__empty">Noch kein Carrier zugeordnet.</p>
+        ) : carriers.length === 0 ? (
+          <dl className="orders-facts">
+            <OrderFact label="Carrier" value={historicalCarrierNumbers.map(formatCarrierNumber).join(", ")} />
+            <OrderFact label="Status" value="freigegeben · historisch" tone="success" />
+            <OrderFact label="Aktueller Schritt" value="Auftrag abgeschlossen" />
+          </dl>
         ) : (
           <dl className="orders-facts">
             <OrderFact label="Carrier" value={formatCarrier(primaryCarrier)} />
             <OrderFact label="Status" value={carrierStatus(primaryCarrier.status)} tone="success" />
-            <OrderFact label="Aktueller Schritt" value={primaryCarrier.current_step_no ?? "–"} />
+            <OrderFact label="Aktueller Schritt" value={activeStep?.step_no ?? primaryCarrier.current_step_no ?? "–"} />
           </dl>
         )}
       </section>
@@ -553,12 +640,13 @@ function InspectorOverview({ order, route, carriers, machineName, productName, r
   );
 }
 
-function InspectorRoute({ order, route, carriers, resourceNames }) {
+function InspectorRoute({ order, route, executionSteps, carriers, productionLog, resourceNames }) {
+  const historicalCarrierNumbers = productionLog?.snapshot?.carriers || [];
   return (
     <>
       <section className="orders-inspector__section">
         <h3>Route</h3>
-        <RouteTimeline order={order} route={route} carriers={carriers} resourceNames={resourceNames} />
+        <RouteTimeline order={order} route={route} executionSteps={executionSteps} carriers={carriers} resourceNames={resourceNames} />
       </section>
       <section className="orders-inspector__section">
         <h3>Technische Routendaten</h3>
@@ -574,12 +662,18 @@ function InspectorRoute({ order, route, carriers, resourceNames }) {
       </section>
       <section className="orders-inspector__section">
         <h3>Zugeordnete Carrier</h3>
-        {carriers.length === 0 && <p className="orders-inspector__empty">Noch kein Carrier zugeordnet.</p>}
+        {carriers.length === 0 && historicalCarrierNumbers.length === 0 && <p className="orders-inspector__empty">Noch kein Carrier zugeordnet.</p>}
         <div className="orders-carrier-list">
           {carriers.map((carrier) => (
             <div key={carrier.id}>
               <strong>{formatCarrier(carrier)}</strong>
               <span>{carrierStatus(carrier.status)} · Schritt {carrier.current_step_no}</span>
+            </div>
+          ))}
+          {carriers.length === 0 && historicalCarrierNumbers.map((carrierNumber) => (
+            <div key={carrierNumber}>
+              <strong>{formatCarrierNumber(carrierNumber)}</strong>
+              <span>freigegeben · Auftrag abgeschlossen</span>
             </div>
           ))}
         </div>
@@ -588,9 +682,9 @@ function InspectorRoute({ order, route, carriers, resourceNames }) {
   );
 }
 
-function InspectorHistory({ order, log, resourceNames }) {
+function InspectorHistory({ order, log, executionSteps, resourceNames }) {
   const snapshot = log?.snapshot;
-  if (!snapshot) {
+  if (!snapshot && executionSteps.length === 0) {
     return (
       <section className="orders-inspector__section">
         <h3>Produktionsverlauf</h3>
@@ -602,29 +696,39 @@ function InspectorHistory({ order, log, resourceNames }) {
   }
   return (
     <>
-      <section className="orders-inspector__section">
+      {snapshot ? <section className="orders-inspector__section">
         <h3>Zusammenfassung</h3>
         <dl className="orders-facts">
           <OrderFact label="Produktionsstart" value={formatDateTime(snapshot.order.started_at)} />
           <OrderFact label="Produktionsende" value={formatDateTime(snapshot.order.completed_at)} />
           <OrderFact label="Dauer" value={formatDuration(snapshot.order.duration_ms)} />
         </dl>
-      </section>
+      </section> : null}
       <section className="orders-inspector__section">
-        <h3>Stationsereignisse</h3>
+        <h3>Arbeitsschritte</h3>
+        {executionSteps.length > 0 ? (
+          <div className="grid gap-2">
+            {executionSteps.map((step, index) => (
+              <ExecutionStepCard key={step.id || `${step.resource_id}-${step.started_at || index}`} step={step} resourceName={step.resource_name || resourceNames[step.resource_id]} compact />
+            ))}
+          </div>
+        ) : <p className="orders-inspector__empty">Noch keine Arbeitsschritte gemeldet.</p>}
+      </section>
+      {snapshot ? <section className="orders-inspector__section">
+        <h3>Technische Stationsereignisse</h3>
         <div className="orders-history-list">
-          {snapshot.station_executions.map((entry) => (
+          {(snapshot.station_executions || []).map((entry) => (
             <div key={`${entry.resource_id}-${entry.carrier_number}-${entry.requested_at}`}>
-              <span className={entry.result_code === 0 ? "is-success" : "is-error"} />
+              <span className={executionSucceeded(entry) ? "is-success" : "is-error"} />
               <div>
                 <strong>{resourceNames[entry.resource_id] || `Station ${entry.resource_id}`}</strong>
                 <small>{formatDateTime(entry.requested_at)} · Carrier {entry.carrier_number}</small>
               </div>
-              <em>{entry.result_code === 0 ? "Erfolgreich" : `Fehler ${entry.result_code ?? "–"}`}</em>
+              <em>{executionSucceeded(entry) ? "Erfolgreich" : `Fehler ${entry.result_code ?? "–"}`}</em>
             </div>
           ))}
         </div>
-      </section>
+      </section> : null}
     </>
   );
 }
@@ -637,13 +741,14 @@ function OrderStatus({ status }) {
   return <span className={`orders-status orders-status--${status}`}><i />{STATUS_LABELS[status] || status}</span>;
 }
 
-function RouteTimeline({ order, route, carriers, resourceNames }) {
+function RouteTimeline({ order, route, executionSteps = [], carriers, resourceNames }) {
   if (route.length === 0) return <p className="orders-inspector__empty">Noch keine Route hinterlegt.</p>;
   const sortedRoute = [...route].sort((a, b) => a.step_no - b.step_no);
   return (
     <ol className="orders-route-timeline">
       {sortedRoute.map((step) => {
-        const state = getRouteStepState(order, step, carriers, sortedRoute);
+        const execution = executionForRouteStep(executionSteps, step);
+        const state = execution ? routeStateFromExecution(execution.state) : getRouteStepState(order, step, carriers, sortedRoute);
         return (
           <li key={step.id || step.step_no} className={`is-${state}`}>
             <span className="orders-route-timeline__marker">
@@ -651,7 +756,7 @@ function RouteTimeline({ order, route, carriers, resourceNames }) {
             </span>
             <div>
               <strong>{step.step_no === 1 ? resourceNames[step.resource_id] || step.operation : resourceNames[step.resource_id] || step.operation}</strong>
-              <small>{state === "complete" ? "Abgeschlossen" : state === "current" ? "In Arbeit" : "Ausstehend"}</small>
+              <small>{state === "complete" ? "Abgeschlossen" : state === "current" ? execution?.state === "paused" ? "Pausiert" : "In Arbeit" : state === "failed" ? "Fehler" : "Ausstehend"}</small>
             </div>
           </li>
         );
@@ -700,7 +805,9 @@ function OrderModal({ form, setForm, machines, products, orderParameterDefinitio
 
 function Field({ label, children }) { return <label className="space-y-1.5 text-sm font-medium text-neutral-700"><span>{label}</span>{children}</label>; }
 function progress(order) { return order.quantity ? Math.min(100, Math.round((order.completed_quantity / order.quantity) * 100)) : 0; }
-function formatCarrier(carrier) { return carrier ? `C-${String(carrier.carrier_number).padStart(4, "0")}` : "–"; }
+function formatCarrier(carrier) { return carrier ? formatCarrierNumber(carrier.carrier_number) : "–"; }
+function formatCarrierNumber(carrierNumber) { return `C-${String(carrierNumber).padStart(4, "0")}`; }
+function executionSucceeded(entry) { return !entry.error_message && (entry.status === "acknowledged" || entry.status === "responded" || entry.response?.accepted === true); }
 function getRouteStepState(order, step, carriers, route) {
   if (order.status === "completed") return "complete";
   const carrierSteps = carriers.map((carrier) => Number(carrier.current_step_no)).filter(Number.isFinite);
@@ -712,6 +819,19 @@ function getRouteStepState(order, step, carriers, route) {
   if (Number(step.step_no) < currentStep) return "complete";
   if (order.status === "in_progress" && Number(step.step_no) === currentStep) return "current";
   return "pending";
+}
+function routeStateFromExecution(state) {
+  if (state === "completed") return "complete";
+  if (state === "failed") return "failed";
+  if (state === "running" || state === "paused" || state === "ready") return "current";
+  return "pending";
+}
+function executionForRouteStep(executionSteps, routeStep) {
+  const matching = executionSteps.filter((entry) => (
+    (entry.step_no != null && Number(entry.step_no) === Number(routeStep.step_no))
+    || (entry.resource_id != null && Number(entry.resource_id) === Number(routeStep.resource_id))
+  ));
+  return matching.find(isActiveExecutionStep) || matching.at(-1) || null;
 }
 function formatDateTime(value) { return value ? new Intl.DateTimeFormat("de-DE", { dateStyle: "short", timeStyle: "medium" }).format(new Date(value)) : "–"; }
 function formatDuration(value) { if (!Number.isFinite(value)) return "–"; const seconds = Math.max(0, Math.round(value / 1000)); const minutes = Math.floor(seconds / 60); const rest = seconds % 60; return minutes ? `${minutes} min ${rest} s` : `${rest} s`; }

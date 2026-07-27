@@ -1,0 +1,879 @@
+{
+  "profileVersion": "1.0",
+  "machineId": "nova-nx9000",
+  "displayName": "NovaPress NX-9000",
+  "description": "Production-control profile for the simulated NovaPress servo press.",
+  "transport": "opcua",
+  "operatingMode": "control",
+  "routing": {
+    "terminalResourceId": 0
+  },
+  "connection": {
+    "endpointUrl": "opc.tcp://127.0.0.1:4841/UA/NovaPress",
+    "applicationName": "WARA MES NovaPress Controller",
+    "security": {
+      "mode": "None",
+      "policy": "None"
+    },
+    "authentication": {
+      "type": "anonymous"
+    },
+    "connectionTimeoutMs": 2000,
+    "sessionTimeoutMs": 30000,
+    "reconnect": {
+      "enabled": true,
+      "initialDelayMs": 250,
+      "maximumDelayMs": 2000,
+      "backoffMultiplier": 1.5
+    }
+  },
+  "namespaces": [
+    {
+      "key": "nova",
+      "uri": "urn:nova-automation:machines:nx9000:v2"
+    }
+  ],
+  "orderParameterDefinitions": [
+    {
+      "key": "pressForceKn",
+      "signalKey": "pressForceKn",
+      "targetResourceIds": [72],
+      "required": true,
+      "label": "Presskraft",
+      "type": "number",
+      "default_value": 75,
+      "min_value": 50,
+      "max_value": 120,
+      "unit": "kN"
+    },
+    {
+      "key": "dwellTimeMs",
+      "signalKey": "dwellTimeMs",
+      "targetResourceIds": [72],
+      "required": true,
+      "label": "Haltezeit",
+      "type": "number",
+      "default_value": 500,
+      "min_value": 100,
+      "max_value": 2000,
+      "unit": "ms"
+    }
+  ],
+  "resultCodes": {
+    "100": "Freigabe erteilt",
+    "210": "Carrier unbekannt",
+    "220": "Auftrag oder Schritt fehlt",
+    "230": "Falsche Station",
+    "240": "Bereits abgeschlossen",
+    "299": "Interner Fehler"
+  },
+  "routingResultCodes": {
+    "accepted": 100,
+    "carrier_unknown": 210,
+    "order_missing": 220,
+    "wrong_resource": 230,
+    "already_completed": 240,
+    "internal_error": 299
+  },
+  "stations": [
+    {
+      "stationId": "nx9000-machine",
+      "resourceId": 70,
+      "displayName": "NovaPress NX-9000",
+      "description": "Übergeordnete Equipment-Einheit für Identifikation, Zustand und maschinenweite Steuerung.",
+      "enabled": true,
+      "resourceType": "production",
+      "capabilities": ["control"],
+      "equipmentLevel": "machine",
+      "executionModel": "work_unit_jobs",
+      "jobInterface": "telemetry_only",
+      "signals": [
+        {
+          "key": "commandStart",
+          "role": "controlStart",
+          "direction": "mesToMachine",
+          "namespace": "nova",
+          "identifier": "s=NX9000.Control.Start",
+          "dataType": "Boolean",
+          "access": "write",
+          "required": true
+        },
+        {
+          "key": "commandStop",
+          "role": "controlStop",
+          "direction": "mesToMachine",
+          "namespace": "nova",
+          "identifier": "s=NX9000.Control.Stop",
+          "dataType": "Boolean",
+          "access": "write",
+          "required": true
+        },
+        {
+          "key": "commandReset",
+          "role": "controlReset",
+          "direction": "mesToMachine",
+          "namespace": "nova",
+          "identifier": "s=NX9000.Control.Reset",
+          "dataType": "Boolean",
+          "access": "write",
+          "required": true
+        },
+        {
+          "key": "commandPause",
+          "role": "controlPause",
+          "direction": "mesToMachine",
+          "namespace": "nova",
+          "identifier": "s=NX9000.Control.Pause",
+          "dataType": "Boolean",
+          "access": "write",
+          "required": true
+        },
+        {
+          "key": "machineRunning",
+          "role": "custom",
+          "direction": "machineToMes",
+          "namespace": "nova",
+          "identifier": "s=NX9000.Status.Run",
+          "dataType": "Boolean",
+          "access": "read",
+          "required": true
+        },
+        {
+          "key": "faultActive",
+          "role": "custom",
+          "direction": "machineToMes",
+          "namespace": "nova",
+          "identifier": "s=NX9000.Status.Fault",
+          "dataType": "Boolean",
+          "access": "read",
+          "required": true
+        }
+      ],
+      "metadata": {
+        "manufacturer": "Nova Automation",
+        "model": "NX-9000",
+        "location": "NovaPress Gesamtanlage",
+        "machineType": "servo_press_system"
+      }
+    },
+    {
+      "stationId": "nx9000-infeed",
+      "resourceId": 71,
+      "displayName": "NX-9000 Materialzuführung",
+      "description": "Work Unit für Bauteilaufnahme, Carrier-Erkennung und Identifikation.",
+      "enabled": true,
+      "resourceType": "production",
+      "capabilities": ["production", "routing"],
+      "parentResourceId": 70,
+      "equipmentLevel": "work_unit",
+      "executionModel": "work_unit_jobs",
+      "jobInterface": "signal_handshake",
+      "routing": {
+        "sequence": 1,
+        "operationNo": 710,
+        "operation": "Bauteilaufnahme und Identifikation"
+      },
+      "signals": [
+        {
+          "key": "carrierNumber",
+          "role": "carrierId",
+          "direction": "machineToMes",
+          "namespace": "nova",
+          "identifier": "s=NX9000.Infeed.Job.CarrierNumber",
+          "dataType": "UInt32",
+          "access": "read",
+          "required": true
+        },
+        {
+          "key": "requestedResource",
+          "role": "resourceId",
+          "direction": "machineToMes",
+          "namespace": "nova",
+          "identifier": "s=NX9000.Infeed.Job.ResourceNumber",
+          "dataType": "UInt16",
+          "access": "read",
+          "required": true
+        },
+        {
+          "key": "jobRequest",
+          "role": "workRequest",
+          "direction": "machineToMes",
+          "namespace": "nova",
+          "identifier": "s=NX9000.Infeed.Job.Request",
+          "dataType": "Boolean",
+          "access": "read",
+          "required": true
+        },
+        {
+          "key": "jobBusy",
+          "role": "requestBusy",
+          "direction": "mesToMachine",
+          "namespace": "nova",
+          "identifier": "s=NX9000.Infeed.Job.Busy",
+          "dataType": "Boolean",
+          "access": "write",
+          "required": true
+        },
+        {
+          "key": "jobAccepted",
+          "role": "requestAccepted",
+          "direction": "mesToMachine",
+          "namespace": "nova",
+          "identifier": "s=NX9000.Infeed.Job.Accepted",
+          "dataType": "Boolean",
+          "access": "write",
+          "required": true
+        },
+        {
+          "key": "jobRejected",
+          "role": "requestRejected",
+          "direction": "mesToMachine",
+          "namespace": "nova",
+          "identifier": "s=NX9000.Infeed.Job.Rejected",
+          "dataType": "Boolean",
+          "access": "write",
+          "required": true
+        },
+        {
+          "key": "orderNumber",
+          "role": "orderId",
+          "direction": "mesToMachine",
+          "namespace": "nova",
+          "identifier": "s=NX9000.Infeed.Job.OrderNumber",
+          "dataType": "String",
+          "access": "write",
+          "required": true
+        },
+        {
+          "key": "partNumber",
+          "role": "partNumber",
+          "direction": "mesToMachine",
+          "namespace": "nova",
+          "identifier": "s=NX9000.Infeed.Job.PartNumber",
+          "dataType": "String",
+          "access": "write",
+          "required": true
+        },
+        {
+          "key": "operationNumber",
+          "role": "operationId",
+          "direction": "mesToMachine",
+          "namespace": "nova",
+          "identifier": "s=NX9000.Infeed.Job.OperationNumber",
+          "dataType": "UInt16",
+          "access": "write",
+          "required": true
+        },
+        {
+          "key": "stepNumber",
+          "role": "stepNumber",
+          "direction": "mesToMachine",
+          "namespace": "nova",
+          "identifier": "s=NX9000.Infeed.Job.StepNumber",
+          "dataType": "Int16",
+          "access": "write",
+          "required": true
+        },
+        {
+          "key": "nextResource",
+          "role": "nextStationId",
+          "direction": "mesToMachine",
+          "namespace": "nova",
+          "identifier": "s=NX9000.Infeed.Job.NextResourceNumber",
+          "dataType": "UInt16",
+          "access": "write",
+          "required": true
+        },
+        {
+          "key": "resultCode",
+          "role": "processResult",
+          "direction": "mesToMachine",
+          "namespace": "nova",
+          "identifier": "s=NX9000.Infeed.Job.ResultCode",
+          "dataType": "UInt16",
+          "access": "write",
+          "required": true
+        },
+        {
+          "key": "processActive",
+          "role": "processActive",
+          "direction": "machineToMes",
+          "namespace": "nova",
+          "identifier": "s=NX9000.Infeed.Process.Active",
+          "dataType": "Boolean",
+          "access": "read",
+          "required": true
+        },
+        {
+          "key": "completedCarrierNumber",
+          "role": "completedCarrierId",
+          "direction": "machineToMes",
+          "namespace": "nova",
+          "identifier": "s=NX9000.Infeed.Process.CompletedCarrierNumber",
+          "dataType": "UInt32",
+          "access": "read",
+          "required": true
+        },
+        {
+          "key": "processCompleted",
+          "role": "processCompleted",
+          "direction": "machineToMes",
+          "namespace": "nova",
+          "identifier": "s=NX9000.Infeed.Process.Completed",
+          "dataType": "Boolean",
+          "access": "read",
+          "required": true,
+          "event": { "trigger": "rising" }
+        },
+        {
+          "key": "machineRunning",
+          "role": "custom",
+          "direction": "machineToMes",
+          "namespace": "nova",
+          "identifier": "s=NX9000.Infeed.Status.Run",
+          "dataType": "Boolean",
+          "access": "read",
+          "required": true
+        },
+        {
+          "key": "idealCycleTime",
+          "role": "idealCycleTimeMs",
+          "direction": "machineToMes",
+          "namespace": "nova",
+          "identifier": "s=NX9000.Infeed.Production.IdealCycleMs",
+          "dataType": "UInt32",
+          "access": "read",
+          "required": true
+        },
+        {
+          "key": "acceptedParts",
+          "role": "goodCount",
+          "direction": "machineToMes",
+          "namespace": "nova",
+          "identifier": "s=NX9000.Infeed.Production.Accepted",
+          "dataType": "UInt32",
+          "access": "read",
+          "required": true
+        },
+        {
+          "key": "rejectedParts",
+          "role": "rejectCount",
+          "direction": "machineToMes",
+          "namespace": "nova",
+          "identifier": "s=NX9000.Infeed.Production.Rejected",
+          "dataType": "UInt32",
+          "access": "read",
+          "required": true
+        }
+      ],
+      "metadata": {
+        "manufacturer": "Nova Automation",
+        "model": "NX-9000",
+        "location": "NovaPress Gesamtanlage",
+        "machineType": "material_handling",
+        "equipmentLevel": "work_unit",
+        "parentEquipment": "nova-nx9000"
+      }
+    },
+    {
+      "stationId": "nx9000-press-cell",
+      "resourceId": 72,
+      "displayName": "NX-9000 Servo-Pressstation",
+      "description": "Autonomous servo press controlled through the neutral MES routing handshake.",
+      "enabled": true,
+      "resourceType": "production",
+      "capabilities": ["production", "routing"],
+      "parentResourceId": 70,
+      "equipmentLevel": "work_unit",
+      "executionModel": "work_unit_jobs",
+      "jobInterface": "signal_handshake",
+      "routing": {
+        "sequence": 2,
+        "operationNo": 720,
+        "operation": "Servo-Pressvorgang"
+      },
+      "signals": [
+        {
+          "key": "carrierNumber",
+          "role": "carrierId",
+          "direction": "machineToMes",
+          "namespace": "nova",
+          "identifier": "s=NX9000.Job.CarrierNumber",
+          "dataType": "UInt32",
+          "access": "read",
+          "required": true
+        },
+        {
+          "key": "requestedResource",
+          "role": "resourceId",
+          "direction": "machineToMes",
+          "namespace": "nova",
+          "identifier": "s=NX9000.Job.ResourceNumber",
+          "dataType": "UInt16",
+          "access": "read",
+          "required": true
+        },
+        {
+          "key": "jobRequest",
+          "role": "workRequest",
+          "direction": "machineToMes",
+          "namespace": "nova",
+          "identifier": "s=NX9000.Job.Request",
+          "dataType": "Boolean",
+          "access": "read",
+          "required": true
+        },
+        {
+          "key": "jobBusy",
+          "role": "requestBusy",
+          "direction": "mesToMachine",
+          "namespace": "nova",
+          "identifier": "s=NX9000.Job.Busy",
+          "dataType": "Boolean",
+          "access": "write",
+          "required": true
+        },
+        {
+          "key": "jobAccepted",
+          "role": "requestAccepted",
+          "direction": "mesToMachine",
+          "namespace": "nova",
+          "identifier": "s=NX9000.Job.Accepted",
+          "dataType": "Boolean",
+          "access": "write",
+          "required": true
+        },
+        {
+          "key": "jobCompleted",
+          "role": "requestCompleted",
+          "direction": "mesToMachine",
+          "namespace": "nova",
+          "identifier": "s=NX9000.Job.Accepted",
+          "dataType": "Boolean",
+          "access": "write",
+          "required": true
+        },
+        {
+          "key": "jobRejected",
+          "role": "requestRejected",
+          "direction": "mesToMachine",
+          "namespace": "nova",
+          "identifier": "s=NX9000.Job.Rejected",
+          "dataType": "Boolean",
+          "access": "write",
+          "required": true
+        },
+        {
+          "key": "orderNumber",
+          "role": "orderId",
+          "direction": "mesToMachine",
+          "namespace": "nova",
+          "identifier": "s=NX9000.Job.OrderNumber",
+          "dataType": "String",
+          "access": "write",
+          "required": true
+        },
+        {
+          "key": "partNumber",
+          "role": "partNumber",
+          "direction": "mesToMachine",
+          "namespace": "nova",
+          "identifier": "s=NX9000.Job.PartNumber",
+          "dataType": "String",
+          "access": "write",
+          "required": true
+        },
+        {
+          "key": "operationNumber",
+          "role": "operationId",
+          "direction": "mesToMachine",
+          "namespace": "nova",
+          "identifier": "s=NX9000.Job.OperationNumber",
+          "dataType": "UInt16",
+          "access": "write",
+          "required": true
+        },
+        {
+          "key": "stepNumber",
+          "role": "stepNumber",
+          "direction": "mesToMachine",
+          "namespace": "nova",
+          "identifier": "s=NX9000.Job.StepNumber",
+          "dataType": "Int16",
+          "access": "write",
+          "required": true
+        },
+        {
+          "key": "nextResource",
+          "role": "nextStationId",
+          "direction": "mesToMachine",
+          "namespace": "nova",
+          "identifier": "s=NX9000.Job.NextResourceNumber",
+          "dataType": "UInt16",
+          "access": "write",
+          "required": true
+        },
+        {
+          "key": "resultCode",
+          "role": "processResult",
+          "direction": "mesToMachine",
+          "namespace": "nova",
+          "identifier": "s=NX9000.Job.ResultCode",
+          "dataType": "UInt16",
+          "access": "write",
+          "required": true
+        },
+        {
+          "key": "pressForceKn",
+          "role": "routingParameter",
+          "direction": "mesToMachine",
+          "namespace": "nova",
+          "identifier": "s=NX9000.Recipe.TargetForceKn",
+          "dataType": "Double",
+          "access": "write",
+          "required": true
+        },
+        {
+          "key": "dwellTimeMs",
+          "role": "routingParameter",
+          "direction": "mesToMachine",
+          "namespace": "nova",
+          "identifier": "s=NX9000.Recipe.DwellTimeMs",
+          "dataType": "UInt32",
+          "access": "write",
+          "required": true
+        },
+        {
+          "key": "processActive",
+          "role": "processActive",
+          "direction": "machineToMes",
+          "namespace": "nova",
+          "identifier": "s=NX9000.Process.Active",
+          "dataType": "Boolean",
+          "access": "read",
+          "required": true
+        },
+        {
+          "key": "completedCarrierNumber",
+          "role": "completedCarrierId",
+          "direction": "machineToMes",
+          "namespace": "nova",
+          "identifier": "s=NX9000.Process.CompletedCarrierNumber",
+          "dataType": "UInt32",
+          "access": "read",
+          "required": true
+        },
+        {
+          "key": "processCompleted",
+          "role": "processCompleted",
+          "direction": "machineToMes",
+          "namespace": "nova",
+          "identifier": "s=NX9000.Process.Completed",
+          "dataType": "Boolean",
+          "access": "read",
+          "required": true,
+          "event": {
+            "trigger": "rising"
+          }
+        },
+        {
+          "key": "machineRunning",
+          "role": "custom",
+          "direction": "machineToMes",
+          "namespace": "nova",
+          "identifier": "s=NX9000.Status.Run",
+          "dataType": "Boolean",
+          "access": "read",
+          "required": true
+        },
+        {
+          "key": "faultActive",
+          "role": "custom",
+          "direction": "machineToMes",
+          "namespace": "nova",
+          "identifier": "s=NX9000.Status.Fault",
+          "dataType": "Boolean",
+          "access": "read",
+          "required": true
+        },
+        {
+          "key": "idealCycleTime",
+          "role": "idealCycleTimeMs",
+          "direction": "machineToMes",
+          "namespace": "nova",
+          "identifier": "s=NX9000.Production.IdealCycleMs",
+          "dataType": "UInt32",
+          "access": "read",
+          "required": true
+        },
+        {
+          "key": "acceptedParts",
+          "role": "goodCount",
+          "direction": "machineToMes",
+          "namespace": "nova",
+          "identifier": "s=NX9000.Production.Accepted",
+          "dataType": "UInt32",
+          "access": "read",
+          "required": true
+        },
+        {
+          "key": "rejectedParts",
+          "role": "rejectCount",
+          "direction": "machineToMes",
+          "namespace": "nova",
+          "identifier": "s=NX9000.Production.Rejected",
+          "dataType": "UInt32",
+          "access": "read",
+          "required": true
+        },
+        {
+          "key": "hydraulicPressure",
+          "role": "custom",
+          "direction": "machineToMes",
+          "namespace": "nova",
+          "identifier": "s=NX9000.Process.PressureBar",
+          "dataType": "Double",
+          "access": "read",
+          "required": false,
+          "metadata": {
+            "unit": "bar"
+          }
+        }
+      ],
+      "metadata": {
+        "manufacturer": "Nova Automation",
+        "model": "NX-9000",
+        "location": "NovaPress Gesamtanlage",
+        "machineType": "servo_press",
+        "equipmentLevel": "work_unit",
+        "parentEquipment": "nova-nx9000"
+      }
+    },
+    {
+      "stationId": "nx9000-quality-outfeed",
+      "resourceId": 73,
+      "displayName": "NX-9000 Qualitätsprüfung",
+      "description": "Work Unit für Kraft-Weg-Bewertung, Gut-/Schlecht-Entscheidung und Ausschleusung.",
+      "enabled": true,
+      "resourceType": "production",
+      "capabilities": ["production", "routing"],
+      "parentResourceId": 70,
+      "equipmentLevel": "work_unit",
+      "executionModel": "work_unit_jobs",
+      "jobInterface": "signal_handshake",
+      "routing": {
+        "sequence": 3,
+        "operationNo": 730,
+        "operation": "Qualitätsprüfung und Ausschleusung"
+      },
+      "signals": [
+        {
+          "key": "carrierNumber",
+          "role": "carrierId",
+          "direction": "machineToMes",
+          "namespace": "nova",
+          "identifier": "s=NX9000.Quality.Job.CarrierNumber",
+          "dataType": "UInt32",
+          "access": "read",
+          "required": true
+        },
+        {
+          "key": "requestedResource",
+          "role": "resourceId",
+          "direction": "machineToMes",
+          "namespace": "nova",
+          "identifier": "s=NX9000.Quality.Job.ResourceNumber",
+          "dataType": "UInt16",
+          "access": "read",
+          "required": true
+        },
+        {
+          "key": "jobRequest",
+          "role": "workRequest",
+          "direction": "machineToMes",
+          "namespace": "nova",
+          "identifier": "s=NX9000.Quality.Job.Request",
+          "dataType": "Boolean",
+          "access": "read",
+          "required": true
+        },
+        {
+          "key": "jobBusy",
+          "role": "requestBusy",
+          "direction": "mesToMachine",
+          "namespace": "nova",
+          "identifier": "s=NX9000.Quality.Job.Busy",
+          "dataType": "Boolean",
+          "access": "write",
+          "required": true
+        },
+        {
+          "key": "jobAccepted",
+          "role": "requestAccepted",
+          "direction": "mesToMachine",
+          "namespace": "nova",
+          "identifier": "s=NX9000.Quality.Job.Accepted",
+          "dataType": "Boolean",
+          "access": "write",
+          "required": true
+        },
+        {
+          "key": "jobRejected",
+          "role": "requestRejected",
+          "direction": "mesToMachine",
+          "namespace": "nova",
+          "identifier": "s=NX9000.Quality.Job.Rejected",
+          "dataType": "Boolean",
+          "access": "write",
+          "required": true
+        },
+        {
+          "key": "orderNumber",
+          "role": "orderId",
+          "direction": "mesToMachine",
+          "namespace": "nova",
+          "identifier": "s=NX9000.Quality.Job.OrderNumber",
+          "dataType": "String",
+          "access": "write",
+          "required": true
+        },
+        {
+          "key": "partNumber",
+          "role": "partNumber",
+          "direction": "mesToMachine",
+          "namespace": "nova",
+          "identifier": "s=NX9000.Quality.Job.PartNumber",
+          "dataType": "String",
+          "access": "write",
+          "required": true
+        },
+        {
+          "key": "operationNumber",
+          "role": "operationId",
+          "direction": "mesToMachine",
+          "namespace": "nova",
+          "identifier": "s=NX9000.Quality.Job.OperationNumber",
+          "dataType": "UInt16",
+          "access": "write",
+          "required": true
+        },
+        {
+          "key": "stepNumber",
+          "role": "stepNumber",
+          "direction": "mesToMachine",
+          "namespace": "nova",
+          "identifier": "s=NX9000.Quality.Job.StepNumber",
+          "dataType": "Int16",
+          "access": "write",
+          "required": true
+        },
+        {
+          "key": "nextResource",
+          "role": "nextStationId",
+          "direction": "mesToMachine",
+          "namespace": "nova",
+          "identifier": "s=NX9000.Quality.Job.NextResourceNumber",
+          "dataType": "UInt16",
+          "access": "write",
+          "required": true
+        },
+        {
+          "key": "resultCode",
+          "role": "processResult",
+          "direction": "mesToMachine",
+          "namespace": "nova",
+          "identifier": "s=NX9000.Quality.Job.ResultCode",
+          "dataType": "UInt16",
+          "access": "write",
+          "required": true
+        },
+        {
+          "key": "processActive",
+          "role": "processActive",
+          "direction": "machineToMes",
+          "namespace": "nova",
+          "identifier": "s=NX9000.Quality.Process.Active",
+          "dataType": "Boolean",
+          "access": "read",
+          "required": true
+        },
+        {
+          "key": "completedCarrierNumber",
+          "role": "completedCarrierId",
+          "direction": "machineToMes",
+          "namespace": "nova",
+          "identifier": "s=NX9000.Quality.Process.CompletedCarrierNumber",
+          "dataType": "UInt32",
+          "access": "read",
+          "required": true
+        },
+        {
+          "key": "processCompleted",
+          "role": "processCompleted",
+          "direction": "machineToMes",
+          "namespace": "nova",
+          "identifier": "s=NX9000.Quality.Process.Completed",
+          "dataType": "Boolean",
+          "access": "read",
+          "required": true,
+          "event": { "trigger": "rising" }
+        },
+        {
+          "key": "machineRunning",
+          "role": "custom",
+          "direction": "machineToMes",
+          "namespace": "nova",
+          "identifier": "s=NX9000.Quality.Status.Run",
+          "dataType": "Boolean",
+          "access": "read",
+          "required": true
+        },
+        {
+          "key": "idealCycleTime",
+          "role": "idealCycleTimeMs",
+          "direction": "machineToMes",
+          "namespace": "nova",
+          "identifier": "s=NX9000.Quality.Production.IdealCycleMs",
+          "dataType": "UInt32",
+          "access": "read",
+          "required": true
+        },
+        {
+          "key": "acceptedParts",
+          "role": "goodCount",
+          "direction": "machineToMes",
+          "namespace": "nova",
+          "identifier": "s=NX9000.Quality.Production.Accepted",
+          "dataType": "UInt32",
+          "access": "read",
+          "required": true
+        },
+        {
+          "key": "rejectedParts",
+          "role": "rejectCount",
+          "direction": "machineToMes",
+          "namespace": "nova",
+          "identifier": "s=NX9000.Quality.Production.Rejected",
+          "dataType": "UInt32",
+          "access": "read",
+          "required": true
+        }
+      ],
+      "metadata": {
+        "manufacturer": "Nova Automation",
+        "model": "NX-9000",
+        "location": "NovaPress Gesamtanlage",
+        "machineType": "quality_inspection",
+        "equipmentLevel": "work_unit",
+        "parentEquipment": "nova-nx9000"
+      }
+    }
+  ],
+  "metadata": {
+    "manufacturer": "Nova Automation",
+    "model": "NX-9000",
+    "version": "2.4.0",
+    "commissioningStage": "production-control",
+    "equipmentModel": "ISA-95 work units; OPC UA for Machinery component hierarchy"
+  }
+}

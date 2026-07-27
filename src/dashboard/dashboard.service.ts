@@ -1,13 +1,25 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { IsNull, Repository } from 'typeorm';
 import { OrderEntity } from '../orders/order.entity';
 import { MachineEntity, MachineStatusEnum } from '../machines/machine.entity';
 import { DowntimeLogEntity } from '../machines/downtime.entity';
 import { DataPointEntity } from '../data-collection/data-point.entity';
 import { TimescaleAggregateService } from './timescale-aggregate.service';
+import {
+  PRODUCTION_METRIC_NODE_IDS,
+  ProductionMetricRole,
+} from '../data-collection/production-metrics';
 
 type MachineStatusCounts = Record<MachineStatusEnum, number>;
+
+interface ProductionMetricSample {
+  machine_id: string;
+  node_id: string;
+  value: number | string;
+  quality: 'good' | 'bad' | 'uncertain';
+  timestamp: Date | string;
+}
 
 @Injectable()
 export class DashboardService {
@@ -25,40 +37,82 @@ export class DashboardService {
 
   async getKpis(from?: string, to?: string) {
     const range = this.resolveRange(from, to);
-    const [machineRows, orderStats, downtimeStats, qualityRows] = await Promise.all([
+    const [machineRows, orderStats, downtimeStats, qualityRows, metricSamples] = await Promise.all([
       this.safeQuery(this.getMachineStatusCounts(), this.emptyMachineStatusCounts()),
       this.safeQuery(this.getOrderStats(range.start, range.end), { target_quantity: 0, completed_quantity: 0, completed_orders: 0, active_orders: 0 }),
       this.safeQuery(this.getDowntimeStats(range.start, range.end), { total_minutes: 0, event_count: 0 }),
       this.safeQuery(this.getQualityStats(range.start, range.end), { good_count: 0, bad_count: 0, uncertain_count: 0 }),
+      this.safeQuery(this.getProductionMetricSamples(range.start, range.end), []),
     ]);
 
     const machineCount = Object.values(machineRows).reduce((sum, count) => sum + count, 0);
     const plannedMinutes = Math.max(0, (range.end.getTime() - range.start.getTime()) / 60000) * machineCount;
     const downtimeMinutes = Math.min(Number(downtimeStats.total_minutes) || 0, plannedMinutes);
-    const availability = plannedMinutes > 0 ? (plannedMinutes - downtimeMinutes) / plannedMinutes : 1;
+    const availability =
+      plannedMinutes > 0
+        ? (plannedMinutes - downtimeMinutes) / plannedMinutes
+        : null;
     const completedQuantity = Number(orderStats.completed_quantity) || 0;
     const targetQuantity = Number(orderStats.target_quantity) || 0;
-    const performance = targetQuantity > 0 ? Math.min(completedQuantity / targetQuantity, 1) : 1;
+    const orderCompletion =
+      targetQuantity > 0
+        ? Math.min(completedQuantity / targetQuantity, 1)
+        : null;
     const goodPoints = Number(qualityRows.good_count) || 0;
     const badPoints = Number(qualityRows.bad_count) || 0;
     const measuredPoints = goodPoints + badPoints;
-    const quality = measuredPoints > 0 ? goodPoints / measuredPoints : 1;
+    const telemetrySignalQuality =
+      measuredPoints > 0 ? goodPoints / measuredPoints : null;
     const rangeHours = Math.max((range.end.getTime() - range.start.getTime()) / 3600000, 1);
+    const production = this.calculateProductionMetrics(
+      metricSamples,
+      availability,
+      range,
+    );
 
     return {
       range: { from: range.start.toISOString(), to: range.end.toISOString() },
       oee: {
-        availability: this.percent(availability),
-        performance: this.percent(performance),
-        quality: this.percent(quality),
-        total: this.percent(availability * performance * quality),
+        availability:
+          availability === null ? null : this.percent(availability),
+        performance:
+          production.performance === null
+            ? null
+            : this.percent(production.performance),
+        quality:
+          production.quality === null
+            ? null
+            : this.percent(production.quality),
+        total:
+          production.total === null ? null : this.percent(production.total),
+        available: production.total !== null,
+        missingInputs: production.missingInputs,
+        availabilityBasis: 'calendar_time_minus_recorded_downtime',
+        performanceBasis: 'machine_counter_delta_and_ideal_cycle_time',
+        qualityBasis: 'machine_good_and_reject_counter_delta',
+        productionCounts: {
+          good: production.goodCount,
+          reject: production.rejectCount,
+        },
       },
       throughput: {
         completedQuantity,
         completedOrders: Number(orderStats.completed_orders) || 0,
         unitsPerHour: this.round(completedQuantity / rangeHours, 1),
       },
-      yield: this.percent(quality),
+      yield:
+        production.quality === null
+          ? null
+          : this.percent(production.quality),
+      telemetrySignalQuality: {
+        percent:
+          telemetrySignalQuality === null
+            ? null
+            : this.percent(telemetrySignalQuality),
+        goodSamples: goodPoints,
+        badSamples: badPoints,
+        uncertainSamples: Number(qualityRows.uncertain_count) || 0,
+      },
       machines: {
         total: machineCount,
         status: machineRows,
@@ -68,6 +122,8 @@ export class DashboardService {
       orders: {
         targetQuantity,
         activeOrders: Number(orderStats.active_orders) || 0,
+        completionPercent:
+          orderCompletion === null ? null : this.percent(orderCompletion),
       },
     };
   }
@@ -86,6 +142,7 @@ export class DashboardService {
     const rows = await this.machinesRepo.createQueryBuilder('machine')
       .select('machine.status', 'status')
       .addSelect('COUNT(*)', 'count')
+      .where('machine.parent_resource_id IS NULL')
       .groupBy('machine.status')
       .getRawMany<{ status: MachineStatusEnum; count: string }>();
 
@@ -136,6 +193,178 @@ export class DashboardService {
     return aggregateRows ?? this.getQualityCounts(start, end);
   }
 
+  private getProductionMetricSamples(
+    start: Date,
+    end: Date,
+  ): Promise<ProductionMetricSample[]> {
+    return this.dataPointRepo.query(
+      `
+        WITH baseline AS (
+          SELECT DISTINCT ON (machine_id, node_id)
+            machine_id, node_id, value, quality, timestamp
+          FROM data_points
+          WHERE node_id = ANY($1)
+            AND timestamp <= $2
+          ORDER BY machine_id, node_id, timestamp DESC
+        ),
+        range_samples AS (
+          SELECT machine_id, node_id, value, quality, timestamp
+          FROM data_points
+          WHERE node_id = ANY($1)
+            AND timestamp > $2
+            AND timestamp <= $3
+        )
+        SELECT machine_id, node_id, value, quality, timestamp
+        FROM (
+          SELECT * FROM baseline
+          UNION ALL
+          SELECT * FROM range_samples
+        ) samples
+        ORDER BY machine_id, node_id, timestamp
+      `,
+      [Object.values(PRODUCTION_METRIC_NODE_IDS), start, end],
+    );
+  }
+
+  private calculateProductionMetrics(
+    samples: ProductionMetricSample[],
+    availability: number | null,
+    range: { start: Date; end: Date },
+  ) {
+    const roleByNodeId = new Map<string, ProductionMetricRole>(
+      Object.entries(PRODUCTION_METRIC_NODE_IDS).map(([role, nodeId]) => [
+        nodeId,
+        role as ProductionMetricRole,
+      ]),
+    );
+    const byMachine = new Map<
+      string,
+      Map<ProductionMetricRole, ProductionMetricSample[]>
+    >();
+
+    for (const sample of samples) {
+      const role = roleByNodeId.get(sample.node_id);
+      if (
+        !role ||
+        sample.quality !== 'good' ||
+        !Number.isFinite(Number(sample.value))
+      ) {
+        continue;
+      }
+      const roles =
+        byMachine.get(sample.machine_id) ||
+        new Map<ProductionMetricRole, ProductionMetricSample[]>();
+      const roleSamples = roles.get(role) || [];
+      roleSamples.push(sample);
+      roles.set(role, roleSamples);
+      byMachine.set(sample.machine_id, roles);
+    }
+
+    const presentRoles = new Set<ProductionMetricRole>();
+    let goodCount = 0;
+    let rejectCount = 0;
+    let idealProductionMs = 0;
+    let observedOperatingMs = 0;
+
+    for (const roles of byMachine.values()) {
+      for (const role of roles.keys()) presentRoles.add(role);
+      const idealSamples = roles.get('idealCycleTimeMs');
+      const goodSamples = roles.get('goodCount');
+      const rejectSamples = roles.get('rejectCount');
+      if (!idealSamples || !goodSamples || !rejectSamples) continue;
+
+      const sortedIdealSamples = this.sortMetricSamples(idealSamples);
+      const idealCycleTimeMs = Number(
+        sortedIdealSamples[sortedIdealSamples.length - 1]?.value,
+      );
+      const machineGood = this.counterDelta(goodSamples);
+      const machineReject = this.counterDelta(rejectSamples);
+      if (!Number.isFinite(idealCycleTimeMs) || idealCycleTimeMs <= 0) continue;
+
+      goodCount += machineGood;
+      rejectCount += machineReject;
+      idealProductionMs +=
+        idealCycleTimeMs * (machineGood + machineReject);
+      const counterSamples = [...goodSamples, ...rejectSamples];
+      const firstCounterTimestamp = Math.max(
+        range.start.getTime(),
+        Math.min(
+          ...counterSamples.map((sample) =>
+            new Date(sample.timestamp).getTime(),
+          ),
+        ),
+      );
+      const lastCounterTimestamp = Math.min(
+        range.end.getTime(),
+        Math.max(
+          ...counterSamples.map((sample) =>
+            new Date(sample.timestamp).getTime(),
+          ),
+        ),
+      );
+      observedOperatingMs += Math.max(
+        0,
+        lastCounterTimestamp - firstCounterTimestamp,
+      );
+    }
+
+    const missingInputs: string[] = [];
+    if (!presentRoles.has('idealCycleTimeMs')) {
+      missingInputs.push('idealCycleTime');
+    }
+    if (!presentRoles.has('goodCount')) missingInputs.push('goodCount');
+    if (!presentRoles.has('rejectCount')) missingInputs.push('rejectCount');
+
+    const totalCount = goodCount + rejectCount;
+    if (!missingInputs.length && totalCount === 0) {
+      missingInputs.push('completedProductionCount');
+    }
+
+    const quality = totalCount > 0 ? goodCount / totalCount : null;
+    const operatingMs =
+      availability === null ? 0 : observedOperatingMs * availability;
+    const performance =
+      idealProductionMs > 0 && operatingMs > 0
+        ? Math.min(idealProductionMs / operatingMs, 1)
+        : null;
+    const total =
+      availability !== null && performance !== null && quality !== null
+        ? availability * performance * quality
+        : null;
+
+    return {
+      performance,
+      quality,
+      total,
+      missingInputs,
+      goodCount,
+      rejectCount,
+    };
+  }
+
+  private counterDelta(samples: ProductionMetricSample[]): number {
+    const sorted = this.sortMetricSamples(samples);
+    let delta = 0;
+    for (let index = 1; index < sorted.length; index += 1) {
+      const previous = Number(sorted[index - 1].value);
+      const current = Number(sorted[index].value);
+      if (current >= previous) {
+        delta += current - previous;
+      }
+    }
+    return Math.max(0, delta);
+  }
+
+  private sortMetricSamples(
+    samples: ProductionMetricSample[],
+  ): ProductionMetricSample[] {
+    return [...samples].sort(
+      (left, right) =>
+        new Date(left.timestamp).getTime() -
+        new Date(right.timestamp).getTime(),
+    );
+  }
+
   private percent(value: number) {
     return this.round(Math.max(0, Math.min(value, 1)) * 100, 1);
   }
@@ -176,6 +405,7 @@ export class DashboardService {
       to: range.end.toISOString(),
       data: rows.map((r) => {
         const downtimeMinutes = Math.round(Number(r.downtime_minutes) || 0);
+        const availability = Number(r.availability_pct);
         cumulativeDowntime += downtimeMinutes;
 
         return {
@@ -183,7 +413,9 @@ export class DashboardService {
           machine_name: r.machine_name,
           downtime_minutes: downtimeMinutes,
           event_count: Number(r.event_count) || 0,
-          availability_pct: this.round(Number(r.availability_pct) || 100, 1),
+          availability_pct: Number.isFinite(availability)
+            ? this.round(availability, 1)
+            : null,
           cumulative_pct: totalDowntime > 0 ? this.round(cumulativeDowntime / totalDowntime * 100, 1) : 0,
         };
       }),
@@ -317,44 +549,47 @@ export class DashboardService {
       ORDER BY ts ASC
     `;
 
-    const qualityQuery = `
-      SELECT
-        EXTRACT(EPOCH FROM time_bucket(${this.quoteLiteral(chunkSize)}, dp.timestamp))::bigint * 1000 AS ts,
-        COUNT(CASE WHEN dp.quality = 'good' THEN 1 END) AS good,
-        COUNT(CASE WHEN dp.quality = 'bad' THEN 1 END) AS bad
-      FROM data_points dp
-      WHERE dp.timestamp BETWEEN :start AND :end
-      GROUP BY ts
-      ORDER BY ts ASC
-    `;
-
-const [downtimeRows, qualityRows] = await Promise.all([
-      this.safeQuery(this.downtimeRepo.query(downtimeQuery, { start: range.start, end: range.end }), []),
-      this.safeQuery(this.dataPointRepo.query(qualityQuery, { start: range.start, end: range.end }), []),
-    ]);
+    const downtimeRows = await this.safeQuery(
+      this.downtimeRepo.query(downtimeQuery, {
+        start: range.start,
+        end: range.end,
+      }),
+      [],
+    );
 
     const downtimeMap = new Map<number, number>();
     for (const r of downtimeRows as any[]) downtimeMap.set(Number(r.ts), parseFloat(r.minutes) ?? 0);
 
-    const qualityMap = new Map<number, { good: number; bad: number }>();
-    for (const r of qualityRows as any[]) qualityMap.set(Number(r.ts), { good: parseInt(r.good, 10) ?? 0, bad: parseInt(r.bad, 10) ?? 0 });
-
-    const allTimestamps = new Set([...downtimeMap.keys(), ...qualityMap.keys()]);
-    const oeePoints: Array<{ timestamp: number; availability: number; quality: number; performance: number }> = [];
-    const machineCount = await this.machinesRepo.count();
-    const plannedMinutesPerInterval = (parseInt(chunkSize.match(/\d+/)?.[0] || '15', 10) || 15) * machineCount;
+    const allTimestamps = new Set(downtimeMap.keys());
+    const oeePoints: Array<{
+      timestamp: number;
+      availability: number | null;
+      quality: null;
+      performance: null;
+      total: null;
+    }> = [];
+    const machineCount = await this.machinesRepo.count({
+      where: { parent_resource_id: IsNull() },
+    });
+    const plannedMinutesPerInterval =
+      this.intervalMinutes(chunkSize) * machineCount;
 
     for (const ts of Array.from(allTimestamps).sort((a, b) => a - b)) {
       const dm = downtimeMap.get(ts) ?? 0;
-      const qm = qualityMap.get(ts) ?? { good: 0, bad: 0 };
-      const avail = plannedMinutesPerInterval > 0 ? Math.max(0, (plannedMinutesPerInterval - dm) / plannedMinutesPerInterval) : 1;
-      const measured = qm.good + qm.bad;
-      const qual = measured > 0 ? qm.good / measured : 1;
+      const avail =
+        plannedMinutesPerInterval > 0
+          ? Math.max(
+              0,
+              (plannedMinutesPerInterval - dm) / plannedMinutesPerInterval,
+            )
+          : null;
       oeePoints.push({
         timestamp: ts,
-        availability: Math.round(avail * 1000) / 1000,
-        quality: Math.round(qual * 1000) / 1000,
-        performance: 1.0,
+        availability:
+          avail === null ? null : Math.round(avail * 1000) / 1000,
+        quality: null,
+        performance: null,
+        total: null,
       });
     }
 
@@ -599,5 +834,15 @@ const [downtimeRows, qualityRows] = await Promise.all([
 
   private quoteLiteral(value: string): string {
     return "'" + value.replace(/'/g, "''") + "'";
+  }
+
+  private intervalMinutes(interval: string): number {
+    const match = interval.trim().match(/^(\d+)\s+(min|minute|hour|day)s?$/i);
+    if (!match) return 15;
+    const amount = Number(match[1]);
+    const unit = match[2].toLowerCase();
+    if (unit === 'hour') return amount * 60;
+    if (unit === 'day') return amount * 24 * 60;
+    return amount;
   }
 }

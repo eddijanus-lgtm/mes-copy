@@ -35,6 +35,13 @@ export class OrdersService {
   ) {}
 
   async create(dto: CreateOrderDto) {
+    const routeStepsData = dto.route_steps?.length
+      ? dto.route_steps
+      : await this.defaultRouteSteps(
+          dto.machine_id,
+          dto.product_id,
+          dto.production_parameters,
+        );
     const availableCarriers = (
       await this.carriersRepo.find({
         where: { status: CarrierStatusEnum.AVAILABLE },
@@ -55,14 +62,13 @@ export class OrdersService {
       product_id: dto.product_id || null,
       operation: dto.operation,
       quantity: dto.quantity,
-      status: 'in_progress',
-      start_time: dto.start_time ?? new Date(),
+      status: 'pending',
+      start_time: undefined,
       target_complete_time: dto.target_complete_time,
       completed_quantity: 0,
     });
     const savedOrder = await this.ordersRepo.save(order);
 
-    const routeStepsData = dto.route_steps?.length ? dto.route_steps : await this.defaultRouteSteps(dto.machine_id, dto.product_id, dto.production_parameters);
     const routeEntities = this.routeStepsRepo.create(routeStepsData.map(step => ({
       ...step,
       order_id: savedOrder.id,

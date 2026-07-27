@@ -54,6 +54,12 @@ export class MachinesController {
     return this.machinesService.findOnline();
   }
 
+  @Get('hierarchy')
+  @Roles(UserRoleEnum.ADMIN, UserRoleEnum.OPERATOR, UserRoleEnum.VIEWER)
+  async findHierarchy() {
+    return { items: await this.machinesService.findHierarchy() };
+  }
+
   @Get('location/:location')
   @Roles(UserRoleEnum.ADMIN, UserRoleEnum.OPERATOR, UserRoleEnum.VIEWER)
   findByLocation(@Param('location') location: string) {

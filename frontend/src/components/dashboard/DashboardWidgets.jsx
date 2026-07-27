@@ -22,13 +22,18 @@ export function ProductionFlowWidget({ machines, carriers, kpis, health }) {
   const stations = [...machines]
     .filter((machine) => machine.resource_id != null && machine.routing_enabled !== false)
     .sort((a, b) => Number(a.route_sequence ?? Number.MAX_SAFE_INTEGER) - Number(b.route_sequence ?? Number.MAX_SAFE_INTEGER));
+  const hasConnectedMachine = machines.some(isOnline);
 
   if (stations.length === 0) {
     return (
       <div className="flow-empty">
         <PulseIcon size={34} />
-        <strong>Keine Stationen verbunden</strong>
-        <span>Der Produktionsfluss erscheint automatisch, sobald die API Stationen liefert.</span>
+        <strong>{hasConnectedMachine ? "Keine Produktionsroute konfiguriert" : "Keine Stationen verbunden"}</strong>
+        <span>
+          {hasConnectedMachine
+            ? "Die verbundene Maschine wird beobachtet, ist im aktiven Maschinenprofil aber nicht für MES-Routing freigegeben."
+            : "Der Produktionsfluss erscheint automatisch, sobald die API Stationen liefert."}
+        </span>
       </div>
     );
   }
@@ -268,5 +273,5 @@ function formatCarrierCount(count) {
 }
 
 function formatPercent(value) {
-  return `${Number.isFinite(value) ? value : 0}%`;
+  return Number.isFinite(value) ? `${value}%` : "–";
 }

@@ -51,7 +51,9 @@ function readInteger(name, fallback, minimum, maximum) {
   const raw = readArg(name) || process.env[name] || String(fallback);
   const parsed = Number(raw);
   if (!Number.isInteger(parsed) || parsed < minimum || parsed > maximum) {
-    throw new Error(`${name} must be an integer from ${minimum} to ${maximum}.`);
+    throw new Error(
+      `${name} must be an integer from ${minimum} to ${maximum}.`,
+    );
   }
   return parsed;
 }
@@ -80,7 +82,9 @@ function safeText(value) {
 }
 
 function statusIsGood(dataValue) {
-  return Boolean(dataValue && dataValue.statusCode && dataValue.statusCode.isGood());
+  return Boolean(
+    dataValue && dataValue.statusCode && dataValue.statusCode.isGood(),
+  );
 }
 
 function dataTypeName(dataValue) {
@@ -110,8 +114,9 @@ function sanitizeEndpoint(endpoint) {
       safeText(endpoint.securityMode),
     securityPolicyUri: endpoint.securityPolicyUri,
     securityLevel: endpoint.securityLevel,
-    userTokenTypes: (endpoint.userIdentityTokens || []).map((token) =>
-      UserTokenType[Number(token.tokenType)] || safeText(token.tokenType),
+    userTokenTypes: (endpoint.userIdentityTokens || []).map(
+      (token) =>
+        UserTokenType[Number(token.tokenType)] || safeText(token.tokenType),
     ),
   };
 }
@@ -130,7 +135,11 @@ function writeReport(report, requestedOutput) {
     );
   const absoluteOutput = path.resolve(output);
   fs.mkdirSync(path.dirname(absoluteOutput), { recursive: true });
-  fs.writeFileSync(absoluteOutput, `${JSON.stringify(report, null, 2)}\n`, 'utf8');
+  fs.writeFileSync(
+    absoluteOutput,
+    `${JSON.stringify(report, null, 2)}\n`,
+    'utf8',
+  );
   console.log(`Report written to ${absoluteOutput}`);
   return absoluteOutput;
 }
@@ -265,7 +274,10 @@ function validateProfileShape(profile) {
     ['displayName', profile.displayName],
     ['transport', profile.transport],
     ['operatingMode', profile.operatingMode],
-    ['connection.endpointUrl', profile.connection && profile.connection.endpointUrl],
+    [
+      'connection.endpointUrl',
+      profile.connection && profile.connection.endpointUrl,
+    ],
   ];
 
   for (const [name, value] of requiredStrings) {
@@ -357,7 +369,9 @@ function validateProfileShape(profile) {
     }
     stationIds.add(station.stationId);
     if (!Number.isInteger(station.resourceId) || station.resourceId < 1) {
-      errors.push(`Station ${station.stationId} needs a positive integer resourceId.`);
+      errors.push(
+        `Station ${station.stationId} needs a positive integer resourceId.`,
+      );
     } else if (resourceIds.has(station.resourceId)) {
       errors.push(`Duplicate resourceId: ${station.resourceId}`);
     }
@@ -412,18 +426,12 @@ function validateProfileShape(profile) {
           `Observe profile contains writable signal ${station.stationId}.${signal.key}; the commissioning tool will still never write it.`,
         );
       }
-      if (
-        signal.direction === 'machineToMes' &&
-        signal.access === 'write'
-      ) {
+      if (signal.direction === 'machineToMes' && signal.access === 'write') {
         errors.push(
           `Machine-to-MES signal ${station.stationId}.${signal.key} is not readable.`,
         );
       }
-      if (
-        signal.direction === 'mesToMachine' &&
-        signal.access === 'read'
-      ) {
+      if (signal.direction === 'mesToMachine' && signal.access === 'read') {
         errors.push(
           `MES-to-machine signal ${station.stationId}.${signal.key} is not writable.`,
         );
@@ -446,14 +454,34 @@ function validateProfileShape(profile) {
 
   for (const definition of profile.orderParameterDefinitions || []) {
     const signalKey = definition.signalKey || definition.key;
+    const targetResourceIds = definition.targetResourceIds;
+    if (
+      targetResourceIds !== undefined &&
+      (!Array.isArray(targetResourceIds) ||
+        targetResourceIds.length === 0 ||
+        new Set(targetResourceIds).size !== targetResourceIds.length)
+    ) {
+      errors.push(
+        `Order parameter ${definition.key} has invalid targetResourceIds.`,
+      );
+    }
+    for (const resourceId of targetResourceIds || []) {
+      if (!resourceIds.has(resourceId)) {
+        errors.push(
+          `Order parameter ${definition.key} targets unknown resource ${resourceId}.`,
+        );
+      }
+    }
     for (const station of (profile.stations || []).filter(
       (candidate) =>
-        candidate.enabled && hasStationCapability(candidate, 'production'),
+        candidate.enabled &&
+        hasStationCapability(candidate, 'production') &&
+        (!targetResourceIds ||
+          targetResourceIds.includes(candidate.resourceId)),
     )) {
       const signal = (station.signals || []).find(
         (candidate) =>
-          candidate.role === 'routingParameter' &&
-          candidate.key === signalKey,
+          candidate.role === 'routingParameter' && candidate.key === signalKey,
       );
       if (profile.operatingMode === 'control' && !signal) {
         errors.push(
@@ -482,10 +510,10 @@ function profileSecurity(profile) {
 }
 
 function profileSessionIdentity(profile) {
-  const authentication =
-    (profile.connection && profile.connection.authentication) || {
-      type: 'anonymous',
-    };
+  const authentication = (profile.connection &&
+    profile.connection.authentication) || {
+    type: 'anonymous',
+  };
   if (authentication.type === 'anonymous') {
     return undefined;
   }
@@ -598,7 +626,8 @@ async function checkSignal(session, profile, station, signal, indexesByUri) {
     readable:
       !expectsRead || Boolean(userAccess & Number(AccessLevelFlag.CurrentRead)),
     writable:
-      !expectsWrite || Boolean(userAccess & Number(AccessLevelFlag.CurrentWrite)),
+      !expectsWrite ||
+      Boolean(userAccess & Number(AccessLevelFlag.CurrentWrite)),
   };
   const passed = Object.values(checks).every(Boolean);
 
@@ -652,9 +681,7 @@ async function withSession(options, callback) {
 }
 
 async function scanCommand() {
-  const endpoint =
-    readArg('endpoint') ||
-    process.env.OPCUA_SCAN_ENDPOINT;
+  const endpoint = readArg('endpoint') || process.env.OPCUA_SCAN_ENDPOINT;
   if (!endpoint) throw new Error('OPC UA endpoint is missing.');
 
   const report = await withSession(
@@ -680,18 +707,8 @@ async function scanCommand() {
     },
     async (session, endpoints) => {
       const namespaces = await namespaceMap(session);
-      const maxDepth = readInteger(
-        'OPCUA_SCAN_MAX_DEPTH',
-        5,
-        0,
-        20,
-      );
-      const maxNodes = readInteger(
-        'OPCUA_SCAN_MAX_NODES',
-        2000,
-        1,
-        50000,
-      );
+      const maxDepth = readInteger('OPCUA_SCAN_MAX_DEPTH', 5, 0, 20);
+      const maxNodes = readInteger('OPCUA_SCAN_MAX_NODES', 2000, 1, 50000);
       const rootNode =
         readArg('root') || process.env.OPCUA_SCAN_ROOT_NODE || 'i=85';
       const addressSpace = await scanAddressSpace(

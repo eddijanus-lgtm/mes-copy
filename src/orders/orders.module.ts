@@ -13,9 +13,10 @@ import { StMesHandshakeEntity } from '../opcua/stmes-handshake.entity';
 import { OrderProductionLogEntity } from './order-production-log.entity';
 import { OrderProductionLogService } from './order-production-log.service';
 import { MachineProfilesModule } from '../machines/profiles/machine-profiles.module';
+import { ExecutionStepsModule } from '../execution-steps/execution-steps.module';
 
 @Module({
-  imports: [MachineProfilesModule, TypeOrmModule.forFeature([
+  imports: [MachineProfilesModule, ExecutionStepsModule, TypeOrmModule.forFeature([
     OrderEntity,
     OrderRouteStepEntity,
     CarrierEntity,

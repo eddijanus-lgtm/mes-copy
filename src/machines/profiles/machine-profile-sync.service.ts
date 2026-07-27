@@ -2,6 +2,9 @@ import { Injectable, Logger, OnApplicationBootstrap } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import {
+  EquipmentLevelEnum,
+  ExecutionModelEnum,
+  JobInterfaceEnum,
   MachineEntity,
   MachineStatusEnum,
 } from '../machine.entity';
@@ -19,6 +22,24 @@ export class MachineProfileSyncService implements OnApplicationBootstrap {
 
   async onApplicationBootstrap(): Promise<void> {
     const profile = this.profiles.getProfile();
+    const activeResourceIds = new Set(
+      profile.stations.map((station) => station.resourceId),
+    );
+    const profileManagedMachines = await this.machines.find({
+      where: { profile_managed: true },
+    });
+
+    for (const machine of profileManagedMachines) {
+      if (machine.resource_id !== undefined && activeResourceIds.has(machine.resource_id)) {
+        continue;
+      }
+      machine.status = MachineStatusEnum.OFFLINE;
+      machine.opcua_enabled = false;
+      machine.routing_enabled = false;
+      machine.telemetry = {};
+      await this.machines.save(machine);
+    }
+
     for (const station of profile.stations) {
       const existing = await this.machines.findOne({
         where: { resource_id: station.resourceId },
@@ -28,6 +49,19 @@ export class MachineProfileSyncService implements OnApplicationBootstrap {
         type: station.metadata?.machineType || 'OPC UA station',
         location: station.metadata?.location || profile.machineId,
         resource_id: station.resourceId,
+        parent_resource_id: station.parentResourceId ?? null,
+        equipment_level:
+          (station.equipmentLevel as EquipmentLevelEnum | undefined) ??
+          EquipmentLevelEnum.WORK_UNIT,
+        execution_model:
+          (station.executionModel as ExecutionModelEnum | undefined) ??
+          ExecutionModelEnum.WORK_UNIT_JOBS,
+        job_interface:
+          (station.jobInterface as JobInterfaceEnum | undefined) ??
+          (station.routing
+            ? JobInterfaceEnum.SIGNAL_HANDSHAKE
+            : JobInterfaceEnum.TELEMETRY_ONLY),
+        capabilities: [...(station.capabilities ?? [])],
         opcua_enabled: station.enabled,
         profile_managed: true,
         routing_enabled:

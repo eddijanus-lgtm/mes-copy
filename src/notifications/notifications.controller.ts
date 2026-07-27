@@ -78,8 +78,8 @@ export class NotificationsController {
 
   @Get('delivery-rate')
   @Roles(UserRoleEnum.ADMIN, UserRoleEnum.OPERATOR, UserRoleEnum.VIEWER)
-  getDeliveryRate() { 
-    return { rate: 0, total_sent: 0, total_failed: 0 }; 
+  getDeliveryRate() {
+    return this.notificationsService.getDeliveryRate();
   }
 
   // --- Manual Trigger (for testing/integration) ---

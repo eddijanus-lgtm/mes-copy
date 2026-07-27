@@ -11,6 +11,23 @@ let cleaned = false;
 let jestProcess;
 let temporaryProfileDirectory;
 
+function runnerArgument(name) {
+  const index = process.argv.indexOf(`--${name}`);
+  return index >= 0 ? process.argv[index + 1] : undefined;
+}
+
+function jestArguments() {
+  const result = [];
+  for (let index = 2; index < process.argv.length; index += 1) {
+    if (process.argv[index] === '--profile-source') {
+      index += 1;
+      continue;
+    }
+    result.push(process.argv[index]);
+  }
+  return result;
+}
+
 function findFreePort() {
   return new Promise((resolvePort, reject) => {
     const server = createServer();
@@ -75,13 +92,17 @@ async function main() {
   const opcUaPort = String(
     process.env.OPC_UA_TEST_SERVER_PORT || (await findFreePort()),
   );
-  const sourceProfilePath = resolve(
-    projectDirectory,
-    'test-machines/opcua-simulator/profile.json',
-  );
+  const profileSource =
+    runnerArgument('profile-source') ||
+    process.env.E2E_MACHINE_PROFILE_SOURCE ||
+    'test-machines/opcua-simulator/profile.json';
+  const sourceProfilePath = resolve(projectDirectory, profileSource);
   const testProfile = JSON.parse(readFileSync(sourceProfilePath, 'utf8'));
   testProfile.connection.endpointUrl =
-    `opc.tcp://127.0.0.1:${opcUaPort}/UA/WaraMesTest`;
+    testProfile.connection.endpointUrl.replace(
+      /^opc\.tcp:\/\/[^/]+/,
+      `opc.tcp://127.0.0.1:${opcUaPort}`,
+    );
   temporaryProfileDirectory = mkdtempSync(
     resolve(tmpdir(), 'wara-mes-e2e-profile-'),
   );
@@ -144,7 +165,7 @@ async function main() {
         '--config',
         resolve(projectDirectory, 'test/jest-e2e.json'),
         '--runInBand',
-        ...process.argv.slice(2),
+        ...jestArguments(),
       ],
       {
         cwd: projectDirectory,

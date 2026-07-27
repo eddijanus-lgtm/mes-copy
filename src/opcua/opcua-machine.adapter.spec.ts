@@ -15,10 +15,7 @@ jest.mock('node-opcua', () => ({
 import { MachineProfileService } from '../machines/profiles/machine-profile.service';
 import type { MachineProfile } from '../machines/profiles/machine-profile.types';
 import { OpcUaMachineAdapter } from './opcua-machine.adapter';
-import {
-  OpcUaConfiguredSignal,
-  OpcUaService,
-} from './opcua.service';
+import { OpcUaConfiguredSignal, OpcUaService } from './opcua.service';
 
 describe('OpcUaMachineAdapter profile contract', () => {
   let adapter: OpcUaMachineAdapter;
@@ -27,6 +24,14 @@ describe('OpcUaMachineAdapter profile contract', () => {
   let signals: Map<string, OpcUaConfiguredSignal>;
 
   const profile = {
+    routingResultCodes: {
+      accepted: 10,
+      carrier_unknown: 20,
+      order_missing: 30,
+      wrong_resource: 40,
+      already_completed: 50,
+      internal_error: 99,
+    },
     stations: [
       {
         stationId: 'loading-cell',
@@ -58,7 +63,12 @@ describe('OpcUaMachineAdapter profile contract', () => {
       },
     ],
     orderParameterDefinitions: [
-      { key: 'iPar1', signalKey: 'parameter1', label: 'Colour', type: 'number' },
+      {
+        key: 'iPar1',
+        signalKey: 'parameter1',
+        label: 'Colour',
+        type: 'number',
+      },
       { key: 'iPar2', signalKey: 'parameter2', label: 'Red', type: 'number' },
       { key: 'iPar3', signalKey: 'parameter3', label: 'Green', type: 'number' },
       { key: 'iPar4', signalKey: 'parameter4', label: 'Blue', type: 'number' },
@@ -90,8 +100,18 @@ describe('OpcUaMachineAdapter profile contract', () => {
       ['carrierId', 'ns=4;s=LineA.Input.Carrier', 'UInt32', 'carrierId'],
       ['resourceId', 'ns=4;s=LineA.Input.Resource', 'UInt16', 'resourceId'],
       ['workRequest', 'ns=4;s=LineA.Input.Request', 'Boolean', 'workRequest'],
-      ['processActive', 'ns=4;s=LineA.State.Active', 'Boolean', 'processActive'],
-      ['carrierIdProcess', 'ns=4;s=LineA.Process.Carrier', 'UInt32', 'completedCarrierId'],
+      [
+        'processActive',
+        'ns=4;s=LineA.State.Active',
+        'Boolean',
+        'processActive',
+      ],
+      [
+        'carrierIdProcess',
+        'ns=4;s=LineA.Process.Carrier',
+        'UInt32',
+        'completedCarrierId',
+      ],
     ] as const;
     for (const [key, nodeId, dataType, role] of readSignals) {
       signals.set(
@@ -102,18 +122,53 @@ describe('OpcUaMachineAdapter profile contract', () => {
 
     const writeSignals = [
       ['requestBusy', 'ns=4;s=LineA.Output.Busy', 'Boolean', 'requestBusy'],
-      ['requestAccepted', 'ns=4;s=LineA.Output.Accepted', 'Boolean', 'requestAccepted'],
-      ['requestRejected', 'ns=4;s=LineA.Output.Rejected', 'Boolean', 'requestRejected'],
+      [
+        'requestAccepted',
+        'ns=4;s=LineA.Output.Accepted',
+        'Boolean',
+        'requestAccepted',
+      ],
+      [
+        'requestRejected',
+        'ns=4;s=LineA.Output.Rejected',
+        'Boolean',
+        'requestRejected',
+      ],
       ['orderId', 'ns=4;s=LineA.Output.Order', 'String', 'orderId'],
       ['partNumber', 'ns=4;s=LineA.Output.Part', 'String', 'partNumber'],
       ['operationId', 'ns=4;s=LineA.Output.Operation', 'UInt16', 'operationId'],
       ['stepNumber', 'ns=4;s=LineA.Output.Step', 'UInt16', 'stepNumber'],
       ['nextStationId', 'ns=4;s=LineA.Output.Next', 'UInt16', 'nextStationId'],
-      ['parameter1', 'ns=4;s=LineA.Output.Parameter.A', 'UInt16', 'routingParameter'],
-      ['parameter2', 'ns=4;s=LineA.Output.Parameter.B', 'UInt16', 'routingParameter'],
-      ['parameter3', 'ns=4;s=LineA.Output.Parameter.C', 'UInt16', 'routingParameter'],
-      ['parameter4', 'ns=4;s=LineA.Output.Parameter.D', 'UInt16', 'routingParameter'],
-      ['processResult', 'ns=4;s=LineA.Output.Result', 'UInt16', 'processResult'],
+      [
+        'parameter1',
+        'ns=4;s=LineA.Output.Parameter.A',
+        'UInt16',
+        'routingParameter',
+      ],
+      [
+        'parameter2',
+        'ns=4;s=LineA.Output.Parameter.B',
+        'UInt16',
+        'routingParameter',
+      ],
+      [
+        'parameter3',
+        'ns=4;s=LineA.Output.Parameter.C',
+        'UInt16',
+        'routingParameter',
+      ],
+      [
+        'parameter4',
+        'ns=4;s=LineA.Output.Parameter.D',
+        'UInt16',
+        'routingParameter',
+      ],
+      [
+        'processResult',
+        'ns=4;s=LineA.Output.Result',
+        'UInt16',
+        'processResult',
+      ],
       ['cmdStart', 'ns=4;s=LineA.Commands.Run', 'Boolean', 'controlStart'],
       ['cmdStop', 'ns=4;s=LineA.Commands.Stop', 'Boolean', 'controlStop'],
       ['cmdReset', 'ns=4;s=LineA.Commands.Reset', 'Boolean', 'controlReset'],
@@ -147,7 +202,9 @@ describe('OpcUaMachineAdapter profile contract', () => {
         return signals.get(key)!;
       }),
       getConfiguredSignalByRole: jest.fn((resourceId: number, role: string) => {
-        const match = [...signals.values()].find((signal) => signal.role === role);
+        const match = [...signals.values()].find(
+          (signal) => signal.role === role,
+        );
         if (resourceId !== 7 || !match) {
           throw new Error(`Signal role ${role} is not configured`);
         }
@@ -161,9 +218,7 @@ describe('OpcUaMachineAdapter profile contract', () => {
   });
 
   it('reads a station request only from arbitrary nodes configured in the profile', async () => {
-    opcUa.readNode
-      .mockResolvedValueOnce(321)
-      .mockResolvedValueOnce(7);
+    opcUa.readNode.mockResolvedValueOnce(321).mockResolvedValueOnce(7);
 
     await expect(adapter.readStationRequest(7)).resolves.toEqual({
       carrierNumber: 321,
@@ -177,6 +232,11 @@ describe('OpcUaMachineAdapter profile contract', () => {
       2,
       'ns=4;s=LineA.Input.Resource',
     );
+  });
+
+  it('maps semantic routing outcomes through the machine profile', () => {
+    expect(adapter.routingResultCode('accepted')).toBe(10);
+    expect(adapter.routingResultCode('internal_error')).toBe(99);
   });
 
   it('writes every routing value to its own configured profile signal', async () => {
@@ -223,6 +283,87 @@ describe('OpcUaMachineAdapter profile contract', () => {
     );
   });
 
+  it('does not invent zero for a missing routing parameter', async () => {
+    await expect(
+      adapter.writeRoutingResponse(7, {
+        orderNo: 'ORD-16',
+        partNo: 'PART-B',
+        operationNo: 30,
+        stepNo: 2,
+        nextResourceId: 42,
+        parameters: { iPar1: 11, iPar2: 22, iPar3: 33 },
+        resultCode: 0,
+        accepted: true,
+      }),
+    ).rejects.toThrow(
+      'Routing parameter iPar4 has neither an order value nor a configured default_value',
+    );
+    expect(opcUa.writeNodes).not.toHaveBeenCalled();
+  });
+
+  it('writes station-scoped routing parameters only to their target resource', async () => {
+    profileService.getProfile.mockReturnValue({
+      ...profile,
+      orderParameterDefinitions: profile.orderParameterDefinitions!.map(
+        (definition) =>
+          definition.key === 'iPar4'
+            ? { ...definition, targetResourceIds: [42] }
+            : definition,
+      ),
+    });
+
+    await adapter.writeRoutingResponse(7, {
+      orderNo: 'ORD-17',
+      partNo: 'PART-C',
+      operationNo: 70,
+      stepNo: 1,
+      nextResourceId: 42,
+      parameters: { iPar1: 11, iPar2: 22, iPar3: 33 },
+      resultCode: 10,
+      accepted: true,
+    });
+
+    const writes = opcUa.writeNodes.mock.calls[0][0];
+    expect(writes).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          nodeId: 'ns=4;s=LineA.Output.Parameter.D',
+        }),
+      ]),
+    );
+  });
+
+  it('writes no invented order payload for a rejected routing request', async () => {
+    await adapter.writeRoutingResponse(7, {
+      resultCode: 40,
+      accepted: false,
+    });
+
+    const writes = opcUa.writeNodes.mock.calls[0][0];
+    expect(writes).toEqual([
+      {
+        nodeId: 'ns=4;s=LineA.Output.Result',
+        dataType: 'UInt16',
+        value: 40,
+      },
+      {
+        nodeId: 'ns=4;s=LineA.Output.Busy',
+        dataType: 'Boolean',
+        value: false,
+      },
+      {
+        nodeId: 'ns=4;s=LineA.Output.Accepted',
+        dataType: 'Boolean',
+        value: false,
+      },
+      {
+        nodeId: 'ns=4;s=LineA.Output.Rejected',
+        dataType: 'Boolean',
+        value: true,
+      },
+    ]);
+  });
+
   it('does not invent a fallback address when a profile signal is missing', async () => {
     signals.delete('resourceId');
     opcUa.readNode.mockResolvedValue(1);
@@ -254,17 +395,57 @@ describe('OpcUaMachineAdapter profile contract', () => {
   it('reads a complete carrier inventory from primitive profile signals', async () => {
     const inventorySignals = [
       ['inventoryValid', 'ns=4;s=Inventory.Valid', 'Boolean', 'inventoryValid'],
-      ['inventoryRevision', 'ns=4;s=Inventory.Revision', 'UInt32', 'inventoryRevision'],
-      ['inventoryCapacity', 'ns=4;s=Inventory.Capacity', 'UInt16', 'inventoryCapacity'],
-      ['availableCount', 'ns=4;s=Inventory.Available', 'UInt16', 'availableCarrierCount'],
+      [
+        'inventoryRevision',
+        'ns=4;s=Inventory.Revision',
+        'UInt32',
+        'inventoryRevision',
+      ],
+      [
+        'inventoryCapacity',
+        'ns=4;s=Inventory.Capacity',
+        'UInt16',
+        'inventoryCapacity',
+      ],
+      [
+        'availableCount',
+        'ns=4;s=Inventory.Available',
+        'UInt16',
+        'availableCarrierCount',
+      ],
       ['totalCount', 'ns=4;s=Inventory.Total', 'UInt16', 'totalCarrierCount'],
-      ['slot1Present', 'ns=4;s=Inventory.Slot1.Present', 'Boolean', 'slotOccupied'],
+      [
+        'slot1Present',
+        'ns=4;s=Inventory.Slot1.Present',
+        'Boolean',
+        'slotOccupied',
+      ],
       ['slot1Carrier', 'ns=4;s=Inventory.Slot1.Carrier', 'UInt32', 'carrierId'],
       ['slot1Rfid', 'ns=4;s=Inventory.Slot1.Rfid', 'String', 'rfidUid'],
-      ['slot1RfidValid', 'ns=4;s=Inventory.Slot1.RfidValid', 'Boolean', 'rfidReadValid'],
-      ['slot1State', 'ns=4;s=Inventory.Slot1.State', 'String', 'carrierPhysicalState'],
-      ['slot1Reader', 'ns=4;s=Inventory.Slot1.Reader', 'String', 'carrierReaderId'],
-      ['slot1LastSeen', 'ns=4;s=Inventory.Slot1.LastSeen', 'DateTime', 'carrierLastSeen'],
+      [
+        'slot1RfidValid',
+        'ns=4;s=Inventory.Slot1.RfidValid',
+        'Boolean',
+        'rfidReadValid',
+      ],
+      [
+        'slot1State',
+        'ns=4;s=Inventory.Slot1.State',
+        'String',
+        'carrierPhysicalState',
+      ],
+      [
+        'slot1Reader',
+        'ns=4;s=Inventory.Slot1.Reader',
+        'String',
+        'carrierReaderId',
+      ],
+      [
+        'slot1LastSeen',
+        'ns=4;s=Inventory.Slot1.LastSeen',
+        'DateTime',
+        'carrierLastSeen',
+      ],
     ] as const;
     for (const [key, nodeId, dataType, role] of inventorySignals) {
       signals.set(

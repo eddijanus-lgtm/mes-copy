@@ -77,6 +77,6 @@ export class ShiftsController {
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: CompleteProductionBatchDto,
   ) {
-    return this.shiftsService.completeBatch(id, dto?.completed_quantity); 
+    return this.shiftsService.completeBatch(id, dto.completed_quantity);
   }
 }

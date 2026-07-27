@@ -2,7 +2,7 @@ import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import {
   RoutingService,
-  WebshopProductionPayload,
+  ExternalProductionOrderPayload,
 } from '../orders/routing.service';
 import { MqttGatewayService } from './mqtt-gateway.service';
 import { translateWebshopOrder } from './webshop-order-translator';
@@ -15,7 +15,7 @@ export class WebshopOrdersService implements OnModuleInit {
   private readonly logger = new Logger(WebshopOrdersService.name);
   private recentOrders: Array<{
     orderName: string;
-    payload: WebshopProductionPayload;
+    payload: ExternalProductionOrderPayload;
     timestamp: string;
   }> = [];
 
@@ -27,10 +27,15 @@ export class WebshopOrdersService implements OnModuleInit {
   ) {}
 
   onModuleInit() {
-    const topic = this.configService.get<string>(
-      'WEBSHOP_MQTT_TOPIC',
-      'i4.0/production/orders',
-    );
+    const topic = this.configService
+      .get<string>('WEBSHOP_MQTT_TOPIC')
+      ?.trim();
+    if (!topic) {
+      this.logger.log(
+        'Webshop order adapter is disabled because WEBSHOP_MQTT_TOPIC is not configured',
+      );
+      return;
+    }
     this.mqtt.onMessage(
       topic,
       (payload: unknown) => void this.handleWebshopOrder(payload),
@@ -48,7 +53,7 @@ export class WebshopOrdersService implements OnModuleInit {
         rawPayload,
         this.machine.getOrderParameterDefinitions(),
       );
-      const result = await this.routing.createWebshopProductionOrder(payload);
+      const result = await this.routing.createExternalProductionOrder(payload);
       this.recentOrders.unshift({
         orderName: result.order.name,
         payload,

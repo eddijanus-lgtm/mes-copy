@@ -33,6 +33,7 @@ import {
   MachineProfileReadError,
   MachineProfileParseError,
 } from './machine-profile.errors';
+import { ROUTING_OUTCOMES } from '../../orders/routing-outcome';
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -61,6 +62,11 @@ function isStringRecord(value: unknown): value is Readonly<Record<string, string
     if (!isString(val)) return false;
   }
   return true;
+}
+
+function isNumberRecord(value: unknown): value is Readonly<Record<string, number>> {
+  if (!isRecord(value)) return false;
+  return Object.values(value).every(isNumber);
 }
 
 const VALID_TRANSPORT_VALUES: readonly string[] = ['opcua'];
@@ -99,6 +105,21 @@ const VALID_RESOURCE_CAPABILITY_VALUES: readonly string[] = [
   'control',
   'inventory',
   'storage',
+  'telemetry',
+];
+const VALID_EQUIPMENT_LEVEL_VALUES: readonly string[] = [
+  'machine',
+  'work_unit',
+  'component',
+];
+const VALID_EXECUTION_MODEL_VALUES: readonly string[] = [
+  'machine_job',
+  'work_unit_jobs',
+];
+const VALID_JOB_INTERFACE_VALUES: readonly string[] = [
+  'signal_handshake',
+  'job_control',
+  'telemetry_only',
 ];
 const VALID_ROLE_VALUES: readonly string[] = [
   'workRequest',
@@ -128,6 +149,9 @@ const VALID_ROLE_VALUES: readonly string[] = [
   'inventoryCapacity',
   'availableCarrierCount',
   'totalCarrierCount',
+  'idealCycleTimeMs',
+  'goodCount',
+  'rejectCount',
   'slotOccupied',
   'slotId',
   'rfidUid',
@@ -257,13 +281,35 @@ function isMachineStationProfile(value: unknown): value is MachineStationProfile
   if (!isRecord(value)) return false;
   if (!isString(value.stationId)) return false;
   if (!Number.isInteger(value.resourceId) || Number(value.resourceId) < 1) return false;
+  if (
+    value.parentResourceId !== undefined &&
+    (!Number.isInteger(value.parentResourceId) ||
+      Number(value.parentResourceId) < 1)
+  ) {
+    return false;
+  }
   if (!isString(value.displayName)) return false;
   if (value.description !== undefined && !isString(value.description)) return false;
   if (!isBoolean(value.enabled)) return false;
   if (
-    value.resourceType !== undefined &&
-    !isInAllowedValues(value.resourceType, VALID_RESOURCE_TYPE_VALUES)
+    value.equipmentLevel !== undefined &&
+    !isInAllowedValues(value.equipmentLevel, VALID_EQUIPMENT_LEVEL_VALUES)
   ) {
+    return false;
+  }
+  if (
+    value.executionModel !== undefined &&
+    !isInAllowedValues(value.executionModel, VALID_EXECUTION_MODEL_VALUES)
+  ) {
+    return false;
+  }
+  if (
+    value.jobInterface !== undefined &&
+    !isInAllowedValues(value.jobInterface, VALID_JOB_INTERFACE_VALUES)
+  ) {
+    return false;
+  }
+  if (!isInAllowedValues(value.resourceType, VALID_RESOURCE_TYPE_VALUES)) {
     return false;
   }
   if (
@@ -301,6 +347,17 @@ function isMachineOrderParameterDefinitionProfile(value: unknown): boolean {
   if (!isString(value.key)) return false;
   if (value.sourceKey !== undefined && !isString(value.sourceKey)) return false;
   if (value.signalKey !== undefined && !isString(value.signalKey)) return false;
+  if (
+    value.targetResourceIds !== undefined &&
+    (!Array.isArray(value.targetResourceIds) ||
+      value.targetResourceIds.length === 0 ||
+      !value.targetResourceIds.every(
+        (resourceId: unknown) =>
+          Number.isInteger(resourceId) && Number(resourceId) > 0,
+      ))
+  ) {
+    return false;
+  }
   if (value.required !== undefined && !isBoolean(value.required)) return false;
   if (!isString(value.label)) return false;
   if (!isInAllowedValues(value.type, ['number', 'select'])) return false;
@@ -336,8 +393,22 @@ function isMachineProfile(value: unknown): value is MachineProfile {
   if (!isMachineConnectionProfile(value.connection)) return false;
   if (!Array.isArray(value.namespaces)) return false;
   if (!value.namespaces.every((ns: unknown) => isMachineNamespaceProfile(ns))) return false;
+  if (
+    value.routing !== undefined &&
+    (!isRecord(value.routing) ||
+      !Number.isInteger(value.routing.terminalResourceId) ||
+      Number(value.routing.terminalResourceId) < 0)
+  ) {
+    return false;
+  }
   if (value.orderParameterDefinitions !== undefined && (!Array.isArray(value.orderParameterDefinitions) || !value.orderParameterDefinitions.every(isMachineOrderParameterDefinitionProfile))) return false;
   if (value.resultCodes !== undefined && !isStringRecord(value.resultCodes)) return false;
+  if (
+    value.routingResultCodes !== undefined &&
+    !isNumberRecord(value.routingResultCodes)
+  ) {
+    return false;
+  }
   if (!Array.isArray(value.stations)) return false;
   if (!value.stations.every((st: unknown) => isMachineStationProfile(st))) return false;
   if (value.metadata !== undefined && !isStringRecord(value.metadata)) return false;
@@ -357,7 +428,7 @@ function hasStationCapability(
     return station.capabilities.includes(capability);
   }
 
-  const resourceType = station.resourceType || 'production';
+  const resourceType = station.resourceType;
   if (resourceType === 'production') {
     return ['production', 'routing', 'control'].includes(capability);
   }
@@ -367,7 +438,7 @@ function hasStationCapability(
   if (resourceType === 'storage') {
     return capability === 'inventory' || capability === 'storage';
   }
-  return true;
+  return false;
 }
 
 function machineProfileSemanticErrors(profile: MachineProfile): string[] {
@@ -431,6 +502,41 @@ function machineProfileSemanticErrors(profile: MachineProfile): string[] {
     'processResult',
     'completedCarrierId',
   ];
+  const hasControlledRouting = profile.stations.some(
+    (station) =>
+      station.enabled &&
+      hasStationCapability(station, 'routing') &&
+      station.jobInterface !== 'job_control' &&
+      station.routing?.enabled !== false,
+  );
+  if (profile.operatingMode === 'control' && hasControlledRouting) {
+    if (!profile.routing) {
+      errors.push(
+        'Control profiles with routing require routing.terminalResourceId',
+      );
+    }
+    const configuredCodes = profile.routingResultCodes;
+    if (!configuredCodes) {
+      errors.push(
+        'Control profiles with routing require routingResultCodes',
+      );
+    } else {
+      const values: number[] = [];
+      for (const outcome of ROUTING_OUTCOMES) {
+        const value = configuredCodes[outcome];
+        if (!Number.isInteger(value) || value < 0) {
+          errors.push(
+            `routingResultCodes.${outcome} must be a non-negative integer`,
+          );
+        } else {
+          values.push(value);
+        }
+      }
+      if (new Set(values).size !== values.length) {
+        errors.push('routingResultCodes values must be unique');
+      }
+    }
+  }
 
   for (const station of profile.stations) {
     if (stationIds.has(station.stationId)) {
@@ -495,7 +601,9 @@ function machineProfileSemanticErrors(profile: MachineProfile): string[] {
     if (
       profile.operatingMode === 'control' &&
       station.enabled &&
-      hasStationCapability(station, 'production')
+      hasStationCapability(station, 'production') &&
+      station.jobInterface !== 'job_control' &&
+      station.jobInterface !== 'telemetry_only'
     ) {
       for (const role of requiredControlRoles) {
         if ((roles.get(role) || 0) !== 1) {
@@ -604,11 +712,61 @@ function machineProfileSemanticErrors(profile: MachineProfile): string[] {
     }
   }
 
+  const stationByResource = new Map(
+    profile.stations.map((station) => [station.resourceId, station] as const),
+  );
+  for (const station of profile.stations) {
+    if (station.parentResourceId === undefined) continue;
+    if (station.parentResourceId === station.resourceId) {
+      errors.push(`Station ${station.stationId} cannot be its own parent`);
+      continue;
+    }
+    if (!stationByResource.has(station.parentResourceId)) {
+      errors.push(
+        `Station ${station.stationId} references unknown parent resource ${station.parentResourceId}`,
+      );
+      continue;
+    }
+
+    const visited = new Set<number>([station.resourceId]);
+    let ancestor = stationByResource.get(station.parentResourceId);
+    while (ancestor) {
+      if (visited.has(ancestor.resourceId)) {
+        errors.push(`Equipment hierarchy contains a cycle at ${station.stationId}`);
+        break;
+      }
+      visited.add(ancestor.resourceId);
+      ancestor =
+        ancestor.parentResourceId === undefined
+          ? undefined
+          : stationByResource.get(ancestor.parentResourceId);
+    }
+  }
+
   for (const definition of profile.orderParameterDefinitions || []) {
     const signalKey = definition.signalKey || definition.key;
+    const targetResourceIds = definition.targetResourceIds;
+    if (
+      targetResourceIds &&
+      new Set(targetResourceIds).size !== targetResourceIds.length
+    ) {
+      errors.push(
+        `Order parameter ${definition.key} has duplicate targetResourceIds`,
+      );
+    }
+    for (const resourceId of targetResourceIds || []) {
+      if (!resourceIds.has(resourceId)) {
+        errors.push(
+          `Order parameter ${definition.key} targets unknown resource ${resourceId}`,
+        );
+      }
+    }
     for (const station of profile.stations.filter(
       (candidate) =>
-        candidate.enabled && hasStationCapability(candidate, 'production'),
+        candidate.enabled &&
+        hasStationCapability(candidate, 'production') &&
+        (!targetResourceIds ||
+          targetResourceIds.includes(candidate.resourceId)),
     )) {
       const signal = station.signals.find(
         (candidate) =>

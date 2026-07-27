@@ -2,6 +2,7 @@ import {
   BadRequestException,
   Injectable,
   NotFoundException,
+  ServiceUnavailableException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
@@ -19,17 +20,13 @@ import { OrderProductionLogService } from './order-production-log.service';
 import { ProductEntity } from '../products/product.entity';
 import { ProductRouteStepEntity } from '../products/product-route-step.entity';
 import { MachineProfileService } from '../machines/profiles/machine-profile.service';
+import type { RoutingOutcome } from './routing-outcome';
+import {
+  ExecutionStepSource,
+} from '../execution-steps/execution-step.entity';
+import { ExecutionStepsService } from '../execution-steps/execution-steps.service';
 
-export enum RoutingResultCode {
-  OK = 0,
-  CARRIER_UNKNOWN = 1,
-  ORDER_MISSING = 2,
-  WRONG_RESOURCE = 3,
-  STEP_ALREADY_COMPLETED = 4,
-  INTERNAL_ERROR = 9,
-}
-
-export type WebshopProductionPayload = {
+export type ExternalProductionOrderPayload = {
   orderName?: string;
   productId?: string;
   partNo?: string;
@@ -46,6 +43,7 @@ export class RoutingService {
     private readonly routeSteps: Repository<OrderRouteStepEntity>,
     private readonly productionLogs: OrderProductionLogService,
     private readonly profiles: MachineProfileService,
+    private readonly executionSteps: ExecutionStepsService,
   ) {}
 
   getRoute(orderId: string) {
@@ -79,7 +77,7 @@ export class RoutingService {
     });
   }
 
-  async createWebshopProductionOrder(payload: WebshopProductionPayload) {
+  async createExternalProductionOrder(payload: ExternalProductionOrderPayload) {
     return this.dataSource.transaction(async (manager) => {
       const profile = this.profiles.getProfile();
       const defaultRoute = profile.stations
@@ -109,7 +107,9 @@ export class RoutingService {
             })
           : null;
       if ((payload.productId || payload.partNo) && !product) {
-        throw new NotFoundException('Configured webshop product was not found');
+        throw new NotFoundException(
+          'Configured external-order product was not found',
+        );
       }
       const productRoute = product
         ? await manager.find(ProductRouteStepEntity, {
@@ -145,7 +145,7 @@ export class RoutingService {
         manager.create(OrderEntity, {
           name:
             payload.orderName ??
-            `WEBSHOP-${new Date()
+            `EXTERNAL-${new Date()
               .toISOString()
               .replace(/[-:.TZ]/g, '')
               .slice(0, 14)}`,
@@ -155,8 +155,7 @@ export class RoutingService {
           operation: product?.name || routeDefinition[0].operation,
           quantity: 1,
           completed_quantity: 0,
-          status: 'in_progress',
-          start_time: new Date(),
+          status: 'pending',
         }),
       );
 
@@ -182,7 +181,7 @@ export class RoutingService {
       let carrier = candidateCarriers.find(isCarrierPhysicallyAvailable);
       if (!carrier)
         throw new BadRequestException(
-          'No available carrier found for webshop order',
+          'No available carrier found for external order',
         );
       carrier.order_id = order.id;
       carrier.current_step_no = route[0].step_no;
@@ -201,9 +200,9 @@ export class RoutingService {
         lock: { mode: 'pessimistic_write' },
       });
       if (!carrier)
-        return { resultCode: RoutingResultCode.CARRIER_UNKNOWN };
+        return { outcome: 'carrier_unknown' as RoutingOutcome };
       if (!carrier.order_id || carrier.current_step_no == null)
-        return { resultCode: RoutingResultCode.ORDER_MISSING };
+        return { outcome: 'order_missing' as RoutingOutcome };
 
       const order = await manager.findOne(OrderEntity, {
         where: { id: carrier.order_id },
@@ -217,19 +216,19 @@ export class RoutingService {
         where: { order_id: carrier.order_id, step_no: carrier.current_step_no },
       });
       if (!order || !step)
-        return { resultCode: RoutingResultCode.ORDER_MISSING };
+        return { outcome: 'order_missing' as RoutingOutcome };
       if (order.status === 'completed') {
         carrier.status = CarrierStatusEnum.AVAILABLE;
         carrier.order_id = null;
         carrier.current_step_no = null;
         carrier.current_resource_id = null;
         await manager.save(carrier);
-        return { resultCode: RoutingResultCode.STEP_ALREADY_COMPLETED };
+        return { outcome: 'already_completed' as RoutingOutcome };
       }
       if (step.resource_id !== resourceId)
-        return { resultCode: RoutingResultCode.WRONG_RESOURCE };
+        return { outcome: 'wrong_resource' as RoutingOutcome };
       if (carrier.status === CarrierStatusEnum.COMPLETED) {
-        return { resultCode: RoutingResultCode.STEP_ALREADY_COMPLETED };
+        return { outcome: 'already_completed' as RoutingOutcome };
       }
 
       carrier.current_resource_id = resourceId;
@@ -240,6 +239,10 @@ export class RoutingService {
         carrier.inventory_stale = false;
       }
       await manager.save(carrier);
+      const startedAt = new Date();
+      if (this.transitionOrderToInProgress(order, startedAt)) {
+        await manager.save(order);
+      }
 
       const route = await manager.find(OrderRouteStepEntity, {
         where: { order_id: carrier.order_id },
@@ -250,18 +253,57 @@ export class RoutingService {
       );
       const nextStep =
         currentIndex >= 0 ? route[currentIndex + 1] : undefined;
+      await this.executionSteps.start(
+        {
+          orderId: order.id,
+          carrierId: carrier.id,
+          carrierNumber: carrier.carrier_number,
+          resourceId,
+          operationNo: step.operation_no,
+          operation: step.operation,
+          stepNo: step.step_no,
+          source: ExecutionStepSource.MACHINE,
+          startedAt,
+        },
+        manager,
+      );
       return {
-        resultCode: RoutingResultCode.OK,
+        outcome: 'accepted' as RoutingOutcome,
         orderNo: order.name,
         partNo: product?.part_no || order.name,
         operationNo: step.operation_no,
         stepNo: step.step_no,
-        nextResourceId: nextStep?.resource_id || 0,
+        nextResourceId:
+          nextStep?.resource_id ?? this.terminalResourceId(),
         parameters: step.parameters || {},
         carrierId: carrier.id,
         orderId: order.id,
       };
     });
+  }
+
+  private terminalResourceId(): number {
+    const terminalResourceId =
+      this.profiles.getProfile().routing?.terminalResourceId;
+    if (
+      !Number.isInteger(terminalResourceId) ||
+      Number(terminalResourceId) < 0
+    ) {
+      throw new ServiceUnavailableException(
+        'Machine profile requires routing.terminalResourceId for the final route step',
+      );
+    }
+    return Number(terminalResourceId);
+  }
+
+  private transitionOrderToInProgress(
+    order: OrderEntity,
+    startedAt = new Date(),
+  ): boolean {
+    if (order.status !== 'pending') return false;
+    order.status = 'in_progress';
+    order.start_time = startedAt;
+    return true;
   }
 
   async completeStationStep(
@@ -303,6 +345,23 @@ export class RoutingService {
       );
       const nextStep =
         currentIndex >= 0 ? route[currentIndex + 1] : undefined;
+
+      await this.executionSteps.complete(
+        {
+          orderId: carrier.order_id,
+          carrierId: carrier.id,
+          carrierNumber: carrier.carrier_number,
+          resourceId,
+          operationNo: step.operation_no,
+          operation: step.operation,
+          stepNo: step.step_no,
+          source: ExecutionStepSource.MACHINE,
+          startedAt: order?.start_time ?? completedAt,
+          completedAt,
+          result: { outcome: 'completed' },
+        },
+        manager,
+      );
 
       if (nextStep) {
         carrier.current_step_no = nextStep.step_no;
@@ -348,5 +407,38 @@ export class RoutingService {
     });
     if (finalizedOrderId) await this.productionLogs.finalize(finalizedOrderId);
     return completed;
+  }
+
+  async failStationStep(
+    resourceId: number,
+    carrierNumber: number,
+    failedAt: Date,
+  ): Promise<boolean> {
+    return this.dataSource.transaction(async (manager) => {
+      const carrier = await manager.findOne(CarrierEntity, {
+        where: { carrier_number: carrierNumber },
+      });
+      if (
+        !carrier?.order_id ||
+        carrier.current_step_no == null ||
+        carrier.current_resource_id !== resourceId
+      ) {
+        return false;
+      }
+      const failed = await this.executionSteps.fail(
+        {
+          orderId: carrier.order_id,
+          carrierId: carrier.id,
+          stepNo: carrier.current_step_no,
+          failedAt,
+          result: {
+            outcome: 'failed',
+            reason: 'job_dispatch_failed',
+          },
+        },
+        manager,
+      );
+      return failed !== null;
+    });
   }
 }
