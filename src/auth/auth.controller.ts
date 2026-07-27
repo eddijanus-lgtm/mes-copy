@@ -16,7 +16,12 @@ export class AuthController {
 
   @Post('login')
   @Public()
-  @Throttle({ default: { limit: 5, ttl: 60_000 } })
+  @Throttle({
+    default: {
+      limit: Number(process.env.AUTH_LOGIN_RATE_LIMIT || 5),
+      ttl: 60_000,
+    },
+  })
   @ApiOperation({ summary: 'Mit Benutzername und Passwort anmelden' })
   @ApiOkResponse({
     type: AccessTokenDto,

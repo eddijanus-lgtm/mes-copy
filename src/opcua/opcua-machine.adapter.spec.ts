@@ -84,6 +84,7 @@ describe('OpcUaMachineAdapter profile contract', () => {
     role: OpcUaConfiguredSignal['role'] = 'custom',
   ): OpcUaConfiguredSignal {
     return {
+      resourceId: 7,
       key,
       role,
       nodeId,
@@ -226,10 +227,12 @@ describe('OpcUaMachineAdapter profile contract', () => {
     });
     expect(opcUa.readNode).toHaveBeenNthCalledWith(
       1,
+      7,
       'ns=4;s=LineA.Input.Carrier',
     );
     expect(opcUa.readNode).toHaveBeenNthCalledWith(
       2,
+      7,
       'ns=4;s=LineA.Input.Resource',
     );
   });
@@ -255,26 +258,31 @@ describe('OpcUaMachineAdapter profile contract', () => {
     expect(writes).toEqual(
       expect.arrayContaining([
         {
+          resourceId: 7,
           nodeId: 'ns=4;s=LineA.Output.Parameter.A',
           dataType: 'UInt16',
           value: 11,
         },
         {
+          resourceId: 7,
           nodeId: 'ns=4;s=LineA.Output.Parameter.B',
           dataType: 'UInt16',
           value: 22,
         },
         {
+          resourceId: 7,
           nodeId: 'ns=4;s=LineA.Output.Parameter.C',
           dataType: 'UInt16',
           value: 33,
         },
         {
+          resourceId: 7,
           nodeId: 'ns=4;s=LineA.Output.Parameter.D',
           dataType: 'UInt16',
           value: 44,
         },
         {
+          resourceId: 7,
           nodeId: 'ns=4;s=LineA.Output.Accepted',
           dataType: 'Boolean',
           value: true,
@@ -342,21 +350,25 @@ describe('OpcUaMachineAdapter profile contract', () => {
     const writes = opcUa.writeNodes.mock.calls[0][0];
     expect(writes).toEqual([
       {
+        resourceId: 7,
         nodeId: 'ns=4;s=LineA.Output.Result',
         dataType: 'UInt16',
         value: 40,
       },
       {
+        resourceId: 7,
         nodeId: 'ns=4;s=LineA.Output.Busy',
         dataType: 'Boolean',
         value: false,
       },
       {
+        resourceId: 7,
         nodeId: 'ns=4;s=LineA.Output.Accepted',
         dataType: 'Boolean',
         value: false,
       },
       {
+        resourceId: 7,
         nodeId: 'ns=4;s=LineA.Output.Rejected',
         dataType: 'Boolean',
         value: true,
@@ -388,6 +400,7 @@ describe('OpcUaMachineAdapter profile contract', () => {
     opcUa.readNode.mockResolvedValueOnce(501);
     await expect(adapter.readCompletedCarrierNumber(7)).resolves.toBe(501);
     expect(opcUa.readNode).toHaveBeenLastCalledWith(
+      7,
       'ns=4;s=LineA.Process.Carrier',
     );
   });
@@ -500,7 +513,9 @@ describe('OpcUaMachineAdapter profile contract', () => {
       'ns=4;s=Inventory.Slot1.Reader': 'RF210R-1',
       'ns=4;s=Inventory.Slot1.LastSeen': new Date('2026-07-26T12:00:00Z'),
     };
-    opcUa.readNode.mockImplementation(async (nodeId: string) => values[nodeId]);
+    opcUa.readNode.mockImplementation(
+      async (_resourceId: number, nodeId: string) => values[nodeId],
+    );
 
     await expect(adapter.readCarrierInventory(7)).resolves.toEqual({
       resourceId: 7,
@@ -545,6 +560,7 @@ describe('OpcUaMachineAdapter profile contract', () => {
 
     expect(opcUa.writeNodes).toHaveBeenCalledWith([
       {
+        resourceId: 7,
         nodeId: 'ns=4;s=LineA.Commands.Run',
         dataType: 'Boolean',
         value: true,

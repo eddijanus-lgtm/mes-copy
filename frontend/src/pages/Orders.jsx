@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useTranslation } from "../i18n/I18nProvider.jsx";
 import { CaretLeftIcon } from "@phosphor-icons/react/CaretLeft";
 import { CaretRightIcon } from "@phosphor-icons/react/CaretRight";
 import { CheckCircleIcon } from "@phosphor-icons/react/CheckCircle";
@@ -23,10 +24,10 @@ import { canDeleteOrders, canManageOrders } from "../utils/roles.js";
 import "../orders.css";
 
 const EMPTY_FORM = { id: null, name: "", priority: 1, machine_id: "", product_id: "", operation: "Produktion", quantity: 1, completed_quantity: 0, status: "pending", production_parameters: {} };
-const STATUS_LABELS = { pending: "Ausstehend", in_progress: "In Arbeit", completed: "Abgeschlossen", cancelled: "Abgebrochen", on_hold: "Pausiert" };
 
 export default function OrdersPage() {
   const { user } = useAuth();
+  const { t } = useTranslation();
   const [orders, setOrders] = useState([]);
   const [machines, setMachines] = useState([]);
   const [products, setProducts] = useState([]);
@@ -49,6 +50,13 @@ export default function OrdersPage() {
   const [deleting, setDeleting] = useState(false);
   const [downloadingOrderId, setDownloadingOrderId] = useState(null);
   const [downloadingAll, setDownloadingAll] = useState(false);
+  const STATUS_LABELS = {
+    pending: t("orders.filter_pending"),
+    in_progress: t("orders.filter_in_progress"),
+    completed: t("orders.filter_completed"),
+    cancelled: t("orders.cancelled"),
+    on_hold: t("orders.on_hold"),
+  };
   const canManage = canManageOrders(user);
   const canDelete = canDeleteOrders(user);
 
@@ -234,10 +242,10 @@ export default function OrdersPage() {
       <header className="mes-page-header">
         <div>
           <div className="mes-title-row">
-            <h1>Produktionsaufträge</h1>
+            <h1>{t("orders.title")}</h1>
             <PageInfo page="orders" />
           </div>
-          <p>Ein Auftrag erzeugt Route, Carrier-Zuordnung und stMES-Freigaben für die Anlage.</p>
+          <p>{t("orders.subtitle")}</p>
         </div>
         <div className="orders-page-actions">
           {completedCount > 0 && (
@@ -248,7 +256,7 @@ export default function OrdersPage() {
               onClick={downloadAllProductionCsv}
             >
               <DownloadSimpleIcon aria-hidden="true" size={16} />
-              {downloadingAll ? "Sammel-CSV wird erstellt..." : `Alle Produktionsläufe CSV (${completedCount})`}
+              {downloadingAll ? t("orders.csv_downloading") : `${t("orders.csv_all")} (${completedCount})`}
             </button>
           )}
           {canManage && (
@@ -258,33 +266,33 @@ export default function OrdersPage() {
               disabled={routableMachines.length === 0}
               className="orders-primary-action bg-brand-primary"
             >
-              + Neuer Auftrag
+              {t("orders.new_order")}
             </button>
           )}
         </div>
       </header>
 
-      {routableMachines.length === 0 && <p className="orders-warning">Vor dem ersten Auftrag muss mindestens eine routbare Work Unit konfiguriert werden.</p>}
+      {routableMachines.length === 0 && <p className="orders-warning">{t("orders.warning_no_routable")}</p>}
       {error && <p role="alert" className="orders-error">{error}</p>}
 
       <section className={`orders-workspace${selectedOrder ? " orders-workspace--open" : ""}`}>
         <div className="orders-list-pane">
           <div className="orders-toolbar">
             <div className="orders-status-tabs" role="tablist" aria-label="Aufträge nach Status filtern">
-              <StatusTab label="Alle" count={orders.length} active={statusFilter === "all"} onClick={() => setStatusFilter("all")} />
-              <StatusTab label="Ausstehend" count={pendingCount} active={statusFilter === "pending"} onClick={() => setStatusFilter("pending")} />
-              <StatusTab label="In Arbeit" count={activeCount} active={statusFilter === "in_progress"} onClick={() => setStatusFilter("in_progress")} />
-              <StatusTab label="Abgeschlossen" count={completedCount} active={statusFilter === "completed"} onClick={() => setStatusFilter("completed")} />
+              <StatusTab label={t("orders.filter_all")} count={orders.length} active={statusFilter === "all"} onClick={() => setStatusFilter("all")} />
+              <StatusTab label={t("orders.filter_pending")} count={pendingCount} active={statusFilter === "pending"} onClick={() => setStatusFilter("pending")} />
+              <StatusTab label={t("orders.filter_in_progress")} count={activeCount} active={statusFilter === "in_progress"} onClick={() => setStatusFilter("in_progress")} />
+              <StatusTab label={t("orders.filter_completed")} count={completedCount} active={statusFilter === "completed"} onClick={() => setStatusFilter("completed")} />
             </div>
 
             <div className="orders-toolbar__actions">
               <label className="orders-search">
                 <MagnifyingGlassIcon aria-hidden="true" size={16} />
-                <span className="sr-only">Auftrag suchen</span>
+                <span className="sr-only">{t("orders.search")}</span>
                 <input
                   value={search}
                   onChange={(event) => setSearch(event.target.value)}
-                  placeholder="Auftrag oder Produkt suchen..."
+                  placeholder={t("orders.search")}
                 />
               </label>
               <button
@@ -294,7 +302,7 @@ export default function OrdersPage() {
                 onClick={() => setFilterMenuOpen((open) => !open)}
               >
                 <FunnelSimpleIcon aria-hidden="true" size={16} />
-                Filter
+                {t("orders.filter")}
               </button>
             </div>
           </div>
@@ -302,16 +310,16 @@ export default function OrdersPage() {
           {filterMenuOpen && (
             <div className="orders-filter-bar">
               <label>
-                <span>Status</span>
+                <span>{t("orders.filter_status")}</span>
                 <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
-                  <option value="all">Alle Status</option>
+                  <option value="all">{t("orders.filter_all")}</option>
                   {Object.entries(STATUS_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
                 </select>
               </label>
               <label>
-                <span>Carrier</span>
+                <span>{t("orders.filter_carrier")}</span>
                 <select value={carrierFilter} onChange={(event) => setCarrierFilter(event.target.value)}>
-                  <option value="all">Alle Carrier</option>
+                  <option value="all">{t("orders.filter_all")}</option>
                   {carriers.filter((carrier) => carrier.order_id).map((carrier) => (
                     <option key={carrier.id} value={carrier.id}>{formatCarrier(carrier)}</option>
                   ))}
@@ -325,7 +333,7 @@ export default function OrdersPage() {
                   setSearch("");
                 }}
               >
-                Filter zurücksetzen
+                {t("orders.filter_reset")}
               </button>
             </div>
           )}
@@ -334,13 +342,13 @@ export default function OrdersPage() {
             <table className="orders-table">
               <thead>
                 <tr>
-                  <th>Auftrag</th>
-                  <th className="orders-col-product">Produkt / Start</th>
-                  <th>Status</th>
-                  <th className="orders-col-quantity">Menge</th>
-                  <th>Fortschritt</th>
-                  <th className="orders-col-carrier">Carrier</th>
-                  <th><span className="sr-only">Details</span></th>
+                  <th>{t("orders.order")}</th>
+                  <th className="orders-col-product">{t("orders.product")}</th>
+                  <th>{t("orders.status")}</th>
+                  <th className="orders-col-quantity">{t("orders.quantity")}</th>
+                  <th>{t("orders.progress")}</th>
+                  <th className="orders-col-carrier">{t("orders.carriers")}</th>
+                  <th><span className="sr-only">{t("orders.details")}</span></th>
                 </tr>
               </thead>
               <tbody>
@@ -355,19 +363,20 @@ export default function OrdersPage() {
                     machineName={machineNames[order.machine_id]}
                     productName={productNames[order.product_id]}
                     onToggle={() => toggleInspector(order)}
+                    statusLabels={STATUS_LABELS}
                   />
                 ))}
               </tbody>
             </table>
-            {filtered.length === 0 && <p className="orders-empty">Keine passenden Aufträge gefunden.</p>}
+            {filtered.length === 0 && <p className="orders-empty">{t("orders.no_results")}</p>}
           </div>
 
           <footer className="orders-pagination">
-            <span>{filtered.length} Ergebnisse</span>
+            <span>{filtered.length} {t("orders.results")}</span>
             <div aria-label="Seitennavigation">
-              <button type="button" disabled aria-label="Vorherige Seite"><CaretLeftIcon aria-hidden="true" size={15} /></button>
+              <button type="button" disabled aria-label={t("orders.prev_page")}><CaretLeftIcon aria-hidden="true" size={15} /></button>
               <span>1</span>
-              <button type="button" disabled aria-label="Nächste Seite"><CaretRightIcon aria-hidden="true" size={15} /></button>
+              <button type="button" disabled aria-label={t("orders.next_page")}><CaretRightIcon aria-hidden="true" size={15} /></button>
             </div>
           </footer>
         </div>
@@ -393,32 +402,34 @@ export default function OrdersPage() {
               onDelete={() => requestDelete(selectedOrder)}
               onDownload={() => downloadProductionCsv(selectedOrder)}
               onClose={() => setSelectedOrderId(null)}
+              statusLabels={STATUS_LABELS}
+              t={t}
             />
           </>
         )}
       </section>
 
-      {modalOpen && <OrderModal form={form} setForm={setForm} machines={routableMachines} products={products} orderParameterDefinitions={orderParameterDefinitions} carriers={carriers} saving={saving} onSubmit={submit} onClose={() => { setModalOpen(false); setForm(EMPTY_FORM); }} />}
-      {deleteCandidate && <DeleteOrderDialog order={deleteCandidate} deleting={deleting} onCancel={() => setDeleteCandidate(null)} onConfirm={remove} />}
+      {modalOpen && <OrderModal form={form} setForm={setForm} machines={routableMachines} products={products} orderParameterDefinitions={orderParameterDefinitions} carriers={carriers} saving={saving} onSubmit={submit} onClose={() => { setModalOpen(false); setForm(EMPTY_FORM); }} t={t} statusLabels={STATUS_LABELS} />}
+      {deleteCandidate && <DeleteOrderDialog order={deleteCandidate} deleting={deleting} onCancel={() => setDeleteCandidate(null)} onConfirm={remove} t={t} statusLabels={STATUS_LABELS} />}
     </div>
   );
 }
 
-function DeleteOrderDialog({ order, deleting, onCancel, onConfirm }) {
+function DeleteOrderDialog({ order, deleting, onCancel, onConfirm, t, statusLabels }) {
   return (
     <div onClick={() => !deleting && onCancel()} className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4">
       <div onClick={(event) => event.stopPropagation()} className="w-full max-w-md rounded-xl bg-white p-6 shadow-[0_20px_50px_rgba(0,0,0,0.12)]">
-        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-status-error">Auftrag löschen</p>
-        <h2 className="mt-2 text-lg font-bold text-neutral-900">{order.name} wirklich löschen?</h2>
-        <p className="mt-2 text-sm text-neutral-500">Der Auftrag und seine Route werden entfernt. Diese Abfrage bleibt im MES-UI und nutzt keinen Browser-Dialog.</p>
+        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-status-error">{t("orders.delete_title")}</p>
+        <h2 className="mt-2 text-lg font-bold text-neutral-900">{order.name} {t("orders.delete_confirm")}</h2>
+        <p className="mt-2 text-sm text-neutral-500">{t("orders.delete_body")}</p>
         <div className="mt-5 rounded-lg border border-neutral-200 bg-neutral-50 p-3 text-sm">
-          <p><span className="font-medium text-neutral-600">Status:</span> {STATUS_LABELS[order.status] || order.status}</p>
-          <p><span className="font-medium text-neutral-600">Menge:</span> {order.completed_quantity}/{order.quantity}</p>
-          <p><span className="font-medium text-neutral-600">Operation:</span> {order.operation}</p>
+          <p><span className="font-medium text-neutral-600">{t("orders.delete_status")}</span> {statusLabels[order.status] || order.status}</p>
+          <p><span className="font-medium text-neutral-600">{t("orders.delete_quantity")}</span> {order.completed_quantity}/{order.quantity}</p>
+          <p><span className="font-medium text-neutral-600">{t("orders.delete_operation")}</span> {order.operation}</p>
         </div>
         <div className="mt-6 flex justify-end gap-2">
-          <button type="button" disabled={deleting} onClick={onCancel} className="rounded-lg bg-neutral-100 px-4 py-2 text-sm font-medium text-neutral-600 transition-colors hover:bg-neutral-200 disabled:opacity-50">Abbrechen</button>
-          <button type="button" disabled={deleting} onClick={onConfirm} className="rounded-lg bg-status-error px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-[var(--color-status-error-dark)] disabled:opacity-50">{deleting ? "Loescht..." : "Loeschen"}</button>
+          <button type="button" disabled={deleting} onClick={onCancel} className="rounded-lg bg-neutral-100 px-4 py-2 text-sm font-medium text-neutral-600 transition-colors hover:bg-neutral-200 disabled:opacity-50">{t("common.cancel")}</button>
+          <button type="button" disabled={deleting} onClick={onConfirm} className="rounded-lg bg-status-error px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-[var(--color-status-error-dark)] disabled:opacity-50">{deleting ? t("orders.saving") : t("common.delete")}</button>
         </div>
       </div>
     </div>
@@ -434,7 +445,7 @@ function StatusTab({ label, count, active, onClick }) {
   );
 }
 
-function OrderRow({ order, selected, carriers, productionLog, executionSteps, machineName, productName, onToggle }) {
+function OrderRow({ order, selected, carriers, productionLog, executionSteps, machineName, productName, onToggle, statusLabels }) {
   const orderProgress = progress(order);
   const primaryCarrier = carriers[0];
   const historicalCarrier = productionLog?.snapshot?.carriers?.[0];
@@ -449,7 +460,7 @@ function OrderRow({ order, selected, carriers, productionLog, executionSteps, ma
         <strong>{productName || order.operation}</strong>
         <span>{activeStep ? `Aktuell: ${activeStep.operation}` : machineName || "Startstation unbekannt"}</span>
       </td>
-      <td><OrderStatus status={order.status} /></td>
+      <td><OrderStatus status={order.status} statusLabels={statusLabels} /></td>
       <td className="orders-col-quantity">{order.completed_quantity} / {order.quantity}</td>
       <td>
         <div className="orders-progress" aria-label={`${orderProgress} Prozent abgeschlossen`}>
@@ -478,7 +489,7 @@ function OrderRow({ order, selected, carriers, productionLog, executionSteps, ma
   );
 }
 
-function OrderInspector({ order, route, productionLog, executionSteps, carriers, machineName, productName, resourceNames, activeTab, onTabChange, canManage, canDelete, downloading, onEdit, onDelete, onDownload, onClose }) {
+function OrderInspector({ order, route, productionLog, executionSteps, carriers, machineName, productName, resourceNames, activeTab, onTabChange, canManage, canDelete, downloading, onEdit, onDelete, onDownload, onClose, t, statusLabels }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [copied, setCopied] = useState(false);
   const primaryCarrier = carriers[0];
@@ -505,7 +516,7 @@ function OrderInspector({ order, route, productionLog, executionSteps, carriers,
       <div className="orders-inspector__header">
         <div>
           <h2>{order.name}</h2>
-          <OrderStatus status={order.status} />
+          <OrderStatus status={order.status} statusLabels={statusLabels} />
         </div>
         <button type="button" className="orders-icon-button" onClick={onClose} aria-label="Detailansicht schließen">
           <XIcon aria-hidden="true" size={20} />
@@ -524,14 +535,14 @@ function OrderInspector({ order, route, productionLog, executionSteps, carriers,
             {order.status === "completed" && (
               <button type="button" className="orders-download-button" disabled={downloading} onClick={onDownload}>
                 <DownloadSimpleIcon aria-hidden="true" size={16} />
-                {downloading ? "CSV wird erstellt..." : "Produktionslauf CSV"}
+                {downloading ? t("orders.csv_creating") : t("orders.csv")}
               </button>
             )}
             {canManage && (
               <>
                 <button type="button" onClick={onEdit}>
                   <PencilSimpleIcon aria-hidden="true" size={15} />
-                  Bearbeiten
+                  {t("common.edit")}
                 </button>
                 <div className="orders-overflow">
                   <button type="button" className="orders-icon-button" aria-label="Weitere Aktionen" aria-expanded={menuOpen} onClick={() => setMenuOpen((open) => !open)}>
@@ -539,7 +550,7 @@ function OrderInspector({ order, route, productionLog, executionSteps, carriers,
                   </button>
                   {menuOpen && (
                     <div className="orders-overflow__menu">
-                      {canDelete ? <button type="button" onClick={onDelete}>Auftrag löschen</button> : <span>Keine weiteren Aktionen</span>}
+                      {canDelete ? <button type="button" onClick={onDelete}>{t("orders.delete")}</button> : <span>{t("orders.no_actions")}</span>}
                     </div>
                   )}
                 </div>
@@ -550,9 +561,9 @@ function OrderInspector({ order, route, productionLog, executionSteps, carriers,
       </div>
 
       <div className="orders-inspector__tabs" role="tablist" aria-label="Auftragsdetails">
-        <InspectorTab id="overview" label="Übersicht" active={activeTab === "overview"} onClick={onTabChange} />
-        <InspectorTab id="route" label="Route & Carrier" active={activeTab === "route"} onClick={onTabChange} />
-        <InspectorTab id="history" label="Verlauf" active={activeTab === "history"} onClick={onTabChange} />
+        <InspectorTab id="overview" label={t("orders.overview")} active={activeTab === "overview"} onClick={onTabChange} />
+        <InspectorTab id="route" label={t("orders.route_carrier")} active={activeTab === "route"} onClick={onTabChange} />
+        <InspectorTab id="history" label={t("orders.history")} active={activeTab === "history"} onClick={onTabChange} />
       </div>
 
       <div className="orders-inspector__content">
@@ -741,8 +752,8 @@ function OrderFact({ label, value, tone }) {
   return <div><dt>{label}</dt><dd className={tone ? `is-${tone}` : ""}>{value || "–"}</dd></div>;
 }
 
-function OrderStatus({ status }) {
-  return <span className={`orders-status orders-status--${status}`}><i />{STATUS_LABELS[status] || status}</span>;
+function OrderStatus({ status, statusLabels }) {
+  return <span className={`orders-status orders-status--${status}`}><i />{statusLabels?.[status] || status}</span>;
 }
 
 function RouteTimeline({ order, route, executionSteps = [], carriers, resourceNames }) {
@@ -769,7 +780,7 @@ function RouteTimeline({ order, route, executionSteps = [], carriers, resourceNa
   );
 }
 
-function OrderModal({ form, setForm, machines, products, orderParameterDefinitions, carriers, saving, onSubmit, onClose }) {
+function OrderModal({ form, setForm, machines, products, orderParameterDefinitions, carriers, saving, onSubmit, onClose, t, statusLabels }) {
   const availableCount = carriers.filter(
     (carrier) =>
       carrier.status === "available" &&
@@ -784,23 +795,23 @@ function OrderModal({ form, setForm, machines, products, orderParameterDefinitio
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-neutral-950/50 p-4" onMouseDown={onClose}>
       <div className="my-auto w-full max-w-2xl rounded-2xl bg-white shadow-2xl" onMouseDown={(event) => event.stopPropagation()}>
-        <div className="border-b border-neutral-100 px-6 py-5"><p className="text-xs font-semibold uppercase tracking-wider text-brand-primary">Produktionsplanung</p><h2 className="mt-1 text-xl font-bold text-neutral-900">{form.id ? "Auftrag bearbeiten" : "Neuen Auftrag anlegen"}</h2></div>
+        <div className="border-b border-neutral-100 px-6 py-5"><p className="text-xs font-semibold uppercase tracking-wider text-brand-primary">Produktionsplanung</p><h2 className="mt-1 text-xl font-bold text-neutral-900">{form.id ? t("orders.edit_order") : t("orders.create_order")}</h2></div>
         <form onSubmit={onSubmit} className="grid gap-4 p-6 sm:grid-cols-2">
-          <Field label="Auftragsname"><input required value={form.name} onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} className="form-input" /></Field>
-          <Field label="Startstation"><select required value={form.machine_id} onChange={(event) => setForm((current) => ({ ...current, machine_id: event.target.value }))} className="form-input"><option value="">Station wählen</option>{machines.map((machine) => <option key={machine.id} value={machine.id}>{machine.name}</option>)}</select></Field>
-          <Field label="Produkt"><select value={form.product_id} onChange={(event) => { const nextProduct = selectedProduct(products, event.target.value); const startMachine = startMachineForProduct(machines, nextProduct); setForm((current) => ({ ...current, product_id: event.target.value, machine_id: startMachine?.id || current.machine_id, operation: nextProduct?.name || current.operation, production_parameters: defaultParameters(orderParameterDefinitions) })); }} className="form-input"><option value="">Kein Produktstamm</option>{activeProducts.map((product) => <option key={product.id} value={product.id}>{product.part_no} · {product.name}</option>)}</select></Field>
-          <Field label="Produkt / Operation"><input required value={form.operation} onChange={(event) => setForm((current) => ({ ...current, operation: event.target.value }))} className="form-input" /></Field>
-          <Field label="Priorität"><input required type="number" min="1" value={form.priority} onChange={(event) => setForm((current) => ({ ...current, priority: event.target.value }))} className="form-input" /></Field>
-          <Field label={`Menge (max. ${availableCount})`}><input required type="number" min="1" max={availableCount} value={form.quantity} onChange={(event) => setForm((current) => ({ ...current, quantity: event.target.value }))} className="form-input" /></Field>
+          <Field label={t("orders.order_name")}><input required value={form.name} onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} className="form-input" /></Field>
+          <Field label={t("orders.start_station")}><select required value={form.machine_id} onChange={(event) => setForm((current) => ({ ...current, machine_id: event.target.value }))} className="form-input"><option value="">{t("orders.start_station_select")}</option>{machines.map((machine) => <option key={machine.id} value={machine.id}>{machine.name}</option>)}</select></Field>
+          <Field label={t("orders.product_label")}><select value={form.product_id} onChange={(event) => { const nextProduct = selectedProduct(products, event.target.value); const startMachine = startMachineForProduct(machines, nextProduct); setForm((current) => ({ ...current, product_id: event.target.value, machine_id: startMachine?.id || current.machine_id, operation: nextProduct?.name || current.operation, production_parameters: defaultParameters(orderParameterDefinitions) })); }} className="form-input"><option value="">{t("orders.product_select")}</option>{activeProducts.map((product) => <option key={product.id} value={product.id}>{product.part_no} · {product.name}</option>)}</select></Field>
+          <Field label={t("orders.product_operation")}><input required value={form.operation} onChange={(event) => setForm((current) => ({ ...current, operation: event.target.value }))} className="form-input" /></Field>
+          <Field label={t("orders.priority")}><input required type="number" min="1" value={form.priority} onChange={(event) => setForm((current) => ({ ...current, priority: event.target.value }))} className="form-input" /></Field>
+          <Field label={t("orders.quantity_label").replace("{count}", availableCount)}><input required type="number" min="1" max={availableCount} value={form.quantity} onChange={(event) => setForm((current) => ({ ...current, quantity: event.target.value }))} className="form-input" /></Field>
           {!form.id && parameterDefinitions.length > 0 && <section className="grid gap-3 rounded-lg border border-neutral-200 bg-neutral-50 p-4 sm:col-span-2 sm:grid-cols-4">
-            <p className="text-xs font-semibold uppercase tracking-wider text-neutral-500 sm:col-span-4">Produktkonfiguration</p>
+            <p className="text-xs font-semibold uppercase tracking-wider text-neutral-500 sm:col-span-4">{t("orders.product_config")}</p>
             {parameterDefinitions.map((definition) => <ParameterField key={definition.key} definition={definition} value={form.production_parameters[definition.key]} onChange={(value) => setForm((current) => ({ ...current, production_parameters: { ...current.production_parameters, [definition.key]: value } }))} />)}
           </section>}
-          {!form.id && parameterDefinitions.length === 0 && <p className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800 sm:col-span-2">Der Maschinenadapter liefert aktuell keine Auftragsparameter.</p>}
+          {!form.id && parameterDefinitions.length === 0 && <p className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800 sm:col-span-2">{t("orders.no_parameters")}</p>}
           {form.id && <Field label="Fertigmenge"><input required type="number" min="0" max={form.quantity} value={form.completed_quantity} onChange={(event) => setForm((current) => ({ ...current, completed_quantity: event.target.value }))} className="form-input" /></Field>}
-          {form.id && <Field label="Status"><select value={form.status} onChange={(event) => setForm((current) => ({ ...current, status: event.target.value }))} className="form-input">{Object.entries(STATUS_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></Field>}
-          {!form.id && <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900 sm:col-span-2"><strong>Wird automatisch angelegt:</strong> Ein Arbeitsplan ab der gewählten Startstation über alle nachfolgenden Stationen der Linie und {form.quantity} von {availableCount} verfügbaren Carriern.</div>}
-          <div className="flex justify-end gap-2 border-t border-neutral-100 pt-4 sm:col-span-2"><button type="button" onClick={onClose} className="rounded-lg px-4 py-2 text-sm font-medium text-neutral-600 hover:bg-neutral-100">Abbrechen</button><button disabled={saving} type="submit" className="rounded-lg bg-brand-primary px-5 py-2 text-sm font-semibold text-white disabled:opacity-50">{saving ? "Speichert..." : "Speichern"}</button></div>
+          {form.id && <Field label={t("orders.status")}><select value={form.status} onChange={(event) => setForm((current) => ({ ...current, status: event.target.value }))} className="form-input">{Object.entries(statusLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></Field>}
+          {!form.id && <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900 sm:col-span-2"><strong>{t("orders.auto_create")}</strong> {t("orders.auto_create_detail").replace("{quantity}", form.quantity).replace("{available}", availableCount)}</div>}
+          <div className="flex justify-end gap-2 border-t border-neutral-100 pt-4 sm:col-span-2"><button type="button" onClick={onClose} className="rounded-lg px-4 py-2 text-sm font-medium text-neutral-600 hover:bg-neutral-100">{t("common.cancel")}</button><button disabled={saving} type="submit" className="rounded-lg bg-brand-primary px-5 py-2 text-sm font-semibold text-white disabled:opacity-50">{saving ? t("orders.saving") : t("common.save")}</button></div>
         </form>
       </div>
     </div>

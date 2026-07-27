@@ -1,6 +1,6 @@
 # MES Production Control System – Roadmap 2026
 
-_Document version: v1.3 — July 2026_
+_Document version: v1.4 — July 2026_
 
 ---
 
@@ -19,14 +19,15 @@ A professional, scalable Manufacturing Execution System that connects machines v
 
 ## 2. Phases & Milestones
 
-### Current Progress - 2026-07-24 CEST
+### Current Progress - 2026-07-27 CEST
 
 | Bewertung | Rechnung | Fortschritt |
-|---|---|---:|---:|
-| Nur vollständig abgeschlossene Aufgaben | 45 von 48 | **93,75 %** |
-| Teilaufgaben zu jeweils 50 % angerechnet | 46 von 48 | **95,8 %** |
+|---|---:|---:|---:|
+| Nur vollständig abgeschlossene Aufgaben (Phasen 1–7) | 47 von 48 | **97,92 %** |
+| Teilaufgaben zu jeweils 50 % angerechnet | 47,5 von 48 | **98,96 %** |
+| Phase 8 — Machine Profile System | 7 von 8 | **87,5 %** |
 
-Aktueller Planungswert: **rund 95 % der Gesamtroadmap**.
+Aktueller Planungswert: **~98 % der Gesamtroadmap (Phasen 1–7); Phase 8 im Aufbau**.
 
 #### Zusammenfassung Phase by Phase
 
@@ -39,10 +40,17 @@ Aktueller Planungswert: **rund 95 % der Gesamtroadmap**.
 | Phase 5 — Dashboard Intelligence | ✅ fertig (WebSocket-KPI-Stream abgeschlossen) | **100 %** |
 | Phase 6 — Reliability & Observability | 🟡 Test-/E2E-Infrastruktur abgeschlossen; Coverage-Ziel formal offen | **92 %** |
 | Phase 7 — Notifications & Advanced Features | ✅ fertig | **100 %** |
+| Phase 8 — Machine Profile System | 🟡 Frontend-Features und NovaPress-Konvertierung abgeschlossen | **87 %** |
 
 #### Wichtige Errungenschaften seit letzter Roadmap-Aktualisierung
 
-- **FIFO-Queue pro Station**: `requestMesData` legt Carrier bei besetzter Station in eine `waitingQueue[]`; nach Fertigstellung/Abweisung/Timeout wird der nächste Carrier mittels `processNextInQueue()` automatisch nachgezogen. Explizite Logs (`in die Queue Position N`, `naechster Carrier X aus der Queue (N verbleibend)`) machen die Warteschlange sichtbar. Queue wird bei `xCmdReset` geleert.
+- **Maschinen-Profil-System (Phase 8)**: Neues, versioniertes Profilsystem für Maschinen-Stations-Hierarchien. Profile werden in `/machine-profiles` als versionierte Dokumente verwaltet mit Status `draft → structurally_valid → live_validated → active`. Jedes Profil enthält Stammdaten, OPC-UA-Verbindungsparameter, Stationsbaum, Routing und Signalschemata.
+- **Profil-Wizard im Frontend**: Schrittweiser Assistent (6 Schritte: Stammdaten → OPC UA → Stationen → Routing → Signale → Abschluss) mit Inline-Editoren für Stationen und Signale, OPC-UA-Browser-Anbindung und Validierungs-/Aktivierungsfunktionen. Admins sehen immer Vollzugriff ("Steuern") unabhängig vom Betriebsmodus.
+- **Uncommissionierte Profile in Maschinentabelle**: Profile, die noch keiner realen Ressource zugeordnet sind, werden als "Inaktiv"-Einträge direkt in die Haupttabelle gemerged und können dort bearbeitet oder gelöscht werden.
+- **Baumansicht mit Unicode-Connectoren**: `flattenEquipmentTree` liefert `_treeConnectors[]` und `_isLastChild` für die Darstellung von `│`, `├`, `└`-Linien in der Maschinen-Stations-Hierarchie.
+- **Bearbeiten springt direkt in Stations-Editor**: Klick auf "Bearbeiten" einer Station im Maschinenbaum öffnet den Wizard direkt in Schritt 3 (Stationen) mit geöffnetem Inline-Editor für genau diese Station.
+- **Tab "Stationen" → "Maschinen" umbenannt**: i18n-Locales (DE/EN) und PageInfo-Hilfetexte aktualisiert.
+- **NovaPress NX-9000 konvertiert**: Erstes produktives Maschinenprofil angelegt (R70 NovaPress NX-9000 mit 3 Sub-Stationen R71–R73 inkl. OPC-UA-Signale und Routing).
 - **Polling erkennt fallende xStart-Flanke**: Die OPC UA Polling-Schleife ruft jetzt auch `acknowledge` auf, wenn `xStart` von `true` auf `false` wechselt. Damit wird das `processing`-Set einer Station immer korrekt freigegeben, auch wenn die Subscription den Ablauf verpasst.
 - **MES-Timeout zählt als Rejection**: Der 15s-Timeout im Testserver inkrementiert jetzt `rejectCounts`. Nach 3 Timeouts pro Carrier stoppt die Station (`xAuto=false, xErrL0=true`). Die Stuck-Erkennung greift somit auch bei Verbindungsabbrüchen.
 - **ConnectionRecoveryService**: Neues Modul in `src/opcua/connection-recovery.service.ts`. Erzeugt `critical`-Alarm bei OPC UA Disconnect während aktiver Produktion. Nach Reconnect/Startup: Carrier-Positionsabgleich via OPC UA `readNode`, Step-Korrektur wenn Carrier an einer Station gefunden wird.
@@ -202,6 +210,25 @@ Aktueller Planungswert: **rund 95 % der Gesamtroadmap**.
 
 ---
 
+### Phase 8 — Machine Profile System _(Weeks 29–32)_
+
+**Goal:** Versioniertes Maschinen-Profil-System für OPC-UA-Konfiguration, Stations-Hierarchie, Routing und Signalschemata. Ersetzt die statische `/machines`-Tabelle durch profilgesteuerte Maschinen.
+
+| # | Task | Priority | Effort | Status |
+|---|------|----------|--------|--------|
+| 8.1 | Backend: `/machine-profiles` CRUD-API mit Versionierung, Aktivierung/Deaktivierung, Validierung und Live-Verifikation | Critical | 3–5 days | ✅ complete — Versionierte Dokumente mit Status `draft → structurally_valid → live_validated → active`. PATCH erzeugt neue Version, POST aktiviert/deaktiviert. Validierung prüft required fields + Signal-Referenzen; Live-Verifikation liest OPC-UA-Nodes und gleicht mit Profil ab. |
+| 8.2 | Frontend: `MachineProfileWizard` mit 6-Schritte-Assistent (Stammdaten, OPC UA, Stationen, Routing, Signale, Abschluss) | Critical | 2–3 days | ✅ complete — Inline-Editoren für Stationen und Signale, OPC-UA-Browser-Anbindung, Validierungs-/Aktivierungs-Dialog. `editProfileId`-Prop erlaubt direktes Editieren eines bestehenden Profils ohne Profilauswahl. |
+| 8.3 | Profilgesteuerte Maschinentabelle: Uncommissionierte Profile als "Inaktiv"-Einträge gemerged | High | 1 day | ✅ complete — `/machine-profiles`-Liste wird parallel geladen; nicht in `/machines` vorhandene Profile werden als `_isUncommissioned`-Einträge mit Badge "Inaktiv" eingeblendet und können bearbeitet/gelöscht werden. |
+| 8.4 | Baumansicht mit Unicode-Connectoren für Stations-Hierarchie | High | 1 day | ✅ complete — `flattenEquipmentTree` liefert `_treeConnectors[]`/`_isLastChild`; Tabelle zeigt `│`/`├`/`└`-Linien. |
+| 8.5 | Stations-Editor direkt aus Maschinentabelle: Bearbeiten-Button einer Station öffnet Wizard mit geöffnetem Inline-Editor | High | 1 day | ✅ complete — `editStationResourceId`-Prop; Wizard springt zu Schritt 3 (Stationen) und öffnet den Editor für die spezifische Station. |
+| 8.6 | Admin-Vollzugriff: Admins sehen immer "Steuern / Vollzugriff" unabhängig vom Betriebsmodus | Medium | 2 hrs | ✅ complete — `MasterDataStep` zeigt bei `disabled=false` immer `control`-Modus. |
+| 8.7 | Tab "Stationen" → "Maschinen" umbenannt (i18n DE/EN) | Low | 30 min | ✅ complete — `nav.stations`, `machines.title`/`search`/`no_results` und PageInfo-Hilfetexte aktualisiert. |
+| 8.8 | Erste produktive Profile anlegen: NovaPress NX-9000 und ggf. weitere | High | 2–3 hrs | 🟡 NovaPress NX-9000 (R70–R73) angelegt — weitere Altanlagen-Konvertierungen offen. |
+
+**Exit Criteria:** ⚠️ Profilsystem technisch vollständig. NovaPress NX-9000 als erster produktiver Profileintrag konvertiert. Ausstehend: Konvertierung weiterer Altanlagen, Integration mit Shopfloor-Routing und OPC-UA-Aktivierungstests gegen reale SPS.
+
+---
+
 ## 3. Technology Stack Summary
 
 | Layer | Current Stack | Planned Changes |
@@ -340,4 +367,4 @@ docs/
 ---
 
 _Roadmap owner: mes-app team_
-_Last updated: 2026-07-24 CEST (v1.3) — FIFO-Queue pro Station, Polling-fallende-Flanke, MES-Timeout-Rejection, ConnectionRecoveryService. Rest: Coverage-Ziel (Phase 6), echte SPS-Anbindung._
+_Last updated: 2026-07-27 CEST (v1.4) — Maschinen-Profil-System (Phase 8), NovaPress NX-9000 konvertiert, Wizard mit Stations-Editor-Sprung. Rest: Coverage-Ziel (Phase 6), echte SPS-Anbindung, Altanlagen-Konvertierung (Phase 8.8)._

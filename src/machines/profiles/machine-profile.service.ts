@@ -1,5 +1,7 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit, Optional } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { InjectRepository } from '@nestjs/typeorm';
+import type { Repository } from 'typeorm';
 import { readFileSync } from 'node:fs';
 import { resolve, relative, isAbsolute, normalize, sep } from 'node:path';
 import {
@@ -34,6 +36,7 @@ import {
   MachineProfileParseError,
 } from './machine-profile.errors';
 import { ROUTING_OUTCOMES } from '../../orders/routing-outcome';
+import { MachineProfileEntity } from './machine-profile.entity';
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -41,7 +44,8 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function getNodeErrorCode(error: unknown): string | undefined {
   if (!isRecord(error)) return undefined;
-  return typeof error.code === 'string' ? error.code : undefined;
+  if (typeof error.code === 'string') return error.code;
+  return getNodeErrorCode(error.driverError);
 }
 
 function isString(value: unknown): value is string {
@@ -331,6 +335,12 @@ function isMachineStationProfile(value: unknown): value is MachineStationProfile
     return false;
   }
   if (value.metadata !== undefined && !isStringRecord(value.metadata)) return false;
+  if (
+    value.connection !== undefined &&
+    !isMachineConnectionProfile(value.connection)
+  ) {
+    return false;
+  }
   return true;
 }
 
@@ -382,12 +392,16 @@ function isMachineConnectionProfile(value: unknown): value is MachineConnectionP
   return true;
 }
 
-function isMachineProfile(value: unknown): value is MachineProfile {
+export function isMachineProfile(value: unknown): value is MachineProfile {
   if (!isRecord(value)) return false;
   if (!isString(value.profileVersion)) return false;
   if (!isString(value.machineId)) return false;
   if (!isString(value.displayName)) return false;
   if (value.description !== undefined && !isString(value.description)) return false;
+  if (value.manufacturer !== undefined && !isString(value.manufacturer)) return false;
+  if (value.model !== undefined && !isString(value.model)) return false;
+  if (value.machineVersion !== undefined && !isString(value.machineVersion)) return false;
+  if (value.location !== undefined && !isString(value.location)) return false;
   if (!isInAllowedValues(value.transport, VALID_TRANSPORT_VALUES)) return false;
   if (!isInAllowedValues(value.operatingMode, VALID_OPERATING_MODE_VALUES)) return false;
   if (!isMachineConnectionProfile(value.connection)) return false;
@@ -441,29 +455,41 @@ function hasStationCapability(
   return false;
 }
 
-function machineProfileSemanticErrors(profile: MachineProfile): string[] {
+function machineConnectionSemanticErrors(
+  connection: MachineConnectionProfile,
+  context: string,
+): string[] {
   const errors: string[] = [];
-  const { security, authentication, reconnect } = profile.connection;
+  const { security, authentication, reconnect } = connection;
+  if (!connection.endpointUrl.trim().startsWith('opc.tcp://')) {
+    errors.push(`${context} endpointUrl must start with opc.tcp://`);
+  }
+  if (!connection.applicationName.trim()) {
+    errors.push(`${context} applicationName must not be empty`);
+  }
+  if (connection.connectionTimeoutMs <= 0 || connection.sessionTimeoutMs <= 0) {
+    errors.push(`${context} connection and session timeouts must be positive`);
+  }
   if ((security.mode === 'None') !== (security.policy === 'None')) {
-    errors.push('OPC UA security mode and policy must both be None or both be secure');
+    errors.push(`${context} security mode and policy must both be None or both be secure`);
   }
   if (
     security.mode !== 'None' &&
     (!security.certificatePathEnv || !security.privateKeyPathEnv)
   ) {
-    errors.push('Secure OPC UA connections require certificatePathEnv and privateKeyPathEnv');
+    errors.push(`${context} secure connection requires certificatePathEnv and privateKeyPathEnv`);
   }
   if (
     authentication.type === 'username' &&
     (!authentication.usernameEnv || !authentication.passwordEnv)
   ) {
-    errors.push('Username authentication requires usernameEnv and passwordEnv');
+    errors.push(`${context} username authentication requires usernameEnv and passwordEnv`);
   }
   if (
     authentication.type === 'certificate' &&
     (!authentication.certificatePathEnv || !security.privateKeyPathEnv)
   ) {
-    errors.push('Certificate authentication requires certificatePathEnv and privateKeyPathEnv');
+    errors.push(`${context} certificate authentication requires certificatePathEnv and privateKeyPathEnv`);
   }
   if (
     reconnect.initialDelayMs < 0 ||
@@ -472,10 +498,29 @@ function machineProfileSemanticErrors(profile: MachineProfile): string[] {
     (reconnect.maxAttempts !== undefined &&
       (!Number.isInteger(reconnect.maxAttempts) || reconnect.maxAttempts < 0))
   ) {
-    errors.push('Reconnect settings are invalid');
+    errors.push(`${context} reconnect settings are invalid`);
+  }
+  return errors;
+}
+
+export function machineProfileSemanticErrors(profile: MachineProfile): string[] {
+  const errors: string[] = [];
+  if (!profile.machineId.trim()) errors.push('machineId must not be empty');
+  if (!profile.displayName.trim()) errors.push('displayName must not be empty');
+  if (profile.stations.some((station) => !station.connection)) {
+    errors.push(...machineConnectionSemanticErrors(profile.connection, 'Default OPC UA'));
+  }
+  if (profile.namespaces.length === 0) {
+    errors.push('At least one OPC UA namespace is required');
+  }
+  if (profile.stations.length === 0) {
+    errors.push('At least one station is required');
   }
   const namespaceKeys = new Set<string>();
   for (const namespace of profile.namespaces) {
+    if (!namespace.key.trim() || !namespace.uri.trim()) {
+      errors.push('Namespace key and URI must not be empty');
+    }
     if (namespaceKeys.has(namespace.key)) {
       errors.push(`Duplicate namespace key ${namespace.key}`);
     }
@@ -539,6 +584,17 @@ function machineProfileSemanticErrors(profile: MachineProfile): string[] {
   }
 
   for (const station of profile.stations) {
+    if (station.connection) {
+      errors.push(
+        ...machineConnectionSemanticErrors(
+          station.connection,
+          `Station ${station.stationId} OPC UA`,
+        ),
+      );
+    }
+    if (!station.stationId.trim() || !station.displayName.trim()) {
+      errors.push('Station ID and display name must not be empty');
+    }
     if (stationIds.has(station.stationId)) {
       errors.push(`Duplicate stationId ${station.stationId}`);
     }
@@ -553,23 +609,38 @@ function machineProfileSemanticErrors(profile: MachineProfile): string[] {
     ) {
       errors.push(`Duplicate capability in ${station.stationId}`);
     }
-    if (
-      profile.operatingMode === 'control' &&
-      hasStationCapability(station, 'routing') &&
-      station.routing?.enabled !== false
-    ) {
-      if (!station.routing) {
-        errors.push(`Station ${station.stationId} requires routing configuration`);
-      } else if (routeSequences.has(station.routing.sequence)) {
+    if (station.routing?.enabled !== false && station.routing) {
+      if (!station.enabled) {
+        errors.push(`Routing station ${station.stationId} must be enabled`);
+      }
+      if (!hasStationCapability(station, 'routing')) {
+        errors.push(
+          `Routing station ${station.stationId} requires routing capability`,
+        );
+      }
+      if (routeSequences.has(station.routing.sequence)) {
         errors.push(`Duplicate routing sequence ${station.routing.sequence}`);
       } else {
         routeSequences.add(station.routing.sequence);
+      }
+    } else if (
+      profile.operatingMode === 'control' &&
+      hasStationCapability(station, 'routing') &&
+      station.enabled
+    ) {
+      if (!station.routing) {
+        errors.push(`Station ${station.stationId} requires routing configuration`);
       }
     }
 
     const signalKeys = new Set<string>();
     const roles = new Map<MachineSignalRole, number>();
     for (const signal of station.signals) {
+      if (!signal.key.trim() || !signal.identifier.trim()) {
+        errors.push(
+          `Signal key and identifier must not be empty in ${station.stationId}`,
+        );
+      }
       if (signalKeys.has(signal.key)) {
         errors.push(`Duplicate signal key ${signal.key} in ${station.stationId}`);
       }
@@ -813,10 +884,71 @@ function resolveProfilePath(profilePath: string, baseDirectory?: string): string
 }
 
 @Injectable()
-export class MachineProfileService {
+export class MachineProfileService implements OnModuleInit {
+  private readonly logger = new Logger(MachineProfileService.name);
   private loadedProfile?: MachineProfile;
+  private source: 'database' | 'legacy_file' | undefined;
 
-  constructor(private readonly configService: ConfigService) {}
+  constructor(
+    private readonly configService: ConfigService,
+    @Optional()
+    @InjectRepository(MachineProfileEntity)
+    private readonly profileVersions?: Repository<MachineProfileEntity>,
+  ) {}
+
+  async onModuleInit(): Promise<void> {
+    if (!this.profileVersions) return;
+    let active: MachineProfileEntity | null;
+    try {
+      active = await this.profileVersions.findOne({
+        where: { active: true },
+        order: { created_at: 'DESC' },
+      });
+    } catch (error) {
+      if (getNodeErrorCode(error) === '42P01') {
+        this.logger.warn(
+          'machine_profile_versions is not installed; using MACHINE_PROFILE_PATH until the machine-profile migration is applied',
+        );
+        return;
+      }
+      throw error;
+    }
+    if (!active) return;
+
+    const validation = this.validateDocument(active.document);
+    if (!validation.valid || !validation.profile) {
+      throw new MachineProfileParseError(
+        `Active persisted machine profile is invalid: ${validation.errors.join('; ')}`,
+        `database:${active.profile_id}:${active.version}`,
+      );
+    }
+    this.loadedProfile = validation.profile;
+    this.source = 'database';
+    this.logger.log(
+      `Loaded active persisted machine profile ${active.machine_id} version ${active.version}`,
+    );
+  }
+
+  validateDocument(value: unknown): {
+    valid: boolean;
+    errors: string[];
+    profile?: MachineProfile;
+  } {
+    if (!isMachineProfile(value)) {
+      return {
+        valid: false,
+        errors: ['Machine profile does not match the expected structure'],
+      };
+    }
+    const errors = machineProfileSemanticErrors(value);
+    return errors.length
+      ? { valid: false, errors, profile: value }
+      : { valid: true, errors: [], profile: value };
+  }
+
+  getSource(): 'database' | 'legacy_file' | undefined {
+    return this.source;
+  }
 
   loadConfiguredProfile(baseDirectory?: string): MachineProfile {
     const rawValue: unknown = this.configService.get(MACHINE_PROFILE_PATH_CONFIG_KEY);
@@ -934,16 +1066,17 @@ export class MachineProfileService {
       );
     }
 
-    const semanticErrors = machineProfileSemanticErrors(parsed);
-    if (semanticErrors.length) {
+    const validation = this.validateDocument(parsed);
+    if (!validation.valid || !validation.profile) {
       throw new MachineProfileParseError(
-        `Machine profile semantic validation failed: ${semanticErrors.join('; ')}`,
+        `Machine profile validation failed: ${validation.errors.join('; ')}`,
         resolvedPath,
       );
     }
 
-    this.loadedProfile = parsed;
-    return parsed;
+    this.loadedProfile = validation.profile;
+    this.source = 'legacy_file';
+    return validation.profile;
   }
 
   getProfile(): MachineProfile {

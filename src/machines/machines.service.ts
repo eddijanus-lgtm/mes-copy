@@ -81,7 +81,7 @@ export class MachinesService {
     const machine = await this.findOne(id);
     if (machine.profile_managed) {
       throw new ConflictException(
-        'Profile-managed stations must be changed in MACHINE_PROFILE_PATH',
+        'Profilverwaltete Stationen müssen in der Maschinenkonfiguration geändert werden',
       );
     }
     Object.assign(machine, dto);
@@ -93,7 +93,7 @@ export class MachinesService {
     const machine = await this.findOne(id);
     if (machine.profile_managed) {
       throw new ConflictException(
-        'Profile-managed stations must be removed from MACHINE_PROFILE_PATH',
+        'Profilverwaltete Stationen werden über eine neue Profilversion deaktiviert und nicht direkt gelöscht',
       );
     }
     const result = await this.machinesRepo.delete(id);

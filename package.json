@@ -21,6 +21,7 @@
     "seed:test-machine-alarms": "node test-machines/opcua-simulator/seed-alarms.js",
     "phase3:apply": "node tools/phase3-apply.js",
     "migrate:oee-nullable": "node tools/migrate-oee-nullable.js",
+    "migrate:machine-profiles": "node tools/migrate-machine-profiles.js",
     "benchmark:timescale": "node tools/benchmark-write-throughput.js",
     "lint": "eslint \"{src,apps,libs,test}/**/*.ts\" --fix",
     "test": "jest",

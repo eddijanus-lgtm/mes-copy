@@ -159,12 +159,12 @@
 }
 .orders-pagination {
   display: flex; min-height: 48px; align-items: center; justify-content: space-between;
-  border-top: 1px solid var(--wara-border); padding: 0 14px; color: #717a85; font-size: .67rem;
+  border-top: 1px solid var(--wara-border); padding: 0 14px; color: var(--wara-text-muted); font-size: .67rem;
 }
 .orders-pagination > div { display: flex; align-items: center; gap: 5px; }
 .orders-pagination button, .orders-pagination > div > span {
   display: inline-grid; width: 27px; height: 27px; place-items: center;
-  border: 1px solid var(--wara-border); color: #757e88; background: #fff;
+  border: 1px solid var(--wara-border); color: var(--wara-text-muted); background: var(--wara-surface);
 }
 .orders-pagination > div > span {
   border-color: var(--wara-accent); border-radius: 5px; color: var(--wara-accent-dark);
