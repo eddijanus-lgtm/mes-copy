@@ -11,6 +11,7 @@ import LoginPage from "./pages/Login.jsx";
 import UsersPage from "./pages/Users.jsx";
 import CarriersPage from "./pages/Carriers.jsx";
 import OrdersPage from "./pages/Orders.jsx";
+import RoutesPage from "./pages/Routes.jsx";
 import NotificationsPage from "./pages/Notifications.jsx";
 import ShiftsPage from "./pages/Shifts.jsx";
 import { useAuth } from "./providers/AuthProvider.jsx";
@@ -36,6 +37,7 @@ function ProtectedApp() {
           <Route path="/" element={<Dashboard />} />
           <Route path="machines/*" element={<MachinesPage />} />
           <Route path="orders/*" element={<OrdersPage />} />
+          <Route path="routes/*" element={<RoutesPage />} />
           <Route path="alarms/*" element={<AlarmsPage />} />
           <Route path="traces/*" element={<TracesPage />} />
           <Route path="shopfloor/*" element={<ShopfloorPage />} />

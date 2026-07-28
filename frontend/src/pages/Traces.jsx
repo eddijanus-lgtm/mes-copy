@@ -103,7 +103,7 @@ export default function TracesPage() {
           </div>
           <button
             onClick={() => { setKeyFilter(""); setMinValue(""); setMaxValue(""); }}
-            className="px-3 py-2 bg-neutral-100 text-neutral-600 rounded-md text-xs font-semibold hover:bg-neutral-200 transition-colors"
+            className="w-24 h-10 bg-neutral-100 text-neutral-600 rounded-md text-xs font-semibold hover:bg-neutral-200 transition-colors"
           >
             {t("traces.reset")}
           </button>

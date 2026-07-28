@@ -3,9 +3,13 @@ import { api } from "../api/client.js";
 import PageInfo from "../components/PageInfo.jsx";
 import { useToasts } from "../providers/ToastProvider.jsx";
 import { useTranslation } from "../i18n/I18nProvider.jsx";
+import { useAuth } from "../providers/AuthProvider.jsx";
+import { hasRole, ROLES } from "../utils/roles.js";
 
 export default function AlarmsPage() {
   const { t } = useTranslation();
+  const { user } = useAuth();
+  const canDelete = hasRole(user, ROLES.ADMIN);
   const [alarms, setAlarms] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState("all");
@@ -84,7 +88,7 @@ export default function AlarmsPage() {
 
   async function handleRowDelete(id) {
     try {
-      await api.delete(`/alarms/bulk`, { data: [id] });
+      await api.del(`/alarms/${id}`);
       setAlarms((prev) => prev.filter((a) => a.id !== id));
       setSelected((prev) => { const next = { ...prev }; delete next[id]; return next; });
     } catch {
@@ -115,7 +119,7 @@ export default function AlarmsPage() {
     setBulkLoading(true);
     const ids = Object.keys(selected);
     try {
-      await api.delete("/alarms/bulk", { data: ids });
+      await api.del("/alarms/bulk", ids);
       setAlarms((prev) => prev.filter((a) => !ids.includes(a.id)));
       setSelected({});
       toast.addToast({ type: "info", message: t("alarms.bulk_delete_toast") });
@@ -151,7 +155,7 @@ export default function AlarmsPage() {
   }
 
   const canBulkAck = selCount > 0 && filtered.some((a) => !a.acknowledged);
-  const canBulkDelete = selCount > 0;
+  const canBulkDelete = canDelete && selCount > 0;
 
   return (
     <div className="mes-page min-h-screen bg-neutral-50">
@@ -287,14 +291,14 @@ export default function AlarmsPage() {
                       )}
                     </td>
                     <td className="px-4 py-3.5 text-right">
-                      <button
+                      {canDelete && <button
                         type="button"
                         onClick={() => handleRowDelete(a.id)}
                         className="w-8 h-8 flex items-center justify-center rounded-full text-neutral-400 hover:text-status-error hover:bg-status-error-bg transition-colors"
                         aria-label={t("common.delete")}
                       >
                         ✕
-                      </button>
+                      </button>}
                     </td>
                   </tr>
                 ))}

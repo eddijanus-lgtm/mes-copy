@@ -844,7 +844,7 @@ function routeStateFromExecution(state) {
 function executionForRouteStep(executionSteps, routeStep) {
   const matching = executionSteps.filter((entry) => (
     (entry.step_no != null && Number(entry.step_no) === Number(routeStep.step_no))
-    || (entry.resource_id != null && Number(entry.resource_id) === Number(routeStep.resource_id))
+    || (entry.step_no == null && entry.resource_id != null && Number(entry.resource_id) === Number(routeStep.resource_id))
   ));
   return matching.find(isActiveExecutionStep) || matching.at(-1) || null;
 }

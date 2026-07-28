@@ -23,6 +23,7 @@ const navGroups = [
     items: [
       { path: "/", label: "nav.dashboard", icon: SquaresFourIcon },
       { path: "/machines", label: "nav.stations", icon: GearSixIcon },
+      { path: "/routes", label: "nav.routes", icon: ClipboardTextIcon },
       { path: "/orders", label: "nav.orders", icon: ClipboardTextIcon },
       { path: "/shifts", label: "nav.shifts", icon: TimerIcon },
     ],
