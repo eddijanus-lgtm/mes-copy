@@ -12,6 +12,9 @@ export class ProductEntity {
   @Column()
   name: string;
 
+  @Column({ type: 'varchar', nullable: true })
+  profile_machine_id?: string | null;
+
   @Column({ nullable: true })
   description?: string;
 
