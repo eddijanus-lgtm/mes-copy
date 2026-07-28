@@ -2,11 +2,15 @@ import React, { lazy, Suspense, useEffect } from "react";
 import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import Sidebar from "./components/Sidebar.jsx";
 import SystemStatus from "./components/SystemStatus.jsx";
+import HaltStoppOverlay from "./components/HaltStoppOverlay.jsx";
 import { useAuth } from "./providers/AuthProvider.jsx";
 import { hasRole, ROLES } from "./utils/roles.js";
 import { I18nProvider } from "./i18n/I18nProvider.jsx";
 import { useSmartphoneMode, useTabletMode } from "./hooks/useTabletMode.js";
-import { useDosKeyboardShortcut } from "./hooks/useDosEasterEgg.js";
+import {
+  useDosKeyboardShortcut,
+  useHaltStoppEasterEgg,
+} from "./hooks/useDosEasterEgg.js";
 
 const Dashboard = lazy(() => import("./pages/Dashboard.jsx"));
 const MachinesPage = lazy(() => import("./pages/Machines.jsx"));
@@ -68,6 +72,7 @@ function ProtectedApp() {
   const isTabletMode = useTabletMode();
   const isSmartphoneMode = useSmartphoneMode();
   const isTouchDashboard = (isTabletMode || isSmartphoneMode) && location.pathname === "/";
+  const haltStopp = useHaltStoppEasterEgg(isAuthenticated);
   useDosKeyboardShortcut(isAuthenticated);
   useTabletDashboardViewportLock(isAuthenticated && isTouchDashboard);
 
@@ -93,6 +98,7 @@ function ProtectedApp() {
           </Routes>
         </Suspense>
       </main>
+      <HaltStoppOverlay isOpen={haltStopp.isOpen} onClose={haltStopp.close} />
     </div>
   );
 }
