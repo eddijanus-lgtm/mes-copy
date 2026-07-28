@@ -208,11 +208,9 @@ export class OpcUaMachineAdapter implements MachineAdapter {
   async readRecoverySnapshot(
     resourceId: number,
   ): Promise<MachineRecoverySnapshot> {
-    const [carrierNumber, requestActive, processBusy] = await Promise.all([
-      this.readRole(resourceId, 'carrierId'),
-      this.readRole(resourceId, 'workRequest'),
-      this.readRole(resourceId, 'processActive'),
-    ]);
+    const carrierNumber = await this.readRole(resourceId, 'carrierId');
+    const requestActive = await this.readRole(resourceId, 'workRequest');
+    const processBusy = await this.readRole(resourceId, 'processActive');
     return {
       carrierNumber: Number(carrierNumber),
       requestActive: Boolean(requestActive),

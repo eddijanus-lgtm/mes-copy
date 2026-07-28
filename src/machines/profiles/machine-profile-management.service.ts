@@ -5,7 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, Not, Repository } from 'typeorm';
+import { DataSource, In, Not, Repository } from 'typeorm';
 import { MachineEntity } from '../machine.entity';
 import type {
   MachineProfile,
@@ -64,6 +64,30 @@ export class MachineProfileManagementService {
     if (!items.length)
       throw new NotFoundException('Maschinenprofil nicht gefunden');
     return { items: items.map((entry) => this.present(entry)) };
+  }
+
+  async remove(profileId: string) {
+    const versions = await this.versions.find({ where: { profile_id: profileId } });
+    if (!versions.length)
+      throw new NotFoundException('Maschinenprofil nicht gefunden');
+    const resourceIds = [
+      ...new Set(
+        versions.flatMap((version) =>
+          this.documentStations(version.document).map(
+            (station) => station.resourceId,
+          ),
+        ),
+      ),
+    ];
+    await this.dataSource.transaction(async (manager) => {
+      if (resourceIds.length) {
+        await manager.delete(MachineEntity, {
+          resource_id: In(resourceIds),
+          profile_managed: true,
+        });
+      }
+      await manager.delete(MachineProfileEntity, { profile_id: profileId });
+    });
   }
 
   async suggestions(displayName?: string) {

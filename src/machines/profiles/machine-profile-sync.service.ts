@@ -76,8 +76,7 @@ export class MachineProfileSyncService implements OnApplicationBootstrap {
         route_sequence: station.routing?.sequence ?? null,
         operation_no: station.routing?.operationNo ?? null,
         dashboard_image: station.metadata?.dashboardImage ?? null,
-        opcua_endpoint_url:
-          station.connection?.endpointUrl ?? profile.connection?.endpointUrl ?? null,
+        opcua_endpoint_url: station.connection?.endpointUrl ?? null,
         opcua_node_prefix: null,
       };
       if (existing) {

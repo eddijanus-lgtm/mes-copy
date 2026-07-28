@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   BadGatewayException,
   Injectable,
   NotFoundException,
@@ -11,6 +12,10 @@ import type {
   MachineSignalProfile,
   MachineStationProfile,
 } from './machine-profile.types';
+import {
+  isMachineConnectionProfile,
+  machineConnectionSemanticErrors,
+} from './machine-profile.service';
 
 const opcua = require('node-opcua');
 
@@ -31,6 +36,10 @@ const BUILTIN_DATA_TYPES: Record<number, string> = {
 export class OpcUaCommissioningService {
   constructor(private readonly config: ConfigService) {}
 
+  async testConnectionConfig(rawConnection: unknown) {
+    return this.connectionDetails(this.connection(rawConnection));
+  }
+
   async testConnection(profile: MachineProfile, stationId?: string) {
     if (stationId) {
       return this.testStationConnection(
@@ -38,7 +47,9 @@ export class OpcUaCommissioningService {
         this.station(profile, stationId),
       );
     }
-    const enabledStations = profile.stations.filter((station) => station.enabled);
+    const enabledStations = profile.stations.filter(
+      (station) => station.enabled,
+    );
     if (enabledStations.length === 0) {
       return {
         valid: false,
@@ -50,12 +61,12 @@ export class OpcUaCommissioningService {
     }
     const stations = await Promise.all(
       enabledStations.map(async (station) => {
-          try {
-            return await this.testStationConnection(profile, station);
-          } catch (error) {
-            return this.stationFailure(profile, station, error);
-          }
-        }),
+        try {
+          return await this.testStationConnection(profile, station);
+        } catch (error) {
+          return this.stationFailure(profile, station, error);
+        }
+      }),
     );
     return {
       valid: stations.every((station) => station.valid),
@@ -70,10 +81,14 @@ export class OpcUaCommissioningService {
     station: MachineStationProfile,
   ) {
     const connection = station.connection || profile.connection;
+    const result = await this.connectionDetails(connection);
+    return { ...result, stationId: station.stationId };
+  }
+
+  private async connectionDetails(connection: MachineConnectionProfile) {
     return this.readOnlySession(connection, async (session, endpoints) => {
       const namespaces = await this.namespaceArray(session);
       return {
-        stationId: station.stationId,
         endpoint: this.safeEndpoint(connection.endpointUrl),
         valid: true,
         readOnly: true,
@@ -201,7 +216,143 @@ export class OpcUaCommissioningService {
   ) {
     const station = stationId ? this.station(profile, stationId) : undefined;
     const connection = station?.connection || profile.connection;
+    const result = await this.browseWithConnection(
+      connection,
+      nodeId,
+      maxNodes,
+    );
+    return { ...(station ? { stationId: station.stationId } : {}), ...result };
+  }
+
+  async browseConnection(
+    rawConnection: unknown,
+    nodeId = 'i=85',
+    maxNodes = 200,
+  ) {
+    return this.browseWithConnection(
+      this.connection(rawConnection),
+      nodeId,
+      maxNodes,
+    );
+  }
+
+  async discoverSignals(
+    rawConnection: unknown,
+    rootNodeId = 'i=85',
+    maxDepth = 6,
+    maxNodes = 2000,
+  ) {
+    const connection = this.connection(rawConnection);
     return this.readOnlySession(connection, async (session) => {
+      const namespaceArray = await this.namespaceArray(session);
+      const queue = [{ nodeId: rootNodeId, path: '', depth: 0 }];
+      const siemensNamespaceIndex = namespaceArray.indexOf(
+        'http://www.siemens.com/simatic-s7-opcua',
+      );
+      if (siemensNamespaceIndex >= 0) {
+        queue.push({
+          nodeId: `ns=${siemensNamespaceIndex};s="dbProcessData"`,
+          path: 'dbProcessData',
+          depth: 0,
+        });
+      }
+      const visited = new Set<string>();
+      const signals: Record<string, unknown>[] = [];
+      const unmappedSignals: Record<string, unknown>[] = [];
+      let scannedNodes = 0;
+      let candidateVariables = 0;
+
+      while (queue.length && scannedNodes < maxNodes) {
+        const current = queue.shift()!;
+        if (visited.has(current.nodeId) || current.depth >= maxDepth) continue;
+        visited.add(current.nodeId);
+        const result = await session.browse({
+          nodeId: current.nodeId,
+          browseDirection: opcua.BrowseDirection.Forward,
+          includeSubtypes: true,
+          nodeClassMask: 0,
+          resultMask: opcua.makeResultMask(
+            'ReferenceType | IsForward | BrowseName | DisplayName | NodeClass | TypeDefinition',
+          ),
+        });
+
+        for (const reference of result.references || []) {
+          if (scannedNodes >= maxNodes) break;
+          scannedNodes += 1;
+          const nodeId = reference.nodeId.toString();
+          const nodeClass =
+            opcua.NodeClass[Number(reference.nodeClass)] ||
+            String(reference.nodeClass);
+          const displayName =
+            this.text(reference.displayName) || this.text(reference.browseName);
+          const path = current.path
+            ? `${current.path}/${displayName}`
+            : displayName;
+
+          if (nodeClass !== 'Variable') {
+            if (nodeClass === 'Object' || nodeClass === 'Folder') {
+              queue.push({ nodeId, path, depth: current.depth + 1 });
+            }
+            continue;
+          }
+
+          const namespaceIndex = this.namespaceIndex(nodeId);
+          if (namespaceIndex === 0) continue;
+          candidateVariables += 1;
+          const suggestion = this.signalSuggestion(displayName);
+          if (!suggestion) {
+            unmappedSignals.push({ nodeId, displayName, path });
+            continue;
+          }
+          const values = await session.read([
+            { nodeId, attributeId: opcua.AttributeIds.DataType },
+            { nodeId, attributeId: opcua.AttributeIds.UserAccessLevel },
+          ]);
+          const dataType = this.dataType(values[0]);
+          const actualAccess = this.access(values[1]);
+          if (!dataType || actualAccess === 'none' || actualAccess === 'write') {
+            continue;
+          }
+          signals.push({
+            ...suggestion,
+            namespaceIndex,
+            namespaceUri: namespaceArray[namespaceIndex] || null,
+            namespaceKey: `ns${namespaceIndex}`,
+            identifier: this.nodeIdentifier(nodeId),
+            nodeId,
+            displayName,
+            path,
+            dataType,
+            access: 'read',
+            direction: 'machineToMes',
+            required: false,
+            event: { trigger: 'change' },
+          });
+        }
+      }
+
+      return {
+        endpoint: this.safeEndpoint(connection.endpointUrl),
+        readOnly: true,
+        namespaceArray,
+        scannedNodes,
+        candidateVariables,
+        mappedCount: signals.length,
+        unmappedCount: Math.max(0, candidateVariables - signals.length),
+        unmappedSignals,
+        truncated: queue.length > 0,
+        signals,
+      };
+    });
+  }
+
+  private async browseWithConnection(
+    connection: MachineConnectionProfile,
+    nodeId: string,
+    maxNodes: number,
+  ) {
+    return this.readOnlySession(connection, async (session) => {
+      const namespaceArray = await this.namespaceArray(session);
       const result = await session.browse({
         nodeId,
         browseDirection: opcua.BrowseDirection.Forward,
@@ -215,6 +366,7 @@ export class OpcUaCommissioningService {
       const nodes = await Promise.all(
         references.map(async (reference) => {
           const childNodeId = reference.nodeId.toString();
+          const namespaceIndex = this.namespaceIndex(childNodeId);
           const nodeClass =
             opcua.NodeClass[Number(reference.nodeClass)] ||
             String(reference.nodeClass);
@@ -223,6 +375,10 @@ export class OpcUaCommissioningService {
             browseName: this.text(reference.browseName),
             displayName: this.text(reference.displayName),
             nodeClass,
+            namespaceIndex,
+            namespaceUri: namespaceArray[namespaceIndex] || null,
+            namespaceKey: `ns${namespaceIndex}`,
+            identifier: this.nodeIdentifier(childNodeId),
           };
           if (nodeClass !== 'Variable') return base;
           const values = await session.read([
@@ -241,18 +397,82 @@ export class OpcUaCommissioningService {
         }),
       );
       return {
-        ...(station
-          ? {
-              stationId: station.stationId,
-              endpoint: this.safeEndpoint(connection.endpointUrl),
-            }
-          : {}),
+        endpoint: this.safeEndpoint(connection.endpointUrl),
         readOnly: true,
         parentNodeId: nodeId,
+        namespaceArray,
         nodes,
         truncated: references.length < (result.references || []).length,
       };
     });
+  }
+
+  private connection(value: unknown): MachineConnectionProfile {
+    if (!isMachineConnectionProfile(value)) {
+      throw new BadRequestException(
+        'Ungültige OPC-UA-Verbindungskonfiguration',
+      );
+    }
+    const errors = machineConnectionSemanticErrors(value, 'OPC UA');
+    if (errors.length) throw new BadRequestException(errors.join('; '));
+    return value;
+  }
+
+  private namespaceIndex(nodeId: string): number {
+    const match = /^ns=(\d+);/.exec(nodeId);
+    return match ? Number(match[1]) : 0;
+  }
+
+  private nodeIdentifier(nodeId: string): string {
+    return nodeId.replace(/^ns=\d+;/, '');
+  }
+
+  private signalSuggestion(name: string) {
+    const normalized = name.toLowerCase().replace(/[^a-z0-9]/g, '');
+    const exact: Record<string, { key: string; role: string }> = {
+      workrequest: { key: 'workRequest', role: 'workRequest' },
+      requestbusy: { key: 'requestBusy', role: 'requestBusy' },
+      requestaccepted: { key: 'requestAccepted', role: 'requestAccepted' },
+      requestrejected: { key: 'requestRejected', role: 'requestRejected' },
+      requestcompleted: { key: 'requestCompleted', role: 'requestCompleted' },
+      orderid: { key: 'orderId', role: 'orderId' },
+      partnumber: { key: 'partNumber', role: 'partNumber' },
+      operationid: { key: 'operationId', role: 'operationId' },
+      nextstationid: { key: 'nextStationId', role: 'nextStationId' },
+      processactive: { key: 'processActive', role: 'processActive' },
+      processcompleted: { key: 'processCompleted', role: 'processCompleted' },
+      processresult: { key: 'processResult', role: 'processResult' },
+      completedcarrierid: {
+        key: 'completedCarrierId',
+        role: 'completedCarrierId',
+      },
+      idealcycletimems: { key: 'idealCycleTimeMs', role: 'idealCycleTimeMs' },
+      goodcount: { key: 'goodCount', role: 'goodCount' },
+      rejectcount: { key: 'rejectCount', role: 'rejectCount' },
+    };
+    const direct = exact[normalized] || exact[normalized.replace(/^[xib]/, '')];
+    if (direct) return { ...direct, confidence: 'high' };
+    if (/carrierid$/.test(normalized)) {
+      return { key: 'carrierId', role: 'carrierId', confidence: 'high' };
+    }
+    if (/resourceid$|stationid$/.test(normalized)) {
+      return { key: 'resourceId', role: 'resourceId', confidence: 'high' };
+    }
+    if (/stepno$|stepnumber$/.test(normalized)) {
+      return { key: 'stepNumber', role: 'stepNumber', confidence: 'high' };
+    }
+    if (/timestamp$|datetime$/.test(normalized)) {
+      return { key: 'timestamp', role: 'timestamp', confidence: 'high' };
+    }
+    const parameter = /^(?:i)?par(?:ameter)?0*(\d+)$/.exec(normalized);
+    if (parameter) {
+      return {
+        key: `parameter${Number(parameter[1])}`,
+        role: 'routingParameter',
+        confidence: 'high',
+      };
+    }
+    return undefined;
   }
 
   private async checkSignal(

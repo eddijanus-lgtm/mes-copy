@@ -39,6 +39,34 @@ export class BrowseMachineProfileDto {
   maxNodes?: number;
 }
 
+export class CommissioningConnectionDto {
+  @IsObject()
+  connection: Record<string, unknown>;
+}
+
+export class CommissioningBrowseDto extends BrowseMachineProfileDto {
+  @IsObject()
+  connection: Record<string, unknown>;
+}
+
+export class CommissioningDiscoverSignalsDto extends CommissioningConnectionDto {
+  @IsOptional()
+  @IsString()
+  rootNodeId?: string;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(10)
+  maxDepth?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(5000)
+  maxNodes?: number;
+}
+
 export class AddStationDto {
   @IsObject()
   station: Record<string, unknown>;

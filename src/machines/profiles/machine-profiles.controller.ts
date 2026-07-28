@@ -18,6 +18,9 @@ import {
   ActivateMachineProfileDto,
   AddStationDto,
   BrowseMachineProfileDto,
+  CommissioningBrowseDto,
+  CommissioningConnectionDto,
+  CommissioningDiscoverSignalsDto,
   ReplaceSignalsDto,
   SaveMachineProfileDto,
 } from './machine-profile.dto';
@@ -62,10 +65,45 @@ export class MachineProfilesController {
     );
   }
 
+  @Post('commissioning/test-connection')
+  @Roles(UserRoleEnum.ADMIN)
+  testCommissioningConnection(@Body() dto: CommissioningConnectionDto) {
+    return this.commissioning.testConnectionConfig(dto.connection);
+  }
+
+  @Post('commissioning/browse')
+  @Roles(UserRoleEnum.ADMIN)
+  browseCommissioningConnection(@Body() dto: CommissioningBrowseDto) {
+    return this.commissioning.browseConnection(
+      dto.connection,
+      dto.nodeId || undefined,
+      dto.maxNodes,
+    );
+  }
+
+  @Post('commissioning/discover-signals')
+  @Roles(UserRoleEnum.ADMIN)
+  discoverCommissioningSignals(
+    @Body() dto: CommissioningDiscoverSignalsDto,
+  ) {
+    return this.commissioning.discoverSignals(
+      dto.connection,
+      dto.rootNodeId || undefined,
+      dto.maxDepth,
+      dto.maxNodes,
+    );
+  }
+
   @Get(':profileId')
   @Roles(UserRoleEnum.ADMIN, UserRoleEnum.OPERATOR, UserRoleEnum.VIEWER)
   find(@Param('profileId', ParseUUIDPipe) profileId: string) {
     return this.profiles.find(profileId);
+  }
+
+  @Delete(':profileId')
+  @Roles(UserRoleEnum.ADMIN)
+  remove(@Param('profileId', ParseUUIDPipe) profileId: string) {
+    return this.profiles.remove(profileId);
   }
 
   @Get(':profileId/history')
