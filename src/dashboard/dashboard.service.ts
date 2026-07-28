@@ -13,6 +13,13 @@ import {
 
 type MachineStatusCounts = Record<MachineStatusEnum, number>;
 
+interface DashboardMachineSnapshot {
+  total: number;
+  connected: number;
+  connectedResourceIds: number[];
+  status: MachineStatusCounts;
+}
+
 interface ProductionMetricSample {
   machine_id: string;
   node_id: string;
@@ -37,19 +44,26 @@ export class DashboardService {
 
   async getKpis(from?: string, to?: string) {
     const range = this.resolveRange(from, to);
-    const [machineRows, orderStats, downtimeStats, qualityRows, metricSamples] = await Promise.all([
-      this.safeQuery(this.getMachineStatusCounts(), this.emptyMachineStatusCounts()),
+    const [machineSnapshot, orderStats, downtimeStats, qualityRows, metricSamples] = await Promise.all([
+      this.safeQuery(this.getMachineStatusSnapshot(range.end), {
+        total: 0,
+        connected: 0,
+        connectedResourceIds: [],
+        status: this.emptyMachineStatusCounts(),
+      }),
       this.safeQuery(this.getOrderStats(range.start, range.end), { target_quantity: 0, completed_quantity: 0, completed_orders: 0, active_orders: 0 }),
       this.safeQuery(this.getDowntimeStats(range.start, range.end), { total_minutes: 0, event_count: 0 }),
       this.safeQuery(this.getQualityStats(range.start, range.end), { good_count: 0, bad_count: 0, uncertain_count: 0 }),
       this.safeQuery(this.getProductionMetricSamples(range.start, range.end), []),
     ]);
 
-    const machineCount = Object.values(machineRows).reduce((sum, count) => sum + count, 0);
-    const plannedMinutes = Math.max(0, (range.end.getTime() - range.start.getTime()) / 60000) * machineCount;
+    const machineCount = machineSnapshot.total;
+    const plannedMinutes =
+      Math.max(0, (range.end.getTime() - range.start.getTime()) / 60000) *
+      machineSnapshot.connected;
     const downtimeMinutes = Math.min(Number(downtimeStats.total_minutes) || 0, plannedMinutes);
     const availability =
-      plannedMinutes > 0
+      machineSnapshot.connected > 0 && plannedMinutes > 0
         ? (plannedMinutes - downtimeMinutes) / plannedMinutes
         : null;
     const completedQuantity = Number(orderStats.completed_quantity) || 0;
@@ -115,7 +129,9 @@ export class DashboardService {
       },
       machines: {
         total: machineCount,
-        status: machineRows,
+        connected: machineSnapshot.connected,
+        connectedResourceIds: machineSnapshot.connectedResourceIds,
+        status: machineSnapshot.status,
         downtimeMinutes: this.round(downtimeMinutes, 1),
         downtimeEvents: Number(downtimeStats.event_count) || 0,
       },
@@ -138,18 +154,61 @@ export class DashboardService {
     return start <= end ? { start, end } : { start: end, end: start };
   }
 
-  private async getMachineStatusCounts(): Promise<MachineStatusCounts> {
-    const rows = await this.machinesRepo.createQueryBuilder('machine')
-      .select('machine.status', 'status')
-      .addSelect('COUNT(*)', 'count')
-      .where('machine.parent_resource_id IS NULL')
-      .groupBy('machine.status')
-      .getRawMany<{ status: MachineStatusEnum; count: string }>();
+  private async getMachineStatusSnapshot(
+    referenceTime: Date,
+  ): Promise<DashboardMachineSnapshot> {
+    const machines = await this.machinesRepo.find();
+    const roots = machines.filter(
+      (machine) => machine.parent_resource_id == null,
+    );
+    const childrenByParent = new Map<number, MachineEntity[]>();
 
-    return Object.values(MachineStatusEnum).reduce((counts, status) => {
-      counts[status] = Number(rows.find((row) => row.status === status)?.count) || 0;
-      return counts;
-    }, this.emptyMachineStatusCounts());
+    for (const machine of machines) {
+      if (machine.parent_resource_id == null) continue;
+      const children = childrenByParent.get(machine.parent_resource_id) ?? [];
+      children.push(machine);
+      childrenByParent.set(machine.parent_resource_id, children);
+    }
+
+    const status = this.emptyMachineStatusCounts();
+    for (const root of roots) {
+      const candidates = [
+        root,
+        ...(root.resource_id == null
+          ? []
+          : childrenByParent.get(root.resource_id) ?? []),
+      ];
+      const effectiveStatus = this.effectiveMachineStatus(
+        root,
+        candidates,
+        referenceTime,
+      );
+      status[effectiveStatus] += 1;
+    }
+
+    const routableStations = machines.filter(
+      (machine) =>
+        machine.routing_enabled &&
+        machine.opcua_enabled &&
+        machine.resource_id != null,
+    );
+    const connectionTargets =
+      routableStations.length > 0
+        ? routableStations
+        : roots.filter(
+            (machine) =>
+              machine.opcua_enabled && machine.resource_id != null,
+          );
+    const connectedResourceIds = connectionTargets
+      .filter((machine) => this.hasFreshOnlineHeartbeat(machine, referenceTime))
+      .map((machine) => machine.resource_id as number);
+
+    return {
+      total: roots.length,
+      connected: connectedResourceIds.length,
+      connectedResourceIds,
+      status,
+    };
   }
 
   private emptyMachineStatusCounts(): MachineStatusCounts {
@@ -157,6 +216,56 @@ export class DashboardService {
       counts[status] = 0;
       return counts;
     }, {} as MachineStatusCounts);
+  }
+
+  private effectiveMachineStatus(
+    root: MachineEntity,
+    candidates: MachineEntity[],
+    referenceTime: Date,
+  ): MachineStatusEnum {
+    const liveCandidates = candidates.filter((machine) =>
+      this.hasFreshOnlineHeartbeat(machine, referenceTime),
+    );
+    if (
+      liveCandidates.some(
+        (machine) => machine.status === MachineStatusEnum.ONLINE,
+      )
+    ) {
+      return MachineStatusEnum.ONLINE;
+    }
+    if (
+      liveCandidates.some(
+        (machine) => machine.status === MachineStatusEnum.IDLE,
+      )
+    ) {
+      return MachineStatusEnum.IDLE;
+    }
+    if (root.status === MachineStatusEnum.ERROR) {
+      return MachineStatusEnum.ERROR;
+    }
+    if (root.status === MachineStatusEnum.MAINTENANCE) {
+      return MachineStatusEnum.MAINTENANCE;
+    }
+    return MachineStatusEnum.OFFLINE;
+  }
+
+  private hasFreshOnlineHeartbeat(
+    machine: MachineEntity,
+    referenceTime: Date,
+  ): boolean {
+    if (
+      machine.status !== MachineStatusEnum.ONLINE &&
+      machine.status !== MachineStatusEnum.IDLE
+    ) {
+      return false;
+    }
+    if (!machine.last_heartbeat) return false;
+    const heartbeatTime = new Date(machine.last_heartbeat).getTime();
+    return (
+      Number.isFinite(heartbeatTime) &&
+      heartbeatTime <= referenceTime.getTime() &&
+      referenceTime.getTime() - heartbeatTime <= 15_000
+    );
   }
 
   private getOrderStats(start: Date, end: Date) {

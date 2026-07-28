@@ -244,6 +244,32 @@
   margin-top: 6px;
 }
 
+.tablet-production-empty {
+  display: grid;
+  min-height: 170px;
+  place-items: center;
+  align-content: center;
+  gap: 7px;
+  color: var(--wara-text-muted);
+  text-align: center;
+}
+
+.tablet-production-empty strong {
+  color: var(--wara-text);
+  font-size: clamp(0.95rem, 1.5vw, 1.2rem);
+}
+
+.tablet-production-empty span {
+  max-width: 390px;
+  font-size: 0.68rem;
+  line-height: 1.45;
+}
+
+.tablet-dashboard .tablet-empty-action {
+  margin-top: 6px;
+  touch-action: manipulation;
+}
+
 .tablet-station-step {
   display: flex;
   min-width: 0;

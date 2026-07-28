@@ -17,6 +17,7 @@ import { PulseIcon } from "@phosphor-icons/react/Pulse";
 import { SquaresFourIcon } from "@phosphor-icons/react/SquaresFour";
 import { XIcon } from "@phosphor-icons/react/X";
 import { openDashboardReport } from "../../dashboard/dashboardReport.js";
+import Button from "../../design-system/components/Button.jsx";
 import "./tablet-dashboard.css";
 
 const MAX_WIDGETS = 4;
@@ -258,6 +259,7 @@ export default function TabletDashboard({ dashboardData, user }) {
               onPointerMove={handleTilePointerMove}
               onPointerUp={handleTilePointerEnd}
               onPointerCancel={handleTilePointerEnd}
+              onCreateMachine={() => navigate("/machines?create=1")}
             />
           </div>
         ))}
@@ -364,9 +366,9 @@ function TabletWidget({
   onPointerMove,
   onPointerUp,
   onPointerCancel,
+  onCreateMachine,
 }) {
   const interactionProps = {
-    type: "button",
     onClick: isGhost ? undefined : onOpen,
     onPointerDown: isGhost ? undefined : onPointerDown,
     onPointerMove: isGhost ? undefined : onPointerMove,
@@ -378,45 +380,78 @@ function TabletWidget({
   };
 
   if (id === "production") {
-    const stations = stationSummary.stations.length > 0
-      ? stationSummary.stations
-      : [{ resource_id: 10 }, { resource_id: 20 }, { resource_id: 30 }, { resource_id: 40 }];
+    const stations = stationSummary.stations;
     return (
-      <button {...interactionProps}>
+      <div
+        {...interactionProps}
+        role="button"
+        onKeyDown={(event) => {
+          if (!isGhost && !isEditing && (event.key === "Enter" || event.key === " ")) {
+            event.preventDefault();
+            onOpen?.();
+          }
+        }}
+      >
         <TabletTileHeading icon={FactoryIcon} title="Produktionsfluss" />
-        <div className="tablet-station-flow">
-          {stations.map((station, index) => {
-            const online = isMachineOnline(station);
-            return (
-              <div className="tablet-station-step" key={station.id || station.resource_id}>
-                <span className={online ? "is-online" : ""}>
-                  <CheckCircleIcon size={24} weight={online ? "fill" : "regular"} />
-                  <strong>{resourceCode(station)}</strong>
-                </span>
-                {index < stations.length - 1 ? <i className={online ? "is-online" : ""} /> : null}
-              </div>
-            );
-          })}
-        </div>
-        <div className="tablet-summary">
-          <i />
-          <strong>{stationSummary.runningCount || 0} Stationen laufen</strong>
-          <span>Linie A</span>
-        </div>
-      </button>
+        {stationSummary.runningCount === 0 ? (
+          <div className="tablet-production-empty">
+            <PulseIcon size={54} weight="duotone" />
+            <strong>Keine Stationen verbunden</strong>
+            <span>{stations.length} Stationen sind konfiguriert, liefern aber keine frische Telemetrie.</span>
+            {!isEditing && !isGhost ? (
+              <Button
+                className="tablet-empty-action"
+                size="touch"
+                icon={<PlusCircleIcon size={21} weight="fill" />}
+                onPointerDown={(event) => event.stopPropagation()}
+                onPointerMove={(event) => event.stopPropagation()}
+                onPointerUp={(event) => event.stopPropagation()}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onCreateMachine?.();
+                }}
+              >
+                Maschine anlegen
+              </Button>
+            ) : null}
+          </div>
+        ) : (
+          <>
+            <div className="tablet-station-flow">
+              {stations.map((station, index) => {
+                const online = isMachineOnline(station);
+                return (
+                  <div className="tablet-station-step" key={station.id || station.resource_id}>
+                    <span className={online ? "is-online" : ""}>
+                      <CheckCircleIcon size={24} weight={online ? "fill" : "regular"} />
+                      <strong>{resourceCode(station)}</strong>
+                    </span>
+                    {index < stations.length - 1 ? <i className={online ? "is-online" : ""} /> : null}
+                  </div>
+                );
+              })}
+            </div>
+            <div className="tablet-summary">
+              <i />
+              <strong>{stationSummary.runningCount} Stationen laufen</strong>
+              <span>Linie A</span>
+            </div>
+          </>
+        )}
+      </div>
     );
   }
 
   if (id === "oee") {
     const value = numberValue(data.kpis?.oee?.total);
     return (
-      <button {...interactionProps}>
+      <button type="button" {...interactionProps}>
         <TabletTileHeading icon={GaugeIcon} title="OEE Live-Score" />
         <div className="tablet-oee-content">
-          <div className="tablet-oee-ring" style={{ "--oee-value": `${value || 0}%` }}>
-            <strong>{formatNumber(value)}<span>%</span></strong>
+          <div className="tablet-oee-ring" style={{ "--oee-value": `${value ?? 0}%` }}>
+            <strong>{formatNumber(value)}{value == null ? null : <span>%</span>}</strong>
           </div>
-          <div><strong>{value >= 85 ? "Im Zielbereich" : "Unter Zielwert"}</strong><small>Zielwert 85 %</small></div>
+          <div><strong>{oeeStateLabel(value)}</strong><small>{value == null ? "Keine aktive Maschine" : "Zielwert 85 %"}</small></div>
         </div>
       </button>
     );
@@ -425,7 +460,7 @@ function TabletWidget({
   if (id === "alarms") {
     const alarmCount = Number(data.stats?.alarms || 0);
     return (
-      <button {...interactionProps}>
+      <button type="button" {...interactionProps}>
         <TabletTileHeading icon={BellSimpleIcon} title="Aktive Alarme" tone="danger" />
         <div className="tablet-alarm-content">
           <BellSimpleIcon size={72} weight="duotone" />
@@ -438,7 +473,7 @@ function TabletWidget({
 
   if (id === "performance") {
     return (
-      <button {...interactionProps}>
+      <button type="button" {...interactionProps}>
         <TabletTileHeading icon={HouseIcon} title="Leistung" />
         <div className="tablet-metrics">
           <TabletMetric value={formatNumber(data.kpis?.throughput?.unitsPerHour)} unit="/h" label="Durchsatz" />
@@ -452,7 +487,7 @@ function TabletWidget({
   if (id === "status") {
     const healthy = Boolean(data.stats?.health);
     return (
-      <button {...interactionProps}>
+      <button type="button" {...interactionProps}>
         <TabletTileHeading icon={PulseIcon} title="Betriebsstatus" />
         <div className="tablet-status-content">
           <CheckCircleIcon size={86} weight="duotone" />
@@ -464,7 +499,7 @@ function TabletWidget({
   }
 
   return (
-    <button {...interactionProps}>
+    <button type="button" {...interactionProps}>
       <TabletTileHeading icon={FilePdfIcon} title="Berichte" />
       <div className="tablet-reports-content">
         <div><FilePdfIcon size={50} weight="duotone" /><span><strong>Schichtbericht</strong><small>PDF erstellen</small></span></div>
@@ -485,7 +520,7 @@ function TabletTileHeading({ icon: Icon, title, tone = "default" }) {
 }
 
 function TabletMetric({ value, unit, label }) {
-  return <div><strong>{value}<small>{unit}</small></strong><span>{label}</span></div>;
+  return <div><strong>{value}{value === "–" ? null : <small>{unit}</small>}</strong><span>{label}</span></div>;
 }
 
 function TabletDialog({ detail, data, onClose, onNavigate }) {
@@ -527,7 +562,7 @@ function TabletDialog({ detail, data, onClose, onNavigate }) {
                   <div key={machine.id || machine.resource_id}>
                     <i className={isMachineOnline(machine) ? "is-online" : ""} />
                     <span><strong>{resourceCode(machine)}</strong><small>{machine.name || "Produktionsstation"}</small></span>
-                    <b>{machineStatusLabel(machine.status)}</b>
+                    <b>{machineStatusLabel(machine)}</b>
                   </div>
                 ))}
               </div>
@@ -539,8 +574,8 @@ function TabletDialog({ detail, data, onClose, onNavigate }) {
             <div className="tablet-detail-stack">
               <div className="tablet-detail-score">
                 <span>Aktueller OEE</span>
-                <strong>{formatNumber(data.kpis?.oee?.total)}<small>%</small></strong>
-                <b>{numberValue(data.kpis?.oee?.total) >= 85 ? "Im Zielbereich" : "Unter Zielwert 85 %"}</b>
+                <strong>{formatNumber(data.kpis?.oee?.total)}{numberValue(data.kpis?.oee?.total) == null ? null : <small>%</small>}</strong>
+                <b>{oeeStateLabel(numberValue(data.kpis?.oee?.total), "Unter Zielwert 85 %")}</b>
               </div>
               <div className="tablet-detail-kpis">
                 <DetailKpi label="Verfügbarkeit" value={data.kpis?.oee?.availability} />
@@ -610,20 +645,21 @@ function widgetTitle(id) {
 }
 
 function DetailKpi({ label, value, unit = "%" }) {
+  const numericValue = numberValue(value);
   return (
     <div>
       <span>{label}</span>
-      <strong>{formatNumber(value)}<small>{unit}</small></strong>
-      <i><b style={{ width: `${Math.max(0, Math.min(numberValue(value), 100))}%` }} /></i>
+      <strong>{formatNumber(value)}{numericValue == null ? null : <small>{unit}</small>}</strong>
+      <i><b style={{ width: `${Math.max(0, Math.min(numericValue ?? 0, 100))}%` }} /></i>
     </div>
   );
 }
 
-function machineStatusLabel(status) {
-  if (status === "online") return "Online";
-  if (status === "idle") return "Bereit";
-  if (status === "maintenance") return "Wartung";
-  if (status === "error") return "Störung";
+function machineStatusLabel(machine) {
+  if (machine.live_connected && machine.effective_status === "online") return "Online";
+  if (machine.live_connected && machine.effective_status === "idle") return "Bereit";
+  if (machine.effective_status === "maintenance") return "Wartung";
+  if (machine.effective_status === "error") return "Störung";
   return "Offline";
 }
 
@@ -640,7 +676,7 @@ function formatTime(value) {
 }
 
 function isMachineOnline(machine) {
-  return machine.status === "online" || machine.status === "idle";
+  return machine.live_connected === true;
 }
 
 function resourceCode(machine) {
@@ -651,13 +687,19 @@ function resourceCode(machine) {
 }
 
 function numberValue(value) {
+  if (value === null || value === undefined || value === "") return null;
   const number = Number(value);
-  return Number.isFinite(number) ? number : 0;
+  return Number.isFinite(number) ? number : null;
 }
 
 function formatNumber(value) {
-  const number = Number(value);
-  return Number.isFinite(number)
+  const number = numberValue(value);
+  return number !== null
     ? new Intl.NumberFormat("de-DE", { maximumFractionDigits: 1 }).format(number)
     : "–";
+}
+
+function oeeStateLabel(value, belowTargetLabel = "Unter Zielwert") {
+  if (value === null) return "Keine Live-Daten";
+  return value >= 85 ? "Im Zielbereich" : belowTargetLabel;
 }

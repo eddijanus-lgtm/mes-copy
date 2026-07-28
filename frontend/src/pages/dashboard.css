@@ -526,12 +526,12 @@
   text-align: center;
 }
 
-.flow-empty strong {
+.flow-empty h3 {
   color: #343941;
   font-size: 0.9rem;
 }
 
-.flow-empty span {
+.flow-empty p {
   max-width: 330px;
   font-size: 0.72rem;
 }

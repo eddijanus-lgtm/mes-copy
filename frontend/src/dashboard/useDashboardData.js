@@ -75,18 +75,39 @@ export function useDashboardData(token) {
     };
   }, [token]);
 
-  const connectedMachines = useMemo(
-    () => machines.filter((machine) => machine.status === "online" || machine.status === "idle"),
-    [machines],
+  const connectedResourceIds = useMemo(
+    () => new Set(
+      Array.isArray(kpis?.machines?.connectedResourceIds)
+        ? kpis.machines.connectedResourceIds.map(String)
+        : [],
+    ),
+    [kpis],
+  );
+
+  const dashboardMachines = useMemo(
+    () => machines.map((machine) => {
+      const liveConnected = connectedResourceIds.has(String(machine.resource_id));
+      const effectiveStatus = liveConnected
+        ? machine.status === "idle" ? "idle" : "online"
+        : machine.status === "error" || machine.status === "maintenance"
+          ? machine.status
+          : "offline";
+      return {
+        ...machine,
+        live_connected: liveConnected,
+        effective_status: effectiveStatus,
+      };
+    }),
+    [connectedResourceIds, machines],
   );
 
   return {
-    machines,
+    machines: dashboardMachines,
     carriers,
     activeAlarms,
     kpis,
     stats,
     isLoading,
-    connectedMachineCount: connectedMachines.length,
+    connectedMachineCount: Number(kpis?.machines?.connected || 0),
   };
 }

@@ -4,8 +4,12 @@ import { CheckIcon } from "@phosphor-icons/react/Check";
 import { FilePdfIcon } from "@phosphor-icons/react/FilePdf";
 import { GaugeIcon } from "@phosphor-icons/react/Gauge";
 import { PackageIcon } from "@phosphor-icons/react/Package";
+import { PlusIcon } from "@phosphor-icons/react/Plus";
 import { PulseIcon } from "@phosphor-icons/react/Pulse";
 import { UsersIcon } from "@phosphor-icons/react/Users";
+import { Link } from "react-router-dom";
+import Button from "../../design-system/components/Button.jsx";
+import EmptyState from "../../design-system/components/EmptyState.jsx";
 import { openDashboardReport } from "../../dashboard/dashboardReport.js";
 
 const TrendWidget = lazy(() => import("./TrendWidget.jsx"));
@@ -18,23 +22,27 @@ const STATUS_ROWS = [
   ["offline", "Offline", "gray"],
 ];
 
-export function ProductionFlowWidget({ machines, carriers, kpis, health }) {
+export function ProductionFlowWidget({ machines, carriers, kpis }) {
   const stations = [...machines]
     .filter((machine) => machine.resource_id != null && machine.routing_enabled !== false)
     .sort((a, b) => Number(a.route_sequence ?? Number.MAX_SAFE_INTEGER) - Number(b.route_sequence ?? Number.MAX_SAFE_INTEGER));
-  const hasConnectedMachine = machines.some(isOnline);
+  const hasConnectedStation = stations.some(isOnline);
 
-  if (stations.length === 0) {
+  if (stations.length === 0 || !hasConnectedStation) {
     return (
-      <div className="flow-empty">
-        <PulseIcon size={34} />
-        <strong>{hasConnectedMachine ? "Keine Produktionsroute konfiguriert" : "Keine Stationen verbunden"}</strong>
-        <span>
-          {hasConnectedMachine
-            ? "Die verbundene Maschine wird beobachtet, ist im aktiven Maschinenprofil aber nicht für MES-Routing freigegeben."
-            : "Der Produktionsfluss erscheint automatisch, sobald die API Stationen liefert."}
-        </span>
-      </div>
+      <EmptyState
+        className="flow-empty"
+        icon={<PulseIcon size={34} />}
+        title={stations.length === 0 ? "Keine Produktionsroute konfiguriert" : "Keine Stationen verbunden"}
+        description={stations.length === 0
+          ? "Im aktiven Maschinenprofil ist keine Station für MES-Routing freigegeben."
+          : `${stations.length} Stationen sind konfiguriert, liefern aber aktuell keine frische Telemetrie.`}
+        action={(
+          <Button as={Link} to="/machines?create=1" icon={<PlusIcon size={17} weight="bold" />}>
+            Maschine anlegen
+          </Button>
+        )}
+      />
     );
   }
 
@@ -50,7 +58,7 @@ export function ProductionFlowWidget({ machines, carriers, kpis, health }) {
           );
           const state = getStationState(station, stationCarriers.length > 0);
           const nextStation = stations[index + 1];
-          const connectionActive = nextStation && isOnline(station) && isOnline(nextStation) && health;
+          const connectionActive = nextStation && isOnline(station) && isOnline(nextStation);
           return (
             <div className="production-flow__segment" key={station.id || station.resource_id}>
               <article className={`flow-station ${state.className}`}>
@@ -239,13 +247,13 @@ export function ReportsWidget({ dashboardData }) {
 }
 
 function isOnline(station) {
-  return station.status === "online" || station.status === "idle";
+  return station.live_connected === true;
 }
 
 function getStationState(station, hasCarrier) {
   if (hasCarrier) return { label: "Arbeitet", dot: "orange", className: "is-working" };
-  if (station.status === "error") return { label: "Störung", dot: "orange", className: "has-error" };
-  if (station.status === "maintenance") return { label: "Wartung", dot: "yellow", className: "" };
+  if (station.effective_status === "error") return { label: "Störung", dot: "orange", className: "has-error" };
+  if (station.effective_status === "maintenance") return { label: "Wartung", dot: "yellow", className: "" };
   if (isOnline(station)) return { label: "Online", dot: "green", className: "" };
   return { label: "Offline", dot: "gray", className: "is-offline" };
 }

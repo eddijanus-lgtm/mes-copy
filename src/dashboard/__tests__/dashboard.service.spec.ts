@@ -14,6 +14,7 @@ import { TimescaleAggregateService } from '../timescale-aggregate.service';
 const createMockRepo = () => ({
   createQueryBuilder: jest.fn(),
   count: jest.fn().mockResolvedValue(0),
+  find: jest.fn().mockResolvedValue([]),
   query: jest.fn().mockResolvedValue([]),
 });
 
@@ -49,6 +50,7 @@ describe('DashboardService', () => {
 
   describe('getKpis', () => {
     beforeEach(() => {
+      mockMachineRepo.find.mockResolvedValue([]);
       mockMachineRepo.createQueryBuilder.mockReturnValue({
         select: jest.fn().mockReturnThis(),
         addSelect: jest.fn().mockReturnThis(),
@@ -158,17 +160,17 @@ describe('DashboardService', () => {
       const from = '2026-07-27T00:00:00.000Z';
       const firstSample = '2026-07-27T08:00:00.000Z';
       const to = '2026-07-27T08:00:10.000Z';
-      mockMachineRepo.createQueryBuilder.mockReturnValue({
-        select: jest.fn().mockReturnThis(),
-        addSelect: jest.fn().mockReturnThis(),
-        where: jest.fn().mockReturnThis(),
-        groupBy: jest.fn().mockReturnThis(),
-        getRawMany: jest
-          .fn()
-          .mockResolvedValue([
-            { status: MachineStatusEnum.ONLINE, count: '1' },
-          ]),
-      });
+      mockMachineRepo.find.mockResolvedValue([
+        {
+          id: 'machine-1',
+          resource_id: 71,
+          parent_resource_id: null,
+          status: MachineStatusEnum.ONLINE,
+          opcua_enabled: true,
+          routing_enabled: true,
+          last_heartbeat: new Date(to),
+        },
+      ]);
       mockDowntimeRepo.createQueryBuilder.mockReturnValue({
         select: jest.fn().mockReturnThis(),
         addSelect: jest.fn().mockReturnThis(),
@@ -229,6 +231,59 @@ describe('DashboardService', () => {
         productionCounts: { good: 9, reject: 1 },
       });
       expect(result.yield).toBe(90);
+    });
+
+    it('treats an old online heartbeat as offline and leaves availability unknown', async () => {
+      const to = '2026-07-27T08:00:00.000Z';
+      mockMachineRepo.find.mockResolvedValue([
+        {
+          id: 'machine-1',
+          resource_id: 70,
+          parent_resource_id: null,
+          status: MachineStatusEnum.ONLINE,
+          opcua_enabled: true,
+          routing_enabled: false,
+          last_heartbeat: new Date('2026-07-27T07:59:00.000Z'),
+        },
+        {
+          id: 'station-1',
+          resource_id: 71,
+          parent_resource_id: 70,
+          status: MachineStatusEnum.ONLINE,
+          opcua_enabled: true,
+          routing_enabled: true,
+          last_heartbeat: new Date('2026-07-27T07:59:00.000Z'),
+        },
+      ]);
+      mockDowntimeRepo.createQueryBuilder.mockReturnValue({
+        select: jest.fn().mockReturnThis(),
+        addSelect: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        getRawOne: jest.fn().mockResolvedValue({
+          total_minutes: 0,
+          event_count: 0,
+        }),
+      });
+
+      const result = await service.getKpis(
+        '2026-07-27T00:00:00.000Z',
+        to,
+      );
+
+      expect(result.machines).toMatchObject({
+        total: 1,
+        connected: 0,
+        connectedResourceIds: [],
+        status: {
+          online: 0,
+          idle: 0,
+          error: 0,
+          maintenance: 0,
+          offline: 1,
+        },
+      });
+      expect(result.oee.availability).toBeNull();
     });
 
     it('uses a decreased cumulative counter as a new baseline after a reset', () => {

@@ -4,6 +4,8 @@ import { PencilSimpleIcon } from "@phosphor-icons/react/PencilSimple";
 import { SlidersHorizontalIcon } from "@phosphor-icons/react/SlidersHorizontal";
 import { XIcon } from "@phosphor-icons/react/X";
 import PageInfo from "../components/PageInfo.jsx";
+import Button from "../design-system/components/Button.jsx";
+import PageHeader from "../design-system/components/PageHeader.jsx";
 import { ResponsiveGridLayout, useContainerWidth } from "react-grid-layout";
 import "react-grid-layout/css/styles.css";
 import "react-resizable/css/styles.css";
@@ -123,48 +125,46 @@ function DesktopDashboard({ dashboardData, layoutState }) {
 function DashboardHeader({ layoutState }) {
   const { t } = useTranslation();
   return (
-    <header className="dashboard-page__header">
-      <div>
-        <div className="mes-title-row">
-          <h1>{layoutState.profiles[layoutState.activeProfileId]?.name || t("dashboard.title")}</h1>
-          <PageInfo page="dashboard" />
+    <PageHeader
+      className="dashboard-page__header"
+      title={layoutState.profiles[layoutState.activeProfileId]?.name || t("dashboard.title")}
+      description={t("dashboard.subtitle")}
+      titleAccessory={<PageInfo page="dashboard" />}
+      actions={(
+        <div className="dashboard-page__controls">
+          <label>
+            <span>{t("dashboard.view")}</span>
+            <select
+              value={layoutState.activeProfileId}
+              onChange={(event) => layoutState.selectProfile(event.target.value)}
+              disabled={layoutState.isEditing}
+            >
+              {Object.values(layoutState.profiles).map((profile) => (
+                <option key={profile.id} value={profile.id}>{profile.name}</option>
+              ))}
+            </select>
+          </label>
+
+          {layoutState.isEditing ? (
+            <>
+              <Button variant="secondary" onClick={layoutState.resetDraft}>
+                {t("dashboard.reset")}
+              </Button>
+              <Button variant="secondary" icon={<XIcon size={18} />} onClick={layoutState.cancelEditing}>
+                {t("dashboard.cancel")}
+              </Button>
+              <Button icon={<FloppyDiskIcon size={18} />} onClick={layoutState.saveEditing}>
+                {t("dashboard.save")}
+              </Button>
+            </>
+          ) : (
+            <Button icon={<PencilSimpleIcon size={18} />} onClick={layoutState.startEditing}>
+              {t("dashboard.edit")}
+            </Button>
+          )}
         </div>
-        <p>{t("dashboard.subtitle")}</p>
-      </div>
-
-      <div className="dashboard-page__controls">
-        <label>
-          <span>{t("dashboard.view")}</span>
-          <select
-            value={layoutState.activeProfileId}
-            onChange={(event) => layoutState.selectProfile(event.target.value)}
-            disabled={layoutState.isEditing}
-          >
-            {Object.values(layoutState.profiles).map((profile) => (
-              <option key={profile.id} value={profile.id}>{profile.name}</option>
-            ))}
-          </select>
-        </label>
-
-        {layoutState.isEditing ? (
-          <>
-            <button type="button" className="dashboard-button secondary" onClick={layoutState.resetDraft}>
-              {t("dashboard.reset")}
-            </button>
-            <button type="button" className="dashboard-button secondary" onClick={layoutState.cancelEditing}>
-              <XIcon size={18} /> {t("dashboard.cancel")}
-            </button>
-            <button type="button" className="dashboard-button primary" onClick={layoutState.saveEditing}>
-              <FloppyDiskIcon size={18} /> {t("dashboard.save")}
-            </button>
-          </>
-        ) : (
-          <button type="button" className="dashboard-button primary" onClick={layoutState.startEditing}>
-            <PencilSimpleIcon size={18} /> {t("dashboard.edit")}
-          </button>
-        )}
-      </div>
-    </header>
+      )}
+    />
   );
 }
 
@@ -183,7 +183,6 @@ function WidgetContent({ id, dashboardData }) {
           machines={machines}
           carriers={carriers}
           kpis={kpis}
-          health={stats.health}
         />
       );
     case "oee":

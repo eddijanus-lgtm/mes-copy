@@ -2,9 +2,11 @@ import { Fragment, useEffect, useMemo, useState } from "react";
 import { CheckCircleIcon } from "@phosphor-icons/react/CheckCircle";
 import { StackIcon } from "@phosphor-icons/react/Stack";
 import { WarningCircleIcon } from "@phosphor-icons/react/WarningCircle";
+import { useSearchParams } from "react-router-dom";
 import StatCard from "../components/StatCard";
 import PageInfo from "../components/PageInfo.jsx";
 import MachineProfileWizard from "../components/MachineProfileWizard.jsx";
+import PageHeader from "../design-system/components/PageHeader.jsx";
 import { api } from "../api/client.js";
 import { useAuth } from "../providers/AuthProvider.jsx";
 import { canConfigureMachineProfiles, canDeleteMachines, canManageMachines } from "../utils/roles.js";
@@ -17,6 +19,7 @@ import { useTranslation } from "../i18n/I18nProvider.jsx";
 export default function MachinesPage() {
   const { user } = useAuth();
   const { t } = useTranslation();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [machines, setMachines] = useState([]);
   const [profiles, setProfiles] = useState([]);
   const [showModal, setShowModal] = useState(false);
@@ -37,6 +40,13 @@ export default function MachinesPage() {
   const canManage = canManageMachines(user);
   const canDelete = canDeleteMachines(user);
   const canConfigureProfiles = canConfigureMachineProfiles(user);
+
+  useEffect(() => {
+    if (searchParams.get("create") !== "1" || !canManage) return;
+    setForm({ id: null, name: "", type: "CNC", status: "offline", location: "" });
+    setShowModal(true);
+    setSearchParams({}, { replace: true });
+  }, [canManage, searchParams, setSearchParams]);
 
   useEffect(() => {
     const load = () => Promise.all([
@@ -209,15 +219,11 @@ export default function MachinesPage() {
     <div className="mes-page min-h-screen bg-neutral-50">
       <main className="p-6 space-y-6">
 
-        <div className="mes-page-header">
-          <div>
-          <div className="mes-title-row">
-            <h1 className="text-2xl font-bold text-neutral-900">{t("machines.title")}</h1>
-            <PageInfo page="machines" />
-          </div>
-          <p className="text-sm text-neutral-500 mt-0.5">{t("machines.subtitle")}</p>
-          </div>
-        </div>
+        <PageHeader
+          title={t("machines.title")}
+          description={t("machines.subtitle")}
+          titleAccessory={<PageInfo page="machines" />}
+        />
 
         {/* Status-Karten */}
         <div className="mes-metric-strip grid grid-cols-3">
