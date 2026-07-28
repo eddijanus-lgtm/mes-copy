@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { api } from "../api/client.js";
 import PageInfo from "../components/PageInfo.jsx";
+import PageHeader from "../design-system/components/PageHeader.jsx";
 import Modal from "../components/Modal.jsx";
 import { ROLES, USER_ROLES } from "../utils/roles.js";
 import { EyeIcon } from "@phosphor-icons/react/Eye";
@@ -102,15 +103,11 @@ export default function UsersPage() {
   return (
     <div className="mes-page min-h-screen bg-neutral-50">
       <main className="p-6 space-y-6">
-        <div className="mes-page-header">
-          <div>
-            <div className="mes-title-row">
-              <h1 className="text-2xl font-bold text-neutral-900">{t("users.title")}</h1>
-              <PageInfo page="users" />
-            </div>
-            <p className="text-sm text-neutral-500 mt-0.5">{t("users.subtitle")}</p>
-          </div>
-        </div>
+        <PageHeader
+          title={t("users.title")}
+          description={t("users.subtitle")}
+          titleAccessory={<PageInfo page="users" />}
+        />
 
         {/* Create user form */}
         <section className="mes-panel max-w-2xl p-6">

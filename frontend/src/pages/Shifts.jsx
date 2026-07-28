@@ -1,6 +1,8 @@
 import { useState, useEffect } from "react";
 import { api } from "../api/client.js";
 import PageInfo from "../components/PageInfo.jsx";
+import PageHeader from "../design-system/components/PageHeader.jsx";
+import Tabs from "../design-system/components/Tabs.jsx";
 import { useTranslation } from "../i18n/I18nProvider.jsx";
 
 export default function ShiftsPage() {
@@ -52,21 +54,23 @@ export default function ShiftsPage() {
 
   return (
     <div className="mes-page p-6 max-w-7xl mx-auto">
-      <div className="mes-page-header mb-6">
-        <div>
-        <div className="mes-title-row">
-          <h1 className="text-2xl font-bold">{t("shifts.title")}</h1>
-          <PageInfo page="shifts" />
-        </div>
-        <p>{t("shifts.subtitle")}</p>
-        </div>
-      </div>
+      <PageHeader
+        className="mb-6"
+        title={t("shifts.title")}
+        description={t("shifts.subtitle")}
+        titleAccessory={<PageInfo page="shifts" />}
+      />
 
-      <div className="mes-tabs">
-        {[["shifts", t("shifts.shifts_tab")], ["reports", t("shifts.reports_tab")]].map(([key, label]) => (
-          <button key={key} onClick={() => setActiveTab(key)} className={activeTab === key ? "is-active" : ""}>{label}</button>
-        ))}
-      </div>
+      <Tabs
+        className="mb-5"
+        ariaLabel={t("shifts.title")}
+        value={activeTab}
+        onChange={setActiveTab}
+        items={[
+          { value: "shifts", label: t("shifts.shifts_tab") },
+          { value: "reports", label: t("shifts.reports_tab") },
+        ]}
+      />
 
       {loading && <p className="text-neutral-400">{t("common.loading")}</p>}
 

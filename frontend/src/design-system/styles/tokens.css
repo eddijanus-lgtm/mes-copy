@@ -1,0 +1,86 @@
+:root {
+  color-scheme: light;
+
+  --ds-color-canvas: #f4f5f6;
+  --ds-color-surface: #ffffff;
+  --ds-color-surface-subtle: #f8f9fa;
+  --ds-color-text: #15191e;
+  --ds-color-text-muted: #68717d;
+  --ds-color-border: #dfe3e7;
+  --ds-color-border-strong: #cbd1d8;
+  --ds-color-accent: #ff5a00;
+  --ds-color-action-primary: #c74300;
+  --ds-color-action-primary-hover: #a83900;
+  --ds-color-accent-hover: #d94d00;
+  --ds-color-success: #07952c;
+  --ds-color-warning: #c47a00;
+  --ds-color-danger: #bd2d21;
+  --ds-color-info: #1d70c9;
+
+  --ds-font-sans: Inter, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --ds-font-mono: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  --ds-font-size-xs: 0.6875rem;
+  --ds-font-size-sm: 0.75rem;
+  --ds-font-size-md: 0.875rem;
+  --ds-font-size-lg: 1rem;
+  --ds-font-size-xl: 1.25rem;
+  --ds-font-size-2xl: 1.75rem;
+  --ds-line-height-tight: 1.2;
+  --ds-line-height-normal: 1.5;
+
+  --ds-space-1: 0.25rem;
+  --ds-space-2: 0.5rem;
+  --ds-space-3: 0.75rem;
+  --ds-space-4: 1rem;
+  --ds-space-5: 1.25rem;
+  --ds-space-6: 1.5rem;
+  --ds-space-8: 2rem;
+  --ds-space-10: 2.5rem;
+
+  --ds-radius-sm: 0.3125rem;
+  --ds-radius-md: 0.5rem;
+  --ds-radius-lg: 0.75rem;
+  --ds-shadow-sm: 0 1px 2px rgb(21 25 30 / 5%);
+  --ds-shadow-md: 0 10px 28px rgb(21 25 30 / 12%);
+  --ds-shadow-dialog: 0 24px 70px rgb(0 0 0 / 28%);
+  --ds-focus-ring: 0 0 0 3px rgb(255 90 0 / 18%);
+  --ds-duration-fast: 140ms;
+  --ds-duration-normal: 220ms;
+  --ds-ease-standard: cubic-bezier(0.2, 0.75, 0.2, 1);
+  --ds-touch-target: 2.75rem;
+  --ds-page-gutter: clamp(1.25rem, 2.2vw, 2.125rem);
+
+  /* Compatibility aliases for existing feature styles during migration. */
+  --wara-bg: var(--ds-color-canvas);
+  --wara-surface: var(--ds-color-surface);
+  --wara-surface-subtle: var(--ds-color-surface-subtle);
+  --wara-text: var(--ds-color-text);
+  --wara-text-muted: var(--ds-color-text-muted);
+  --wara-border: var(--ds-color-border);
+  --wara-border-strong: var(--ds-color-border-strong);
+  --wara-accent: var(--ds-color-accent);
+  --wara-accent-dark: var(--ds-color-accent-hover);
+  --wara-success: var(--ds-color-success);
+  --wara-warning: var(--ds-color-warning);
+  --wara-error: var(--ds-color-danger);
+  --wara-info: var(--ds-color-info);
+  --wara-radius-sm: var(--ds-radius-sm);
+  --wara-radius: var(--ds-radius-md);
+  --wara-shadow: var(--ds-shadow-sm);
+  --wara-focus: var(--ds-focus-ring);
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --ds-color-canvas: #11161c;
+  --ds-color-surface: #1a2027;
+  --ds-color-surface-subtle: #202831;
+  --ds-color-text: #eef1f4;
+  --ds-color-text-muted: #aab3bd;
+  --ds-color-border: #303944;
+  --ds-color-border-strong: #46515e;
+  --ds-color-accent-hover: #ff762e;
+  --ds-shadow-sm: 0 1px 2px rgb(0 0 0 / 28%);
+  --ds-shadow-md: 0 10px 28px rgb(0 0 0 / 35%);
+  --ds-focus-ring: 0 0 0 3px rgb(255 118 46 / 24%);
+}

@@ -3,7 +3,7 @@
 .routes-header { display: flex; align-items: flex-end; justify-content: space-between; gap: 20px; }
 .routes-header h1 { margin: 0; font-size: 1.45rem; }
 .routes-header p { margin: 5px 0 0; color: var(--wara-text-muted); font-size: .76rem; }
-.routes-primary { border-color: var(--wara-accent) !important; color: #fff !important; background: var(--wara-accent) !important; }
+.routes-primary { border-color: var(--ds-color-action-primary) !important; color: #fff !important; background: var(--ds-color-action-primary) !important; }
 .routes-list { display: grid; gap: 12px; }
 .route-card { border: 1px solid var(--wara-border); border-radius: 9px; padding: 16px 18px; background: var(--wara-surface); box-shadow: var(--wara-shadow); }
 .route-card > header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }

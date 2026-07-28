@@ -14,6 +14,7 @@ import { XIcon } from "@phosphor-icons/react/X";
 import { api } from "../api/client.js";
 import ExecutionStepCard from "../components/ExecutionStepCard.jsx";
 import PageInfo from "../components/PageInfo.jsx";
+import PageHeader from "../design-system/components/PageHeader.jsx";
 import { useAuth } from "../providers/AuthProvider.jsx";
 import {
   isActiveExecutionStep,
@@ -239,15 +240,12 @@ export default function OrdersPage() {
 
   return (
     <div className="mes-page orders-page min-h-screen bg-neutral-50">
-      <header className="mes-page-header">
-        <div>
-          <div className="mes-title-row">
-            <h1>{t("orders.title")}</h1>
-            <PageInfo page="orders" />
-          </div>
-          <p>{t("orders.subtitle")}</p>
-        </div>
-        <div className="orders-page-actions">
+      <PageHeader
+        title={t("orders.title")}
+        description={t("orders.subtitle")}
+        titleAccessory={<PageInfo page="orders" />}
+        actions={(
+          <div className="orders-page-actions">
           {completedCount > 0 && (
             <button
               type="button"
@@ -269,8 +267,9 @@ export default function OrdersPage() {
               {t("orders.new_order")}
             </button>
           )}
-        </div>
-      </header>
+          </div>
+        )}
+      />
 
       {routableMachines.length === 0 && <p className="orders-warning">{t("orders.warning_no_routable")}</p>}
       {error && <p role="alert" className="orders-error">{error}</p>}

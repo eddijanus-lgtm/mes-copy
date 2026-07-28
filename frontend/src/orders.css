@@ -26,9 +26,9 @@
 
 .orders-primary-action {
   display: inline-flex; min-height: 40px; align-items: center; justify-content: center;
-  border: 1px solid var(--wara-accent); padding: 0 16px; color: #fff; background: var(--wara-accent);
+  border: 1px solid var(--ds-color-action-primary); padding: 0 16px; color: #fff; background: var(--ds-color-action-primary);
 }
-.orders-primary-action:hover { border-color: var(--wara-accent-dark); background: var(--wara-accent-dark); }
+.orders-primary-action:hover { border-color: var(--ds-color-action-primary-hover); background: var(--ds-color-action-primary-hover); }
 .orders-page-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
 .orders-secondary-action {
   display: inline-flex; min-height: 40px; align-items: center; justify-content: center; gap: 7px;

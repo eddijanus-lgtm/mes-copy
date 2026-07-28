@@ -1,23 +1,28 @@
-import React from "react";
+import React, { lazy, Suspense } from "react";
 import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import Sidebar from "./components/Sidebar.jsx";
-import Dashboard from "./pages/Dashboard.jsx";
-import MachinesPage from "./pages/Machines.jsx";
-import AlarmsPage from "./pages/Alarms.jsx";
-import TracesPage from "./pages/Traces.jsx";
-import ShopfloorPage from "./pages/Shopfloor.jsx";
 import SystemStatus from "./components/SystemStatus.jsx";
-import LoginPage from "./pages/Login.jsx";
-import UsersPage from "./pages/Users.jsx";
-import CarriersPage from "./pages/Carriers.jsx";
-import OrdersPage from "./pages/Orders.jsx";
-import RoutesPage from "./pages/Routes.jsx";
-import NotificationsPage from "./pages/Notifications.jsx";
-import ShiftsPage from "./pages/Shifts.jsx";
 import { useAuth } from "./providers/AuthProvider.jsx";
 import { hasRole, ROLES } from "./utils/roles.js";
 import { I18nProvider } from "./i18n/I18nProvider.jsx";
 import { useTabletMode } from "./hooks/useTabletMode.js";
+
+const Dashboard = lazy(() => import("./pages/Dashboard.jsx"));
+const MachinesPage = lazy(() => import("./pages/Machines.jsx"));
+const AlarmsPage = lazy(() => import("./pages/Alarms.jsx"));
+const TracesPage = lazy(() => import("./pages/Traces.jsx"));
+const ShopfloorPage = lazy(() => import("./pages/Shopfloor.jsx"));
+const LoginPage = lazy(() => import("./pages/Login.jsx"));
+const UsersPage = lazy(() => import("./pages/Users.jsx"));
+const CarriersPage = lazy(() => import("./pages/Carriers.jsx"));
+const OrdersPage = lazy(() => import("./pages/Orders.jsx"));
+const RoutesPage = lazy(() => import("./pages/Routes.jsx"));
+const NotificationsPage = lazy(() => import("./pages/Notifications.jsx"));
+const ShiftsPage = lazy(() => import("./pages/Shifts.jsx"));
+
+function PageLoading() {
+  return <div className="mes-page-loading" role="status">Ansicht wird geladen…</div>;
+}
 
 function AdminRoute({ children }) {
   const { user } = useAuth();
@@ -35,19 +40,21 @@ function ProtectedApp() {
     <div className="h-screen w-screen flex overflow-hidden bg-neutral-50">
       {isTabletDashboard ? null : <Sidebar />}
       <main className={`app-content relative min-h-0 min-w-0 flex-1 ${isTabletDashboard ? "overflow-hidden" : "overflow-y-auto"}`}>
-        <Routes>
-          <Route path="/" element={<Dashboard />} />
-          <Route path="machines/*" element={<MachinesPage />} />
-          <Route path="orders/*" element={<OrdersPage />} />
-          <Route path="routes/*" element={<RoutesPage />} />
-          <Route path="alarms/*" element={<AlarmsPage />} />
-          <Route path="traces/*" element={<TracesPage />} />
-          <Route path="shopfloor/*" element={<ShopfloorPage />} />
-          <Route path="users" element={<AdminRoute><UsersPage /></AdminRoute>} />
-          <Route path="carriers" element={<CarriersPage />} />
-          <Route path="notifications" element={<NotificationsPage />} />
-          <Route path="shifts" element={<ShiftsPage />} />
-        </Routes>
+        <Suspense fallback={<PageLoading />}>
+          <Routes>
+            <Route path="/" element={<Dashboard />} />
+            <Route path="machines/*" element={<MachinesPage />} />
+            <Route path="orders/*" element={<OrdersPage />} />
+            <Route path="routes/*" element={<RoutesPage />} />
+            <Route path="alarms/*" element={<AlarmsPage />} />
+            <Route path="traces/*" element={<TracesPage />} />
+            <Route path="shopfloor/*" element={<ShopfloorPage />} />
+            <Route path="users" element={<AdminRoute><UsersPage /></AdminRoute>} />
+            <Route path="carriers" element={<CarriersPage />} />
+            <Route path="notifications" element={<NotificationsPage />} />
+            <Route path="shifts" element={<ShiftsPage />} />
+          </Routes>
+        </Suspense>
       </main>
     </div>
   );
@@ -57,10 +64,12 @@ export default function App() {
   return (
     <I18nProvider>
       <>
-        <Routes>
-          <Route path="/login" element={<LoginPage />} />
-          <Route path="/*" element={<ProtectedApp />} />
-        </Routes>
+        <Suspense fallback={<PageLoading />}>
+          <Routes>
+            <Route path="/login" element={<LoginPage />} />
+            <Route path="/*" element={<ProtectedApp />} />
+          </Routes>
+        </Suspense>
         <SystemStatus />
       </>
     </I18nProvider>

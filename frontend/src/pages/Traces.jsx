@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { api } from "../api/client.js";
 import PageInfo from "../components/PageInfo.jsx";
+import PageHeader from "../design-system/components/PageHeader.jsx";
 import { useToasts } from "../providers/ToastProvider.jsx";
 import { useTranslation } from "../i18n/I18nProvider.jsx";
 
@@ -60,15 +61,11 @@ export default function TracesPage() {
   return (
     <div className="mes-page min-h-screen bg-neutral-50">
       <main className="p-6 space-y-6">
-        <div className="mes-page-header">
-          <div>
-          <div className="mes-title-row">
-            <h1 className="text-2xl font-bold text-neutral-900">{t("traces.title")}</h1>
-            <PageInfo page="traces" />
-          </div>
-          <p className="text-sm text-neutral-500 mt-0.5">{t("traces.subtitle")}</p>
-          </div>
-        </div>
+        <PageHeader
+          title={t("traces.title")}
+          description={t("traces.subtitle")}
+          titleAccessory={<PageInfo page="traces" />}
+        />
 
         <div className="mes-filter-panel flex gap-2 flex-wrap items-end">
           <div>

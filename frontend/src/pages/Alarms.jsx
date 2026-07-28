@@ -1,6 +1,8 @@
 import { useState, useEffect } from "react";
 import { api } from "../api/client.js";
 import PageInfo from "../components/PageInfo.jsx";
+import Button from "../design-system/components/Button.jsx";
+import PageHeader from "../design-system/components/PageHeader.jsx";
 import { useToasts } from "../providers/ToastProvider.jsx";
 import { useTranslation } from "../i18n/I18nProvider.jsx";
 import { useAuth } from "../providers/AuthProvider.jsx";
@@ -160,23 +162,12 @@ export default function AlarmsPage() {
   return (
     <div className="mes-page min-h-screen bg-neutral-50">
       <main className="p-6 space-y-6">
-        <div className="mes-page-header">
-          <div>
-            <div className="mes-title-row">
-              <h1 className="text-2xl font-bold text-neutral-900">{t("alarms.title")}</h1>
-              <PageInfo page="alarms" />
-            </div>
-            <p className="text-sm text-neutral-500 mt-0.5">
-              {t("alarms.subtitle")} {activeCount > 0 && <span>({activeCount} {t("alarms.open_count")})</span>}
-            </p>
-          </div>
-          <button
-            onClick={handleExportCsv}
-            className="px-4 py-2 bg-white border border-neutral-200 rounded-lg text-xs font-semibold text-neutral-700 hover:bg-neutral-50 transition-colors"
-          >
-            {t("alarms.csv_export")}
-          </button>
-        </div>
+        <PageHeader
+          title={t("alarms.title")}
+          description={`${t("alarms.subtitle")}${activeCount > 0 ? ` (${activeCount} ${t("alarms.open_count")})` : ""}`}
+          titleAccessory={<PageInfo page="alarms" />}
+          actions={<Button variant="secondary" onClick={handleExportCsv}>{t("alarms.csv_export")}</Button>}
+        />
 
         <div className="mes-filter-panel space-y-3">
           <div className="flex gap-1.5 flex-wrap" role="group" aria-label={t("alarms.filter_severity")}>

@@ -3,6 +3,7 @@ import { useTranslation } from "../i18n/I18nProvider.jsx";
 import { api } from "../api/client.js";
 import ExecutionStepCard from "../components/ExecutionStepCard.jsx";
 import PageInfo from "../components/PageInfo.jsx";
+import PageHeader from "../design-system/components/PageHeader.jsx";
 import { useShopfloorTelemetry } from "../hooks/useShopfloorTelemetry.js";
 import {
   activeExecutionForResource,
@@ -116,19 +117,17 @@ export default function ShopfloorPage() {
   return (
     <div className="mes-page min-h-screen bg-neutral-50">
       <main className="p-6 space-y-6">
-        <div className="mes-page-header">
-          <div>
-            <div className="mes-title-row">
-              <h1 className="text-2xl font-bold text-neutral-900">{t("shopfloor.title")}</h1>
-              <PageInfo page="shopfloor" />
+        <PageHeader
+          title={t("shopfloor.title")}
+          description={t("shopfloor.subtitle")}
+          titleAccessory={<PageInfo page="shopfloor" />}
+          actions={(
+            <div className="flex items-center gap-2 text-xs text-neutral-500">
+              <span className={`h-2.5 w-2.5 rounded-full ${connected ? "bg-status-success animate-pulse" : "bg-status-error"}`} />
+              {lastMessageAt ? `Daten empfangen vor ${ageInSeconds(lastMessageAt, now)} s` : "Noch keine Telemetrie"}
             </div>
-            <p className="text-sm text-neutral-500 mt-0.5">{t("shopfloor.subtitle")}</p>
-          </div>
-          <div className="flex items-center gap-2 text-xs text-neutral-500">
-            <span className={`h-2.5 w-2.5 rounded-full ${connected ? "bg-status-success animate-pulse" : "bg-status-error"}`} />
-            {lastMessageAt ? `Daten empfangen vor ${ageInSeconds(lastMessageAt, now)} s` : "Noch keine Telemetrie"}
-          </div>
-        </div>
+          )}
+        />
 
         <div className="flex flex-wrap gap-2">
           <StatusBadge label="WebSocket" active={connected} detail={status} />

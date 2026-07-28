@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { api } from "../api/client.js";
 import PageInfo from "../components/PageInfo.jsx";
+import Button from "../design-system/components/Button.jsx";
+import PageHeader from "../design-system/components/PageHeader.jsx";
 import { useAuth } from "../providers/AuthProvider.jsx";
 import { hasRole, ROLES } from "../utils/roles.js";
 import { useTranslation } from "../i18n/I18nProvider.jsx";
@@ -72,16 +74,12 @@ export default function CarriersPage() {
 
   return (
     <div className="mes-page min-h-screen bg-neutral-50 p-6 space-y-6">
-      <div className="mes-page-header">
-        <div>
-          <div className="mes-title-row">
-            <h1 className="text-2xl font-bold text-neutral-900">{t("carriers.title")}</h1>
-            <PageInfo page="carriers" />
-          </div>
-          <p className="mt-1 text-sm text-neutral-500">{t("carriers.subtitle")}</p>
-        </div>
-        <button onClick={load} className="w-fit rounded-lg border border-neutral-200 bg-white px-4 py-2 text-sm font-medium text-neutral-700 hover:border-brand-primary hover:text-brand-primary">{t("carriers.refresh")}</button>
-      </div>
+      <PageHeader
+        title={t("carriers.title")}
+        description={t("carriers.subtitle")}
+        titleAccessory={<PageInfo page="carriers" />}
+        actions={<Button variant="secondary" onClick={load}>{t("carriers.refresh")}</Button>}
+      />
 
       <section className="mes-context-note">
         <strong>{t("carriers.info")}</strong>

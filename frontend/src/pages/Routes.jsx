@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { api } from "../api/client.js";
 import PageInfo from "../components/PageInfo.jsx";
+import Button from "../design-system/components/Button.jsx";
+import PageHeader from "../design-system/components/PageHeader.jsx";
 import { useAuth } from "../providers/AuthProvider.jsx";
 import { hasRole, ROLES } from "../utils/roles.js";
 import "./routes.css";
@@ -154,10 +156,13 @@ export default function RoutesPage() {
   return (
     <div className="mes-page routes-page">
       <main>
-        <header className="routes-header">
-          <div><div className="mes-title-row"><h1>Routenplanung</h1><PageInfo page="routes" /></div><p>Wiederverwendbare Maschinenrouten in ihrer tatsächlichen Ausführungsreihenfolge.</p></div>
-          {canEdit && <button type="button" className="routes-primary" onClick={startNew}>+ Neue Route anlegen</button>}
-        </header>
+        <PageHeader
+          className="routes-header"
+          title="Routenplanung"
+          description="Wiederverwendbare Maschinenrouten in ihrer tatsächlichen Ausführungsreihenfolge."
+          titleAccessory={<PageInfo page="routes" />}
+          actions={canEdit ? <Button onClick={startNew}>Neue Route anlegen</Button> : null}
+        />
         {error && !open && <p className="routes-error">{error}</p>}
         {loading ? <p className="routes-empty">Routen werden geladen…</p> : routes.length ? (
           <div className="routes-list">

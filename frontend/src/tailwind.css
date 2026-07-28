@@ -2,32 +2,32 @@
 
 @theme {
   /* Brand */
-  --color-brand-primary:  #ff5a00;
+  --color-brand-primary:  var(--ds-color-action-primary);
   --color-brand-magenta:  #e8147a;
-  --color-brand-orange:   #ff5a00;
+  --color-brand-orange:   var(--ds-color-accent);
   --color-brand-cyan:     #00b4d8;
   --color-brand-lilac:    #9b72cf;
 
   /* Neutrals — nie #000 oder #1a1a1a */
-  --color-neutral-50:     #f8f9fa;
+  --color-neutral-50:     var(--ds-color-surface-subtle);
   --color-neutral-100:    #eef1f4;
-  --color-neutral-200:    #dfe3e7;
-  --color-neutral-300:    #cbd1d8;
+  --color-neutral-200:    var(--ds-color-border);
+  --color-neutral-300:    var(--ds-color-border-strong);
   --color-neutral-400:    #969da6;
-  --color-neutral-500:    #68717d;
+  --color-neutral-500:    var(--ds-color-text-muted);
   --color-neutral-600:    #505863;
   --color-neutral-700:    #3c434c;
   --color-neutral-800:    #252b32;
-  --color-neutral-900:    #15191e;
+  --color-neutral-900:    var(--ds-color-text);
 
   /* Status */
-  --color-status-success:   #16a34a;
+  --color-status-success:   var(--ds-color-success);
   --color-status-success-bg: #f0fdf4;
-  --color-status-warning:   #ca8a04;
+  --color-status-warning:   var(--ds-color-warning);
   --color-status-warning-bg: #fefce8;
-  --color-status-error:     #dc2626;
+  --color-status-error:     var(--ds-color-danger);
   --color-status-error-bg:   #fef2f2;
-  --color-status-info:      #2563eb;
+  --color-status-info:      var(--ds-color-info);
   --color-status-info-bg:    #eff6ff;
   --color-status-bg-success: #f0fdf4;
   --color-status-bg-warning: #fefce8;
@@ -35,7 +35,7 @@
   --color-status-bg-info:    #eff6ff;
    --color-accent-pink:      #fdf2f8;
    --color-accent-lilac-bg:  #faf5ff;
-   --color-brand-primary-dark: #d94d00;
+   --color-brand-primary-dark: var(--ds-color-action-primary-hover);
    --color-status-error-dark:  #b91c1c;
 }
 

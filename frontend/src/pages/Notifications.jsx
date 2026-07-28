@@ -3,6 +3,8 @@ import { api } from "../api/client.js";
 import PageInfo from "../components/PageInfo.jsx";
 import { useAuth } from "../providers/AuthProvider.jsx";
 import Modal from "../components/Modal.jsx";
+import PageHeader from "../design-system/components/PageHeader.jsx";
+import Tabs from "../design-system/components/Tabs.jsx";
 import { useTranslation } from "../i18n/I18nProvider.jsx";
 
 function sevClass(sev) {
@@ -78,15 +80,12 @@ export default function NotificationsPage() {
 
   return (
     <div className="mes-page p-6 max-w-7xl mx-auto">
-      <div className="mes-page-header mb-6">
-        <div>
-        <div className="mes-title-row">
-          <h1 className="text-2xl font-bold">{t("notifications.title")}</h1>
-          <PageInfo page="notifications" />
-        </div>
-        <p>{t("notifications.subtitle")}</p>
-        </div>
-      </div>
+      <PageHeader
+        className="mb-6"
+        title={t("notifications.title")}
+        description={t("notifications.subtitle")}
+        titleAccessory={<PageInfo page="notifications" />}
+      />
       {stats && (
         <div className="flex gap-4 mb-6">
           <div className="mes-panel flex-1 p-4 text-center">
@@ -104,11 +103,17 @@ export default function NotificationsPage() {
         </div>
       )}
 
-      <div className="mes-tabs">
-        {[["rules", t("notifications.alert_rules")], ["history", t("notifications.history")], ["channels", t("notifications.channels")]].map(([key, label]) => (
-          <button key={key} onClick={() => setActiveTab(key)} className={activeTab === key ? "is-active" : ""}>{label}</button>
-        ))}
-      </div>
+      <Tabs
+        className="mb-5"
+        ariaLabel={t("notifications.title")}
+        value={activeTab}
+        onChange={setActiveTab}
+        items={[
+          { value: "rules", label: t("notifications.alert_rules") },
+          { value: "history", label: t("notifications.history") },
+          { value: "channels", label: t("notifications.channels") },
+        ]}
+      />
 
       {loading && <p className="text-neutral-400">{t("common.loading")}</p>}
 

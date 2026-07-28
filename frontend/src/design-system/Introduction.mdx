@@ -1,0 +1,25 @@
+import { Meta } from "@storybook/addon-docs/blocks";
+
+<Meta title="Grundlagen/Einführung" />
+
+# WARA MES Designsystem
+
+Dieser Katalog ist die verbindliche Quelle für Gestaltung, Komponentenvarianten und UI-Zustände des MES.
+
+## Arbeitsweise
+
+1. Vor einer neuen Komponente wird geprüft, ob bereits ein passender Baustein existiert.
+2. Allgemeine Gestaltung wird ausschließlich über `--ds-*` Design-Tokens gesteuert.
+3. Wiederverwendbare Komponenten liegen in `src/design-system/components`.
+4. Fachliche Komponenten bleiben in ihrem Feature, erhalten aber Stories für wichtige Zustände.
+5. Desktop-, Tablet-, Leer-, Lade-, Fehler- und deaktivierte Zustände werden sichtbar dokumentiert.
+
+## Qualitätskriterien
+
+- Touch-Ziele sind mindestens 44 Pixel hoch.
+- Fokuszustände sind mit der Tastatur sichtbar.
+- Farben funktionieren im hellen und dunklen Design.
+- Komponenten enthalten keine API- oder Fachlogik.
+- Feature-Code importiert Komponenten direkt, ohne zentrale Barrel-Datei.
+
+Die vollständigen Regeln und Migrationshinweise stehen in `frontend/DESIGN_SYSTEM.md`.

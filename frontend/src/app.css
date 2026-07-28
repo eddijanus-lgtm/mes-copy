@@ -1,69 +1,3 @@
-:root {
-  --wara-bg: #f4f5f6;
-  --wara-surface: #ffffff;
-  --wara-surface-subtle: #f8f9fa;
-  --wara-text: #15191e;
-  --wara-text-muted: #68717d;
-  --wara-border: #dfe3e7;
-  --wara-border-strong: #cbd1d8;
-  --wara-accent: #ff5a00;
-  --wara-accent-dark: #d94d00;
-  --wara-success: #07952c;
-  --wara-warning: #c47a00;
-  --wara-error: #bd2d21;
-  --wara-info: #1d70c9;
-  --wara-radius-sm: 5px;
-  --wara-radius: 8px;
-  --wara-shadow: 0 1px 2px rgb(21 25 30 / 5%);
-  --wara-focus: 0 0 0 3px rgb(255 90 0 / 16%);
-}
-
-:root[data-theme="dark"] {
-  --wara-bg: #11161c;
-  --wara-surface: #1a2027;
-  --wara-surface-subtle: #202831;
-  --wara-text: #eef1f4;
-  --wara-text-muted: #aab3bd;
-  --wara-border: #303944;
-  --wara-border-strong: #46515e;
-  --wara-accent-dark: #ff762e;
-  --wara-shadow: 0 1px 2px rgb(0 0 0 / 28%);
-  --wara-focus: 0 0 0 3px rgb(255 118 46 / 24%);
-}
-
-* {
-  box-sizing: border-box;
-}
-
-html,
-body,
-#root {
-  min-height: 100%;
-  margin: 0;
-}
-
-body {
-  color: var(--wara-text);
-  background: var(--wara-bg);
-  font-family: Inter, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-  text-rendering: optimizeLegibility;
-}
-
-button,
-input,
-select,
-textarea {
-  font: inherit;
-}
-
-button {
-  cursor: pointer;
-}
-
-button:disabled {
-  cursor: not-allowed;
-}
-
 .app-content {
   color: var(--wara-text);
   background: var(--wara-bg);
@@ -323,15 +257,15 @@ button:disabled {
 
 .mes-page button[class*="bg-brand-primary"],
 .mes-page button[class~="bg-blue-600"] {
-  border: 1px solid var(--wara-accent) !important;
+  border: 1px solid var(--ds-color-action-primary) !important;
   color: #fff !important;
-  background: var(--wara-accent) !important;
+  background: var(--ds-color-action-primary) !important;
 }
 
 .mes-page button[class*="bg-brand-primary"]:hover,
 .mes-page button[class~="bg-blue-600"]:hover {
-  border-color: var(--wara-accent-dark) !important;
-  background: var(--wara-accent-dark) !important;
+  border-color: var(--ds-color-action-primary-hover) !important;
+  background: var(--ds-color-action-primary-hover) !important;
 }
 
 .mes-page button[class*="bg-white"] {
@@ -453,9 +387,9 @@ button:disabled {
 
 .machine-profile-launch,
 .profile-primary {
-  border: 1px solid var(--wara-accent) !important;
+  border: 1px solid var(--ds-color-action-primary) !important;
   color: #fff !important;
-  background: var(--wara-accent) !important;
+  background: var(--ds-color-action-primary) !important;
   font-weight: 700 !important;
 }
 
@@ -468,7 +402,7 @@ button:disabled {
 
 .machine-profile-launch:hover,
 .profile-primary:hover {
-  background: var(--wara-accent-dark) !important;
+  background: var(--ds-color-action-primary-hover) !important;
 }
 
 .machine-profile-backdrop {
@@ -1635,14 +1569,14 @@ button:disabled {
 }
 
 .mes-primary-button {
-  border-color: var(--wara-accent);
+  border-color: var(--ds-color-action-primary);
   color: #fff;
-  background: var(--wara-accent);
+  background: var(--ds-color-action-primary);
 }
 
 .mes-primary-button:hover {
-  border-color: var(--wara-accent-dark);
-  background: var(--wara-accent-dark);
+  border-color: var(--ds-color-action-primary-hover);
+  background: var(--ds-color-action-primary-hover);
 }
 
 .mes-secondary-button {
@@ -1966,17 +1900,17 @@ button:disabled {
 
 .login-card button {
   min-height: 46px;
-  border: 1px solid var(--wara-accent);
+  border: 1px solid var(--ds-color-action-primary);
   border-radius: 6px;
   color: #fff;
-  background: var(--wara-accent);
+  background: var(--ds-color-action-primary);
   font-size: 0.75rem;
   font-weight: 680;
 }
 
 .login-card button:hover {
-  border-color: var(--wara-accent-dark);
-  background: var(--wara-accent-dark);
+  border-color: var(--ds-color-action-primary-hover);
+  background: var(--ds-color-action-primary-hover);
 }
 
 .login-card [role="alert"] {
