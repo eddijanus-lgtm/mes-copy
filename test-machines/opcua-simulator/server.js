@@ -201,6 +201,7 @@ async function fetchCarriersFromMes() {
         carrierId: c.carrier_number,
         partNo: 'WEBSHOP-PRODUCT-DEMO',
         targetResourceId: currentTargetResourceId(c, routesByOrder.get(c.order_id) || []),
+        routeResourceId: currentTargetResourceId(c, routesByOrder.get(c.order_id) || []),
         releaseDelay: (i + 1) * 2000,
       }));
   } catch (err) {
@@ -214,6 +215,8 @@ async function fetchCarriersFromMes() {
     return ids.map((id, i) => ({
       carrierId: id,
       partNo: 'WEBSHOP-PRODUCT-DEMO',
+      targetResourceId: 1,
+      routeResourceId: 1,
       releaseDelay: (i + 1) * 2000,
     }));
   }
@@ -417,7 +420,9 @@ function requestMesData(station, carrier) {
   });
   station.currentCarrier = carrier;
   station.query.uiCarrierId = carrier.carrierId;
-  station.query.uiResourceId = station.resourceId;
+  // RFID itself is not simulated. routeResourceId represents the routing
+  // value carried by the pallet and read when it reaches a station.
+  station.query.uiResourceId = carrier.routeResourceId;
   station.query.sOrderNo = '';
   station.query.sPartNo = '';
   station.query.uiOperationNo = 0;
@@ -490,8 +495,8 @@ function completeStationCycle(station) {
   station.pendingCompletion = false;
   station.xStartBlockedUntil = Date.now() + 600;
 
-  if (!failed && station.query.uiNextResourceId) {
-    const nextStation = stations.find((candidate) => candidate.resourceId === station.query.uiNextResourceId);
+  if (!failed && carrier.routeResourceId) {
+    const nextStation = stations.find((candidate) => candidate.resourceId === carrier.routeResourceId);
     if (nextStation) {
       observeCarrier(carrier.carrierId, 'in_transit', {
         occupied: false,
@@ -518,6 +523,7 @@ function simulatePlc(station) {
       const stuckCarrier = station.currentCarrier || {
         carrierId: station.processData ? station.processData.iCarrierID : 0,
         partNo: 'WEBSHOP-PRODUCT-DEMO',
+        routeResourceId: station.resourceId,
       };
       station.query.xStart = false;
       station.query.xQryBusy = false;
@@ -572,6 +578,8 @@ function simulatePlc(station) {
       console.log(`${station.name}: MES-Antwort result=${station.query.uiResultCode}, order=${station.query.sOrderNo || '-'}`);
       if (station.query.xDone) {
         delete station.rejectCounts[station.query.uiCarrierId];
+        // Model the PLC writing the MES routing answer onto the carrier.
+        station.currentCarrier.routeResourceId = station.query.uiNextResourceId;
         console.log(`${station.name}: ${station.operation} gestartet, cycleTime=${station.cycleTimeMs} ms`);
         setTimeout(() => completeStationCycle(station), station.cycleTimeMs).unref();
       } else {
@@ -605,6 +613,7 @@ function releaseCarrier(carrier) {
   observeCarrier(carrier.carrierId, 'in_transit', { occupied: false, readerId: 'DEMO-PALLET-STORE-EXIT' });
   console.log(`Wareneingang: carrier ${carrier.carrierId} (${carrier.partNo}) in die Linie freigegeben`);
   const targetStation = stations.find((station) => station.resourceId === carrier.targetResourceId) || stations[0];
+  carrier.routeResourceId = carrier.targetResourceId || targetStation.resourceId;
   requestMesData(targetStation, carrier);
 }
 

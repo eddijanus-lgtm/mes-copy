@@ -59,7 +59,13 @@ export class StMesHandshakeService implements OnModuleInit {
         message: 'MES prueft Auftrag und Routenschritt',
       });
 
-      const decision = await this.routing.resolveStationRequest(resourceId, request.carrierNumber);
+      const decision =
+        request.requestedResourceId === resourceId
+          ? await this.routing.resolveStationRequest(
+              resourceId,
+              request.carrierNumber,
+            )
+          : { outcome: 'wrong_resource' as const };
       const ok = decision.outcome === 'accepted';
       const resultCode = this.machine.routingResultCode(decision.outcome);
       if (
