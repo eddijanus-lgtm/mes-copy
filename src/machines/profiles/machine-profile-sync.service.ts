@@ -41,6 +41,12 @@ export class MachineProfileSyncService implements OnApplicationBootstrap {
     }
 
     for (const station of profile.stations) {
+      const routingCapable = Boolean(
+        station.routing?.enabled !== false &&
+          (station.routing ||
+            (station.capabilities?.includes('routing') &&
+              station.jobInterface !== JobInterfaceEnum.TELEMETRY_ONLY)),
+      );
       const existing = await this.machines.findOne({
         where: { resource_id: station.resourceId },
       });
@@ -63,16 +69,14 @@ export class MachineProfileSyncService implements OnApplicationBootstrap {
           ExecutionModelEnum.WORK_UNIT_JOBS,
         job_interface:
           (station.jobInterface as JobInterfaceEnum | undefined) ??
-          (station.routing
+          (routingCapable
             ? JobInterfaceEnum.SIGNAL_HANDSHAKE
             : JobInterfaceEnum.TELEMETRY_ONLY),
         capabilities: [...(station.capabilities ?? [])],
         opcua_enabled: station.enabled,
         profile_managed: true,
         routing_enabled:
-          station.enabled &&
-          Boolean(station.routing) &&
-          station.routing?.enabled !== false,
+          station.enabled && routingCapable,
         route_sequence: station.routing?.sequence ?? null,
         operation_no: station.routing?.operationNo ?? null,
         dashboard_image: station.metadata?.dashboardImage ?? null,

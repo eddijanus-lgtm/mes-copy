@@ -1,7 +1,7 @@
-export function emptyMachineProfile(suggestion = {}) {
+export function emptyMachineProfile() {
   return {
     profileVersion: '1.0',
-    machineId: suggestion.machineId || '',
+    machineId: '',
     displayName: '',
     description: '',
     manufacturer: '',
@@ -107,17 +107,22 @@ export function validateProfileDraft(document) {
   const resourceIds = new Set();
   const routeSequences = new Set();
   const byResource = new Map(
-    stations.map((station) => [Number(station.resourceId), station]),
+    stations
+      .filter((station) => isPositiveInteger(station.resourceId))
+      .map((station) => [Number(station.resourceId), station]),
   );
 
   for (const station of stations) {
-    if (stationIds.has(station.stationId))
+    const stationId = String(station.stationId || '').trim();
+    if (stationId && stationIds.has(stationId))
       errors.push(`Stations-ID ${station.stationId} ist doppelt.`);
-    stationIds.add(station.stationId);
-    const resourceId = Number(station.resourceId);
-    if (resourceIds.has(resourceId))
+    if (stationId) stationIds.add(stationId);
+    const resourceId = isPositiveInteger(station.resourceId)
+      ? Number(station.resourceId)
+      : null;
+    if (resourceId != null && resourceIds.has(resourceId))
       errors.push(`Ressourcen-ID ${resourceId} ist doppelt.`);
-    resourceIds.add(resourceId);
+    if (resourceId != null) resourceIds.add(resourceId);
     if (station.routing?.enabled !== false && station.routing) {
       const sequence = Number(station.routing.sequence);
       if (!Number.isInteger(sequence) || sequence < 1)
@@ -135,6 +140,7 @@ export function validateProfileDraft(document) {
   }
 
   for (const station of stations) {
+    if (!isPositiveInteger(station.resourceId)) continue;
     const visited = new Set([Number(station.resourceId)]);
     let parent =
       station.parentResourceId == null
@@ -153,4 +159,67 @@ export function validateProfileDraft(document) {
     }
   }
   return errors;
+}
+
+export function stationSetupState(station) {
+  const endpoint = String(station?.connection?.endpointUrl || '').trim();
+  const hasIdentity =
+    String(station?.stationId || '').trim() &&
+    isPositiveInteger(station?.resourceId);
+  const signalCount = Array.isArray(station?.signals)
+    ? station.signals.length
+    : 0;
+
+  if (!endpoint) {
+    return {
+      key: 'planned',
+      label: 'Geplant',
+      detail: 'OPC-UA-Verbindung kann später ergänzt werden.',
+    };
+  }
+  if (!hasIdentity) {
+    return {
+      key: 'connection_configured',
+      label: 'Verbindung eingetragen',
+      detail: 'Stations- und Ressourcen-ID vor Aktivierung ergänzen.',
+    };
+  }
+  if (signalCount === 0) {
+    return {
+      key: 'discoverable',
+      label: 'Bereit zur Erkennung',
+      detail: 'DB151 und stMES können jetzt automatisch erkannt werden.',
+    };
+  }
+  return {
+    key: 'mapped',
+    label: 'Daten zugeordnet',
+    detail: `${signalCount} Signal${signalCount === 1 ? '' : 'e'} konfiguriert.`,
+  };
+}
+
+export function profileSetupSummary(document) {
+  const stations = Array.isArray(document?.stations) ? document.stations : [];
+  const counts = {
+    planned: 0,
+    connection_configured: 0,
+    discoverable: 0,
+    mapped: 0,
+  };
+  for (const station of stations) {
+    counts[stationSetupState(station).key] += 1;
+  }
+  return {
+    stationCount: stations.length,
+    endpointCount: stations.filter((station) =>
+      String(station?.connection?.endpointUrl || '').trim(),
+    ).length,
+    mappedCount: counts.mapped,
+    counts,
+  };
+}
+
+function isPositiveInteger(value) {
+  const number = Number(value);
+  return Number.isInteger(number) && number > 0;
 }

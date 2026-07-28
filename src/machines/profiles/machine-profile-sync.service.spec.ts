@@ -149,4 +149,46 @@ describe('MachineProfileSyncService', () => {
       capabilities: ['production', 'routing'],
     });
   });
+
+  it('marks a handshake station routable without a legacy route sequence', async () => {
+    const station = {
+      resource_id: 30,
+      profile_managed: true,
+      status: MachineStatusEnum.OFFLINE,
+    } as MachineEntity;
+    const profiles = {
+      getProfile: jest.fn(() => ({
+        machineId: 'learning-factory',
+        stations: [
+          {
+            resourceId: 30,
+            displayName: 'Press 01',
+            enabled: true,
+            jobInterface: 'signal_handshake',
+            capabilities: ['production', 'routing', 'telemetry'],
+          },
+        ],
+      })),
+    };
+    const machines = {
+      find: jest.fn().mockResolvedValue([station]),
+      findOne: jest.fn().mockResolvedValue(station),
+      create: jest.fn((value) => value),
+      save: jest.fn(async (value) => value),
+    };
+    const service = new MachineProfileSyncService(
+      profiles as unknown as MachineProfileService,
+      machines as never,
+    );
+
+    await service.onApplicationBootstrap();
+
+    expect(station).toMatchObject({
+      resource_id: 30,
+      routing_enabled: true,
+      route_sequence: null,
+      operation_no: null,
+      job_interface: JobInterfaceEnum.SIGNAL_HANDSHAKE,
+    });
+  });
 });

@@ -49,6 +49,19 @@ describe('OpcUaCommissioningService', () => {
     });
   });
 
+  it('assigns handshake signals to the side that owns each value', () => {
+    const service = new OpcUaCommissioningService(new ConfigService());
+    const direction = (role: string) =>
+      (service as any).signalDirection(role) as string;
+
+    expect(direction('workRequest')).toBe('machineToMes');
+    expect(direction('carrierId')).toBe('machineToMes');
+    expect(direction('completedCarrierId')).toBe('machineToMes');
+    expect(direction('requestAccepted')).toBe('mesToMachine');
+    expect(direction('operationId')).toBe('mesToMachine');
+    expect(direction('routingParameter')).toBe('mesToMachine');
+  });
+
   it('rejects a connection test without an enabled station', async () => {
     const service = new OpcUaCommissioningService(new ConfigService());
     const profile = {

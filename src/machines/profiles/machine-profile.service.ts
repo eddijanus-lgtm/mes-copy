@@ -746,16 +746,6 @@ export function machineProfileSemanticErrors(
       } else {
         routeSequences.add(station.routing.sequence);
       }
-    } else if (
-      profile.operatingMode === 'control' &&
-      hasStationCapability(station, 'routing') &&
-      station.enabled
-    ) {
-      if (!station.routing) {
-        errors.push(
-          `Station ${station.stationId} requires routing configuration`,
-        );
-      }
     }
 
     const signalKeys = new Set<string>();

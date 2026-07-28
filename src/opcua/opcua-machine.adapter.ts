@@ -420,8 +420,11 @@ export class OpcUaMachineAdapter implements MachineAdapter {
           displayName: station.displayName,
           enabled: true,
           routeSequence: station.routing?.sequence,
-          operationNo: station.routing?.operationNo,
-          operation: station.routing?.operation,
+          operationNo: station.routing?.operationNo ?? resourceId,
+          operation:
+            station.routing?.operation?.trim() ||
+            station.displayName.trim() ||
+            'Standardaktion',
           resourceType: station.resourceType,
           ...(station.capabilities
             ? { capabilities: station.capabilities }

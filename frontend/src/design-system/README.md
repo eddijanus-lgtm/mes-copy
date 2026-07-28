@@ -20,5 +20,6 @@ Verfügbare Grundlagen:
 - `EmptyState`: leerer Zustand mit optionaler Aktion
 - `StatCard`: standardisierte Kennzahl
 - `Toolbar`: Anordnung von Seitenaktionen
+- `DataTable`: zugängliche, horizontal scrollbar Tabellenhülle mit definierter Spalten-API
 
 Die visuelle Dokumentation und alle Varianten werden über Storybook gepflegt.
