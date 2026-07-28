@@ -69,6 +69,10 @@ export class CreateProductDto {
   @IsNotEmpty()
   name: string;
 
+  @IsString()
+  @IsNotEmpty()
+  profile_machine_id: string;
+
   @IsOptional()
   @IsString()
   description?: string;
@@ -99,6 +103,11 @@ export class UpdateProductDto {
   @IsString()
   @IsNotEmpty()
   name?: string;
+
+  @IsOptional()
+  @IsString()
+  @IsNotEmpty()
+  profile_machine_id?: string;
 
   @IsOptional()
   @IsString()

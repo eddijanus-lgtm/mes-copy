@@ -5,6 +5,7 @@ import Modal from "../components/Modal.jsx";
 import { ROLES, USER_ROLES } from "../utils/roles.js";
 import { EyeIcon } from "@phosphor-icons/react/Eye";
 import { EyeSlashIcon } from "@phosphor-icons/react/EyeSlash";
+import { useTranslation } from "../i18n/I18nProvider.jsx";
 
 const roleLabels = {
   [ROLES.VIEWER]: "Viewer (nur lesen)",
@@ -19,6 +20,7 @@ const labelRole = {
 };
 
 export default function UsersPage() {
+  const { t } = useTranslation();
   const [users, setUsers] = useState([]);
   const [visiblePasswords, setVisiblePasswords] = useState({});
   const [editingUser, setEditingUser] = useState(null);
@@ -103,20 +105,20 @@ export default function UsersPage() {
         <div className="mes-page-header">
           <div>
             <div className="mes-title-row">
-              <h1 className="text-2xl font-bold text-neutral-900">Benutzerverwaltung</h1>
+              <h1 className="text-2xl font-bold text-neutral-900">{t("users.title")}</h1>
               <PageInfo page="users" />
             </div>
-            <p className="text-sm text-neutral-500 mt-0.5">Benutzer verwalten, anlegen, bearbeiten und löschen</p>
+            <p className="text-sm text-neutral-500 mt-0.5">{t("users.subtitle")}</p>
           </div>
         </div>
 
         {/* Create user form */}
         <section className="mes-panel max-w-2xl p-6">
-          <h2 className="text-sm font-semibold text-neutral-700 mb-5">Benutzer erstellen</h2>
+          <h2 className="text-sm font-semibold text-neutral-700 mb-5">{t("users.create_user")}</h2>
           <form onSubmit={handleCreate} className="mes-form-grid">
             <div className="flex flex-col sm:flex-row gap-4">
               <label className="block flex-1 min-w-0">
-                <span className="block text-sm font-medium text-neutral-700 mb-1.5">Benutzername</span>
+                <span className="block text-sm font-medium text-neutral-700 mb-1.5">{t("users.username")}</span>
                 <input
                   autoFocus
                   autoComplete="off"
@@ -128,22 +130,20 @@ export default function UsersPage() {
               </label>
 
               <label className="block flex-1 min-w-0">
-                <span className="block text-sm font-medium text-neutral-700 mb-1.5">Passwort</span>
+                <span className="block text-sm font-medium text-neutral-700 mb-1.5">{t("users.password")}</span>
                 <input
                   type="password"
                   autoComplete="new-password"
-                  minLength={8}
                   value={form.password}
                   onChange={(event) => setForm((current) => ({ ...current, password: event.target.value }))}
                   className="w-full border border-neutral-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary/30 focus:border-brand-primary"
                   required
                 />
-                <span className="mt-1 block text-xs text-neutral-400">Mindestens 8 Zeichen</span>
               </label>
             </div>
 
             <label className="block">
-              <span className="block text-sm font-medium text-neutral-700 mb-1.5">Rolle</span>
+              <span className="block text-sm font-medium text-neutral-700 mb-1.5">{t("users.role")}</span>
               <select
                 value={form.role}
                 onChange={(event) => setForm((current) => ({ ...current, role: event.target.value }))}
@@ -162,7 +162,7 @@ export default function UsersPage() {
                 disabled={submitting}
                 className="rounded-lg bg-brand-primary px-5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-brand-primary-dark disabled:cursor-wait disabled:opacity-60"
               >
-                {submitting ? "Benutzer wird erstellt..." : "Benutzer erstellen"}
+                {submitting ? t("users.creating_user") : t("users.create_user")}
               </button>
             </div>
           </form>
@@ -171,24 +171,25 @@ export default function UsersPage() {
         {/* User list table */}
         <section className="mes-panel p-0 overflow-hidden">
           <div className="px-6 py-4 border-b border-neutral-200">
-            <h2 className="text-sm font-semibold text-neutral-700">Alle Benutzer</h2>
+            <h2 className="text-sm font-semibold text-neutral-700">{t("users.all_users")}</h2>
           </div>
           <div className="overflow-x-auto">
             <table className="mes-table w-full text-sm">
               <thead>
                 <tr className="text-left text-xs text-neutral-500 border-b border-neutral-200">
-                  <th className="px-4 py-3 font-medium">ID</th>
-                  <th className="px-4 py-3 font-medium">Benutzername</th>
-                  <th className="px-4 py-3 font-medium">Passwort</th>
-                  <th className="px-4 py-3 font-medium">Letzte Anmeldung</th>
-                  <th className="px-4 py-3 font-medium">Erstellt am</th>
-                  <th className="px-4 py-3 font-medium">Rolle</th>
-                  <th className="px-4 py-3 font-medium text-right">Aktionen</th>
+                  <th className="px-4 py-3 font-medium">{t("users.id")}</th>
+                  <th className="px-4 py-3 font-medium">{t("users.username")}</th>
+                  <th className="px-4 py-3 font-medium">{t("users.password")}</th>
+                  <th className="px-4 py-3 font-medium">{t("users.last_logon")}</th>
+                  <th className="px-4 py-3 font-medium">{t("users.created_at")}</th>
+                  <th className="px-4 py-3 font-medium">{t("users.role")}</th>
+                  <th className="px-4 py-3 font-medium text-right">{t("users.actions")}</th>
+                  <th className="px-4 py-3 w-8"></th>
                 </tr>
               </thead>
               <tbody>
                 {users.length === 0 && (
-                  <tr><td colSpan={7} className="px-4 py-8 text-center text-neutral-400">Keine Benutzer vorhanden.</td></tr>
+                  <tr><td colSpan={8} className="px-4 py-8 text-center text-neutral-400">{t("users.no_users")}</td></tr>
                 )}
                 {users.map((user) => (
                   <tr key={user.id} className="border-b border-neutral-100 hover:bg-neutral-50">
@@ -203,7 +204,7 @@ export default function UsersPage() {
                           type="button"
                           onClick={() => togglePassword(user.id)}
                           className="text-neutral-400 hover:text-neutral-600"
-                          aria-label={visiblePasswords[user.id] ? "Passwort ausblenden" : "Passwort anzeigen"}
+                          aria-label={visiblePasswords[user.id] ? t("users.password_hide") : t("users.password_show")}
                         >
                           {visiblePasswords[user.id] ? <EyeSlashIcon size={15} /> : <EyeIcon size={15} />}
                         </button>
@@ -221,22 +222,23 @@ export default function UsersPage() {
                       </span>
                     </td>
                     <td className="px-4 py-3 text-right">
-                      <div className="flex items-center justify-end gap-2">
-                        <button
-                          type="button"
-                          onClick={() => openEdit(user)}
-                          className="rounded px-3 py-1.5 text-xs font-medium text-brand-primary hover:bg-brand-primary/10 transition-colors"
-                        >
-                          Bearbeiten
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => confirmDelete(user.id)}
-                          className="rounded px-3 py-1.5 text-xs font-medium text-status-error hover:bg-status-error-bg transition-colors"
-                        >
-                          Löschen
-                        </button>
-                      </div>
+                      <button
+                        type="button"
+                        onClick={() => openEdit(user)}
+                        className="rounded px-3 py-1.5 text-xs font-medium text-brand-primary hover:bg-brand-primary/10 transition-colors"
+                      >
+                        {t("common.edit")}
+                      </button>
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      <button
+                        type="button"
+                        onClick={() => confirmDelete(user.id)}
+                        className="w-8 h-8 flex items-center justify-center rounded-full text-neutral-400 hover:text-status-error hover:bg-status-error-bg transition-colors"
+                        aria-label={t("common.delete")}
+                      >
+                        ✕
+                      </button>
                     </td>
                   </tr>
                 ))}
@@ -247,7 +249,7 @@ export default function UsersPage() {
       </main>
 
       {/* Edit modal */}
-      <Modal isOpen={!!editingUser} onClose={() => { setEditingUser(null); setEditForm({ username: "", password: "", role: "" }); }} title="Benutzer bearbeiten">
+      <Modal isOpen={!!editingUser} onClose={() => { setEditingUser(null); setEditForm({ username: "", password: "", role: "" }); }} title={t("users.edit_user")}>
         <div className="space-y-4">
           <label className="block">
             <span className="block text-sm font-medium text-neutral-700 mb-1.5">Benutzername</span>
@@ -258,7 +260,7 @@ export default function UsersPage() {
             />
           </label>
           <label className="block">
-            <span className="block text-sm font-medium text-neutral-700 mb-1.5">Neues Passwort (leer lassen für Beibehaltung)</span>
+            <span className="block text-sm font-medium text-neutral-700 mb-1.5">{t("users.new_password")}</span>
             <input
               type="password"
               autoComplete="new-password"
@@ -283,36 +285,36 @@ export default function UsersPage() {
               onClick={() => { setEditingUser(null); setEditForm({ username: "", password: "", role: "" }); }}
               className="rounded-lg px-4 py-2 text-sm font-medium text-neutral-600 hover:bg-neutral-100 transition-colors"
             >
-              Abbrechen
+              {t("common.cancel")}
             </button>
             <button
               type="button"
               onClick={handleEditSave}
               className="rounded-lg bg-brand-primary px-4 py-2 text-sm font-medium text-white hover:bg-brand-primary-dark transition-colors"
             >
-              Speichern
+              {t("common.save")}
             </button>
           </div>
         </div>
       </Modal>
 
       {/* Delete confirmation modal */}
-      <Modal isOpen={!!deletingId} onClose={() => setDeletingId(null)} title="Benutzer löschen">
-        <p className="text-sm text-neutral-600 mb-6">Soll dieser Benutzer wirklich gelöscht werden? Diese Aktion kann nicht rückgängig gemacht werden.</p>
+      <Modal isOpen={!!deletingId} onClose={() => setDeletingId(null)} title={t("common.delete")}>
+        <p className="text-sm text-neutral-600 mb-6">{t("users.delete_confirm")}</p>
         <div className="flex justify-end gap-3">
           <button
             type="button"
             onClick={() => setDeletingId(null)}
             className="rounded-lg px-4 py-2 text-sm font-medium text-neutral-600 hover:bg-neutral-100 transition-colors"
           >
-            Abbrechen
+            {t("common.cancel")}
           </button>
           <button
             type="button"
             onClick={handleDelete}
             className="rounded-lg bg-status-error px-4 py-2 text-sm font-medium text-white hover:bg-status-error-dark transition-colors"
           >
-            Löschen
+            {t("common.delete")}
           </button>
         </div>
       </Modal>

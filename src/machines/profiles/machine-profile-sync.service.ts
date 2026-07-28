@@ -46,8 +46,13 @@ export class MachineProfileSyncService implements OnApplicationBootstrap {
       });
       const values: Partial<MachineEntity> = {
         name: station.displayName,
-        type: station.metadata?.machineType || 'OPC UA station',
-        location: station.metadata?.location || profile.machineId,
+        type:
+          station.metadata?.machineType ||
+          profile.manufacturer ||
+          'OPC UA station',
+        location:
+          station.metadata?.location || profile.location || profile.machineId,
+        model: station.metadata?.model || profile.model,
         resource_id: station.resourceId,
         parent_resource_id: station.parentResourceId ?? null,
         equipment_level:
@@ -71,7 +76,7 @@ export class MachineProfileSyncService implements OnApplicationBootstrap {
         route_sequence: station.routing?.sequence ?? null,
         operation_no: station.routing?.operationNo ?? null,
         dashboard_image: station.metadata?.dashboardImage ?? null,
-        opcua_endpoint_url: null,
+        opcua_endpoint_url: station.connection?.endpointUrl ?? null,
         opcua_node_prefix: null,
       };
       if (existing) {

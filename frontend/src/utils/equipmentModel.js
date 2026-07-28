@@ -90,10 +90,18 @@ export function buildEquipmentTree(items) {
 
 export function flattenEquipmentTree(tree) {
   const result = [];
-  const visit = (nodes, depth) => {
-    for (const node of nodes) {
-      result.push({ ...node, depth });
-      visit(node.children || [], depth + 1);
+  const visit = (nodes, depth, ancestorLasts = []) => {
+    for (let i = 0; i < nodes.length; i++) {
+      const node = nodes[i];
+      const last = i === nodes.length - 1;
+      result.push({
+        ...node,
+        depth,
+        _isLastChild: last,
+        _ancestorLasts: ancestorLasts,
+        _treeConnectors: ancestorLasts.slice(1),
+      });
+      visit(node.children || [], depth + 1, [...ancestorLasts, last]);
     }
   };
   visit(tree || [], 0);

@@ -2,8 +2,14 @@ import { useState, useEffect } from "react";
 import { api } from "../api/client.js";
 import PageInfo from "../components/PageInfo.jsx";
 import { useToasts } from "../providers/ToastProvider.jsx";
+import { useTranslation } from "../i18n/I18nProvider.jsx";
+import { useAuth } from "../providers/AuthProvider.jsx";
+import { hasRole, ROLES } from "../utils/roles.js";
 
 export default function AlarmsPage() {
+  const { t } = useTranslation();
+  const { user } = useAuth();
+  const canDelete = hasRole(user, ROLES.ADMIN);
   const [alarms, setAlarms] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState("all");
@@ -74,9 +80,19 @@ export default function AlarmsPage() {
         delete next[id];
         setSelected(next);
       }
-      toast.addToast({ type: "info", message: "Alarm bestatigt" });
+      toast.addToast({ type: "info", message: t("alarms.acknowledged_toast") });
     } catch {
-      toast.addToast({ type: "error", message: "Alarm kann nicht bestätigt werden" });
+      toast.addToast({ type: "error", message: t("alarms.ack_failed") });
+    }
+  }
+
+  async function handleRowDelete(id) {
+    try {
+      await api.del(`/alarms/${id}`);
+      setAlarms((prev) => prev.filter((a) => a.id !== id));
+      setSelected((prev) => { const next = { ...prev }; delete next[id]; return next; });
+    } catch {
+      toast.addToast({ type: "error", message: t("alarms.bulk_delete_failed") });
     }
   }
 
@@ -91,9 +107,9 @@ export default function AlarmsPage() {
         )
       );
       setSelected({});
-      toast.addToast({ type: "info", message: `${ids.length} Alarme bestatigt` });
+      toast.addToast({ type: "info", message: t("alarms.bulk_ack_toast") });
     } catch {
-      toast.addToast({ type: "error", message: "Alarme konnen nicht bestätigt werden" });
+      toast.addToast({ type: "error", message: t("alarms.bulk_ack_failed") });
     } finally {
       setBulkLoading(false);
     }
@@ -103,12 +119,12 @@ export default function AlarmsPage() {
     setBulkLoading(true);
     const ids = Object.keys(selected);
     try {
-      await api.delete("/alarms/bulk", { data: ids });
+      await api.del("/alarms/bulk", ids);
       setAlarms((prev) => prev.filter((a) => !ids.includes(a.id)));
       setSelected({});
-      toast.addToast({ type: "info", message: `${ids.length} Alarme geloscht` });
+      toast.addToast({ type: "info", message: t("alarms.bulk_delete_toast") });
     } catch {
-      toast.addToast({ type: "error", message: "Alarme konnten nicht gelöscht werden" });
+      toast.addToast({ type: "error", message: t("alarms.bulk_delete_failed") });
     } finally {
       setBulkLoading(false);
     }
@@ -127,9 +143,9 @@ export default function AlarmsPage() {
       a.download = `alarms-export-${new Date().toISOString().slice(0, 10)}.csv`;
       a.click();
       URL.revokeObjectURL(url);
-      toast.addToast({ type: "info", message: "CSV-Export gestartet" });
+      toast.addToast({ type: "info", message: t("alarms.csv_started") });
     } catch {
-      toast.addToast({ type: "error", message: "CSV-Export fehlgeschlagen" });
+      toast.addToast({ type: "error", message: t("alarms.csv_failed") });
     }
   }
 
@@ -139,7 +155,7 @@ export default function AlarmsPage() {
   }
 
   const canBulkAck = selCount > 0 && filtered.some((a) => !a.acknowledged);
-  const canBulkDelete = selCount > 0;
+  const canBulkDelete = canDelete && selCount > 0;
 
   return (
     <div className="mes-page min-h-screen bg-neutral-50">
@@ -147,23 +163,23 @@ export default function AlarmsPage() {
         <div className="mes-page-header">
           <div>
             <div className="mes-title-row">
-              <h1 className="text-2xl font-bold text-neutral-900">Alarme</h1>
+              <h1 className="text-2xl font-bold text-neutral-900">{t("alarms.title")}</h1>
               <PageInfo page="alarms" />
             </div>
             <p className="text-sm text-neutral-500 mt-0.5">
-              Übersicht aller Alarme {activeCount > 0 && <span>({activeCount} offen)</span>}
+              {t("alarms.subtitle")} {activeCount > 0 && <span>({activeCount} {t("alarms.open_count")})</span>}
             </p>
           </div>
           <button
             onClick={handleExportCsv}
             className="px-4 py-2 bg-white border border-neutral-200 rounded-lg text-xs font-semibold text-neutral-700 hover:bg-neutral-50 transition-colors"
           >
-            CSV Export
+            {t("alarms.csv_export")}
           </button>
         </div>
 
         <div className="mes-filter-panel space-y-3">
-          <div className="flex gap-1.5 flex-wrap" role="group" aria-label="Schweregrad filtern">
+          <div className="flex gap-1.5 flex-wrap" role="group" aria-label={t("alarms.filter_severity")}>
             {["all", "info", "warning", "error", "critical"].map((s) => (
               <button
                 key={s}
@@ -175,11 +191,11 @@ export default function AlarmsPage() {
             ))}
           </div>
 
-          <div className="flex gap-1.5 flex-wrap" role="group" aria-label="Bestätigungsstatus filtern">
+          <div className="flex gap-1.5 flex-wrap" role="group" aria-label={t("alarms.filter_ack")}>
             {[
-              { key: "all", label: "Alle" },
-              { key: "open", label: "Offen" },
-              { key: "acknowledged", label: "Bestätigt" },
+              { key: "all", label: t("alarms.all") },
+              { key: "open", label: t("alarms.open") },
+              { key: "acknowledged", label: t("alarms.acknowledged_label") },
             ].map((s) => (
               <button
                 key={s.key}
@@ -199,7 +215,7 @@ export default function AlarmsPage() {
               disabled={bulkLoading}
               className="px-4 py-2 bg-green-600 text-white rounded-lg text-xs font-semibold hover:bg-green-700 transition-colors disabled:opacity-50"
             >
-              {bulkLoading ? "..." : `Bestätigen (${selCount})`}
+              {bulkLoading ? "..." : `${t("alarms.bulk_ack")} (${selCount})`}
             </button>
           </div>
         )}
@@ -211,14 +227,14 @@ export default function AlarmsPage() {
               disabled={bulkLoading}
               className="px-4 py-2 bg-red-600 text-white rounded-lg text-xs font-semibold hover:bg-red-700 transition-colors disabled:opacity-50"
             >
-              {bulkLoading ? "..." : `Löschen (${selCount})`}
+              {bulkLoading ? "..." : `${t("alarms.bulk_delete_btn")} (${selCount})`}
             </button>
           </div>
         )}
 
-        {loading && <p className="text-center text-neutral-400 py-12 text-sm">Laden...</p>}
+        {loading && <p className="text-center text-neutral-400 py-12 text-sm">{t("common.loading")}</p>}
 
-        {!loading && filtered.length === 0 && <p className="text-center text-neutral-400 py-12 text-sm">Keine Alarme</p>}
+        {!loading && filtered.length === 0 && <p className="text-center text-neutral-400 py-12 text-sm">{t("alarms.no_alarms")}</p>}
 
         {filtered.length > 0 && (
           <div className="mes-panel">
@@ -233,12 +249,14 @@ export default function AlarmsPage() {
                       className="w-4 h-4 rounded border-neutral-300 text-brand-primary focus:ring-brand-primary"
                     />
                   </th>
-                  <th className="px-5 py-3 text-left text-xs font-semibold text-neutral-500 uppercase tracking-wider">ID</th>
-                  <th className="px-5 py-3 text-left text-xs font-semibold text-neutral-500 uppercase tracking-wider">Machine</th>
-                  <th className="px-5 py-3 text-left text-xs font-semibold text-neutral-500 uppercase tracking-wider">Nachricht</th>
-                  <th className="px-5 py-3 text-left text-xs font-semibold text-neutral-500 uppercase tracking-wider">Schweregrad</th>
-                  <th className="px-5 py-3 text-left text-xs font-semibold text-neutral-500 uppercase tracking-wider">Bestätigt am</th>
-                  <th className="px-5 py-3 text-right text-xs font-semibold text-neutral-500 uppercase tracking-wider">Aktion</th>
+                  <th className="px-5 py-3 text-left text-xs font-semibold text-neutral-500 uppercase tracking-wider">{t("alarms.id")}</th>
+                  <th className="px-5 py-3 text-left text-xs font-semibold text-neutral-500 uppercase tracking-wider">{t("alarms.machine")}</th>
+                  <th className="px-5 py-3 text-left text-xs font-semibold text-neutral-500 uppercase tracking-wider">{t("alarms.message_col")}</th>
+                  <th className="px-5 py-3 text-left text-xs font-semibold text-neutral-500 uppercase tracking-wider">{t("alarms.severity_col")}</th>
+                  <th className="px-5 py-3 text-left text-xs font-semibold text-neutral-500 uppercase tracking-wider">{t("alarms.timestamp")}</th>
+                  <th className="px-5 py-3 text-left text-xs font-semibold text-neutral-500 uppercase tracking-wider">{t("alarms.acknowledged_at")}</th>
+                  <th className="px-5 py-3 text-right text-xs font-semibold text-neutral-500 uppercase tracking-wider">{t("alarms.action")}</th>
+                  <th className="px-4 py-3 w-8"></th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-neutral-100">
@@ -260,6 +278,7 @@ export default function AlarmsPage() {
                         {a.severity ? a.severity.charAt(0).toUpperCase() + a.severity.slice(1) : "-"}
                       </span>
                     </td>
+                    <td className="px-5 py-3.5 text-xs text-neutral-500">{formatDate(a.created_at)}</td>
                     <td className="px-5 py-3.5 text-xs text-neutral-500">{formatDate(a.acknowledged_at)}</td>
                     <td className="px-5 py-3.5 text-right">
                       {!a.acknowledged && (
@@ -267,9 +286,19 @@ export default function AlarmsPage() {
                           onClick={() => handleAcknowledge(a.id)}
                           className="px-3 py-1.5 bg-brand-primary/10 text-brand-primary rounded-md text-xs font-semibold hover:bg-brand-primary/20 transition-colors"
                         >
-                          Bestätigen
+                          {t("alarms.acknowledge")}
                         </button>
                       )}
+                    </td>
+                    <td className="px-4 py-3.5 text-right">
+                      {canDelete && <button
+                        type="button"
+                        onClick={() => handleRowDelete(a.id)}
+                        className="w-8 h-8 flex items-center justify-center rounded-full text-neutral-400 hover:text-status-error hover:bg-status-error-bg transition-colors"
+                        aria-label={t("common.delete")}
+                      >
+                        ✕
+                      </button>}
                     </td>
                   </tr>
                 ))}

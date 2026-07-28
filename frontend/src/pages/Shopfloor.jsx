@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useTranslation } from "../i18n/I18nProvider.jsx";
 import { api } from "../api/client.js";
 import ExecutionStepCard from "../components/ExecutionStepCard.jsx";
 import PageInfo from "../components/PageInfo.jsx";
@@ -14,6 +15,7 @@ import {
 } from "../utils/equipmentModel.js";
 
 export default function ShopfloorPage() {
+  const { t } = useTranslation();
   const [health, setHealth] = useState(null);
   const [carriers, setCarriers] = useState([]);
   const [orders, setOrders] = useState([]);
@@ -117,10 +119,10 @@ export default function ShopfloorPage() {
         <div className="mes-page-header">
           <div>
             <div className="mes-title-row">
-              <h1 className="text-2xl font-bold text-neutral-900">Shopfloor Gateway</h1>
+              <h1 className="text-2xl font-bold text-neutral-900">{t("shopfloor.title")}</h1>
               <PageInfo page="shopfloor" />
             </div>
-            <p className="text-sm text-neutral-500 mt-0.5">OT/IT-Vermittlung: OPC-UA-Handshake, MQTT-Eingang und Live-Telemetrie</p>
+            <p className="text-sm text-neutral-500 mt-0.5">{t("shopfloor.subtitle")}</p>
           </div>
           <div className="flex items-center gap-2 text-xs text-neutral-500">
             <span className={`h-2.5 w-2.5 rounded-full ${connected ? "bg-status-success animate-pulse" : "bg-status-error"}`} />
@@ -340,12 +342,13 @@ function GatewayRolePanel({ health }) {
 }
 
 function GatewayAdapter({ title, active, detail }) {
+  const { t } = useTranslation();
   return (
     <article className="rounded-lg border border-neutral-200 bg-neutral-50 p-4">
       <div className="flex items-center justify-between gap-3">
         <h3 className="text-sm font-semibold text-neutral-800">{title}</h3>
         <span className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${active ? "bg-status-success-bg text-status-success" : "bg-status-error-bg text-status-error"}`}>
-          {active ? "verbunden" : "getrennt"}
+          {active ? t("shopfloor.connected") : t("shopfloor.disconnected")}
         </span>
       </div>
       <p className="mt-2 text-xs leading-5 text-neutral-500">{detail}</p>
@@ -358,6 +361,7 @@ function MiniPayload({ label, value }) {
 }
 
 function MqttLivePanel({ messages, connected }) {
+  const { t } = useTranslation();
   const visible = messages.slice(0, 8);
   return (
     <section className="rounded-xl border border-neutral-200 bg-white shadow-sm">
@@ -368,7 +372,7 @@ function MqttLivePanel({ messages, connected }) {
         </div>
         <span className={`inline-flex w-fit items-center gap-2 rounded-full px-3 py-1.5 text-xs font-semibold ${connected ? "bg-sky-50 text-sky-700" : "bg-red-50 text-red-700"}`}>
           <span className={`h-2 w-2 rounded-full ${connected ? "animate-pulse bg-sky-500" : "bg-red-500"}`} />
-          {connected ? "abonniert" : "getrennt"}
+          {connected ? "abonniert" : t("shopfloor.disconnected")}
         </span>
       </div>
       <div className="p-4">
@@ -415,6 +419,7 @@ function CarrierFlow({ order, carriers, route }) {
 }
 
 function CarrierRoute({ carrier, route }) {
+  const { t } = useTranslation();
   const sortedRoute = [...route].sort((a, b) => a.step_no - b.step_no);
   const stages = [
     ...sortedRoute.map((step) => ({
@@ -422,7 +427,7 @@ function CarrierRoute({ carrier, route }) {
       label: step.operation || `Schritt ${step.step_no}`,
       stepNo: step.step_no,
     })),
-    { key: "complete", label: "Fertig", stepNo: null },
+    { key: "complete", label: t("shopfloor.completed_label"), stepNo: null },
   ];
   const position = carrier.status === "completed"
     ? stages.length - 1
@@ -431,7 +436,7 @@ function CarrierRoute({ carrier, route }) {
     <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-4">
       <div className="mb-4 flex items-center justify-between">
         <strong className="text-neutral-900">Carrier {carrier.carrier_number}</strong>
-        <span className="rounded-full bg-white px-2.5 py-1 text-[11px] uppercase tracking-wide text-neutral-500 ring-1 ring-neutral-200">{carrierStatus(carrier.status)}</span>
+        <span className="rounded-full bg-white px-2.5 py-1 text-[11px] uppercase tracking-wide text-neutral-500 ring-1 ring-neutral-200">{carrierStatus(carrier.status, t)}</span>
       </div>
       <div className="relative flex">
         <div className="absolute left-[16.66%] right-[16.66%] top-2 h-0.5 bg-neutral-200" />
@@ -502,10 +507,11 @@ function journalEvent(entry, resultCodes = {}) {
 }
 
 function StatusBadge({ label, active, detail }) {
+  const { t } = useTranslation();
   return (
     <span className={`inline-flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-medium ${active ? "bg-status-success-bg text-status-success" : "bg-status-error-bg text-status-error"}`}>
       <span className={`h-2 w-2 rounded-full ${active ? "bg-status-success" : "bg-status-error"}`} />
-      {label}: {detail || (active ? "verbunden" : "getrennt")}
+      {label}: {detail || (active ? t("shopfloor.connected") : t("shopfloor.disconnected"))}
     </span>
   );
 }
@@ -558,8 +564,8 @@ function isRecent(value, now) {
   return Boolean(value && now - value < 2500);
 }
 
-function carrierStatus(status) {
-  return ({ available: "Verfügbar", assigned: "Zugeordnet", in_process: "In Arbeit", completed: "Fertig", error: "Fehler" })[status] || status;
+function carrierStatus(status, t = (s) => s) {
+  return ({ available: "Verfügbar", assigned: "Zugeordnet", in_process: "In Arbeit", completed: t("shopfloor.completed_label"), error: t("shopfloor.failed") })[status] || status;
 }
 
 function formatMqttValue(value) {
@@ -574,6 +580,7 @@ const CONTROL_COMMANDS = [
 ];
 
 function MachineControlPanel({ resourceId, displayName, signals, roles, commands, loading, onControl }) {
+  const { t } = useTranslation();
   const hasError = Boolean(signals.stateError || signals.stateErrorL0 || signals.stateErrorL1 || signals.stateErrorL2);
   const isActive = Boolean(roles.processActive || signals.stateAuto);
   const stateLabel = hasError ? "Fehler/Stop" : isActive ? "Aktiv" : "Bereit";
@@ -593,7 +600,7 @@ function MachineControlPanel({ resourceId, displayName, signals, roles, commands
             disabled={loading}
             className={`rounded-lg px-3 py-2 text-xs font-semibold transition-all ${cmd.color} disabled:opacity-40`}
           >
-            {loading ? "Senden..." : cmd.label}
+            {loading ? t("shopfloor.control_send") + "..." : cmd.label}
           </button>
         ))}
         {commands.length === 0 && <p className="col-span-full text-xs text-neutral-400">Für diese Station sind im Profil keine Steuerbefehle freigegeben.</p>}

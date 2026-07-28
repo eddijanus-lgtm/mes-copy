@@ -1,7 +1,105 @@
 # 10 – OPC-UA-Inbetriebnahme an der echten Anlage
 
-_Status: vorbereitet – reale Maschinendaten stehen noch aus_
+_Status: UI-gestützte Inbetriebnahme verfügbar_
 _Grundsatz: Die erste Inbetriebnahme ist ausschließlich lesend._
+
+## Inbetriebnahme über die MES-Oberfläche
+
+Für normale Anwender ist keine manuelle JSON-Bearbeitung mehr erforderlich. Vor
+der ersten Nutzung richtet ein Administrator einmalig die versionierte
+Profilablage ein:
+
+```powershell
+npm run migrate:machine-profiles
+```
+
+Danach erfolgt die Inbetriebnahme auf **Stationen → Maschine konfigurieren**:
+
+1. Anzeigename, stabile technische `machineId`, Hersteller, Modell, Version und
+   Standort erfassen. Neue Profile werden unabhängig von der Auswahl im
+   Browser durch das Backend zunächst als `observe` gespeichert.
+2. Standardwerte für OPC UA erfassen. Sie dienen bestehenden Legacy-Profilen
+   und als Vorlage für neue Stationen.
+3. Eine Maschinenressource und die untergeordneten Work Units beziehungsweise
+   Komponenten anlegen. Jede Station erhält ihre eigene vollständige
+   `opc.tcp://`-Verbindung mit Endpoint, Security, Authentifizierung, Timeouts
+   und Reconnect. Für Benutzername, Passwort, Zertifikat und Private Key werden nur
+   die Namen dedizierter `OPCUA_*`-Umgebungsvariablen gespeichert. Andere
+   Variablennamen werden abgelehnt, damit keine fremden Backend-Secrets als
+   Maschinenzugang verwendet werden können. Die Werte selbst werden nur im
+   Backend-Prozess gesetzt.
+   Der Assistent schlägt eine noch freie Ressourcennummer
+   vor und zeigt die Hierarchie visuell an.
+4. Routbare, aktivierte Produktionsstationen mit positiver Sequenz,
+   Operationsnummer und Arbeitsgang versehen. Die sortierte Standardroute wird
+   direkt angezeigt.
+5. OPC-UA-Knoten den fachlichen MES-Signalrollen zuordnen. Der optionale Browser
+   liest BrowseName, DisplayName, Node-ID, Datentyp und Zugriffsrechte. Eine
+   fachliche Rolle wird nie automatisch behauptet; der Anwender muss die
+   Auswahl bestätigen.
+6. Entwurf speichern, strukturell validieren, die reale SPS read-only prüfen
+   und die Zusammenfassung kontrollieren. Erst danach kann ein Administrator
+   aktivieren.
+
+Nach einer Aktivierung oder Deaktivierung zeigt das MES
+**Backend-Neustart erforderlich**. Es gibt bewusst keinen partiellen Hot Reload.
+Beim folgenden Start lädt das Backend die aktive Datenbankversion, synchronisiert
+deren Ressourcen als `profile_managed` und verbindet den OPC-UA-Adapter damit.
+Ressourcen des vorherigen Profils werden offline/deaktiviert, niemals hart
+gelöscht.
+
+## Namen und Verantwortlichkeiten
+
+| Begriff | Festlegung | Bedeutung |
+|---|---|---|
+| Maschinenname | MES-Administrator gemeinsam mit Anlagenverantwortung | Für Menschen lesbarer Name der Gesamtanlage |
+| `machineId` | MES-Administrator, nach Anlage technisch unveränderlich | Stabile technische Identität des Profils |
+| Stationsname und `stationId` | Prozess-/Anlagenverantwortung | Maschine, Work Unit oder Komponente im MES-Modell |
+| Ressourcennummer | MES-Administrator mit Assistentenvorschlag | Global eindeutige Nummer für Routing und Historie |
+| SPS-Funktion | SPS-/Maschinenhersteller | Reale physische Funktion, Verriegelung und Sicherheit der Anlage |
+| Arbeitsgang | Arbeitsvorbereitung/Prozessverantwortung | Fachliche Tätigkeit an einem Routenschritt |
+| Standardroute | Maschinenprofil-Verantwortung | Grundsätzliche Reihenfolge für diese Maschinenkonfiguration |
+| Produktarbeitsplan | Arbeitsvorbereitung | Produktspezifische Route; überschreibt bei Verwendung die Standardroute |
+
+Das Maschinenprofil beschreibt, was das MES von der SPS lesen beziehungsweise
+in einer später freigegebenen Stufe schreiben kann. Es ersetzt weder die
+SPS-Logik noch Sicherheitsfunktionen oder lokale Maschinenfreigaben.
+
+## Sicherheitsstufen
+
+- `observe`: ausschließlich lesen, überwachen und Telemetrie erfassen. Neue
+  Maschinen starten immer in diesem Modus.
+- `validate`: ebenfalls keine OPC-UA-Schreiboperationen. Dient der Abnahme einer
+  vollständig modellierten Signal- und Routingkonfiguration.
+- `control`: Runtime-Schreibzugriffe sind möglich, aber nur für explizit im
+  Profil zugelassene Nodes. Aktivierung verlangt neben der `machineId` eine
+  zweite ausdrückliche Schreibfreigabe und eine erfolgreiche Live-Prüfung
+  exakt derselben Profilversion. SPS-Verriegelungen und
+  Maschinensicherheit bleiben zwingend wirksam.
+
+Verbindungstest, OPC-UA-Browser und Live-Profilprüfung sind in allen Modi
+ausschließlich lesend. Fehlermeldungen werden von Secret-Werten bereinigt.
+
+## Persistenz und Legacy-Fallback
+
+Maschinenprofile werden als vollständige, validierte JSONB-Dokumente in
+`machine_profile_versions` gespeichert. Jede Änderung erzeugt eine neue Version
+mit Ersteller, Zeitstempel, Änderungsgrund, Strukturprüfung und optionalem
+Live-Prüfbericht. Mehrere Entwürfe sind möglich, aber ein partieller
+PostgreSQL-Unique-Index erlaubt systemweit genau eine aktive Version.
+
+Die Runtime unterstützt aktuell genau **ein aktives Profil**, darin aber
+beliebig viele voneinander unabhängige Stations-Endpoints. Jede
+Stationsverbindung besitzt eine eigene Session und Reconnect-Logik; der Ausfall
+einer Station unterbricht die übrigen Verbindungen nicht. Beim Backend-Start
+gilt folgende Reihenfolge:
+
+1. aktive persistierte Profilversion;
+2. falls keine existiert: Datei aus `MACHINE_PROFILE_PATH`.
+
+`MACHINE_PROFILE_PATH` bleibt damit für Simulator, bestehende Installationen und
+E2E-Tests erhalten. Sobald ein UI-Profil aktiv ist, ist die Datenbankversion die
+Source of Truth; die Legacy-Datei wird nicht parallel eingemischt.
 
 ## Ziel
 
@@ -80,7 +178,10 @@ $env:OPCUA_SCAN_MAX_NODES = "5000"
 npm run opcua:scan
 ```
 
-## Offline: Maschinenprofil erstellen
+## Legacy: Maschinenprofil als Datei erstellen
+
+Dieser Abschnitt gilt nur für bestehende Automatisierung, Simulatoren und
+Fehlersuche. Der normale Inbetriebnahmeablauf verwendet den UI-Assistenten.
 
 1. `config/machines/commissioning.machine.template.json` kopieren.
 2. Alle `YOUR_*`-Platzhalter mit Informationen aus dem Scan ersetzen.

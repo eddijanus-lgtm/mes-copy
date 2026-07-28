@@ -81,7 +81,7 @@ export class MachinesService {
     const machine = await this.findOne(id);
     if (machine.profile_managed) {
       throw new ConflictException(
-        'Profile-managed stations must be changed in MACHINE_PROFILE_PATH',
+        'Profilverwaltete Stationen müssen in der Maschinenkonfiguration geändert werden',
       );
     }
     Object.assign(machine, dto);
@@ -93,7 +93,7 @@ export class MachinesService {
     const machine = await this.findOne(id);
     if (machine.profile_managed) {
       throw new ConflictException(
-        'Profile-managed stations must be removed from MACHINE_PROFILE_PATH',
+        'Profilverwaltete Stationen werden über eine neue Profilversion deaktiviert und nicht direkt gelöscht',
       );
     }
     const result = await this.machinesRepo.delete(id);
@@ -119,8 +119,10 @@ export class MachinesService {
 
   generateCsvTemplate(): string {
     return [
-      'name,type,status,location,model,serial_number,resource_id,opcua_endpoint_url,opcua_node_prefix,opcua_enabled',
-      '# Eine Maschine pro Zeile eintragen. Kommentarzeilen werden ignoriert.',
+      'name,type,status,location,model,serial_number,resource_id,parent_resource_id,equipment_level,execution_model,job_interface,opcua_endpoint_url,opcua_node_prefix,opcua_enabled',
+      '# Maschine als Root ohne OPC-UA-Endpoint; Stationen referenzieren deren resource_id über parent_resource_id.',
+      '# Beispielmaschine,Maschine,offline,Halle 1,,,100,,machine,machine_job,telemetry_only,,,false',
+      '# Station 1,Produktion,offline,Halle 1,,,101,100,work_unit,machine_job,telemetry_only,opc.tcp://192.168.0.1:4840,,true',
     ].join('\n');
   }
 
@@ -159,6 +161,13 @@ export class MachinesService {
           if (isNaN(resource_id)) resource_id = undefined;
         }
 
+        let parent_resource_id: number | undefined;
+        const parentId = get('parent_resource_id');
+        if (parentId !== undefined) {
+          parent_resource_id = parseInt(parentId, 10);
+          if (isNaN(parent_resource_id)) parent_resource_id = undefined;
+        }
+
         const opcua_enabled = get('opcua_enabled');
 
         const rawStatus = get('status') || 'offline';
@@ -172,6 +181,10 @@ export class MachinesService {
           model: get('model'),
           serial_number: get('serial_number'),
           resource_id,
+          parent_resource_id,
+          equipment_level: get('equipment_level') as any,
+          execution_model: get('execution_model') as any,
+          job_interface: get('job_interface') as any,
           opcua_endpoint_url: get('opcua_endpoint_url'),
           opcua_node_prefix: get('opcua_node_prefix'),
         };

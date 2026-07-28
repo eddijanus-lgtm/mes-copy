@@ -1,13 +1,5 @@
 import { useEffect, useRef, useState } from "react";
 
-const commonActions = [
-  ["Navigation", "Öffnet den gewählten Bereich des MES."],
-  ["DE / EN", "Wechselt die Sprache der Oberfläche."],
-  ["Hell / Dunkel", "Wechselt zwischen hellem und dunklem Design."],
-  ["Systemstatus", "Zeigt den Zustand von Backend, Datenbank und Anmeldung."],
-  ["Abmelden", "Beendet die aktuelle Sitzung."],
-];
-
 const pageHelp = {
   dashboard: {
     title: "Leitstand",
@@ -25,14 +17,15 @@ const pageHelp = {
     ],
   },
   machines: {
-    title: "Stationen",
+    title: "Maschinen",
     actions: [
-      ["CSV Template herunterladen", "Lädt eine Vorlage für den Stationsimport herunter."],
-      ["CSV importieren", "Öffnet den Import einer Stationsliste."],
-      ["Neue Station", "Öffnet das Formular für eine neue Station."],
-      ["Stationen durchsuchen", "Filtert Stationen nach dem eingegebenen Text."],
-      ["Edit", "Bearbeitet die gewählte Station."],
-      ["Löschen", "Öffnet die Sicherheitsabfrage zum Löschen einer Station."],
+      ["CSV Template herunterladen", "Lädt eine Vorlage für den Maschinenimport herunter."],
+      ["CSV importieren", "Öffnet den Import einer Maschinenliste."],
+      ["Manuellen Stammdatensatz anlegen", "Öffnet das Formular für einen manuell gepflegten Maschinendatensatz."],
+      ["Maschine konfigurieren", "Öffnet den Assistenten für Maschinenprofile."],
+      ["Maschinen durchsuchen", "Filtert Maschinen nach dem eingegebenen Text."],
+      ["Edit", "Bearbeitet die gewählte Maschine."],
+      ["Löschen", "Öffnet die Sicherheitsabfrage zum Löschen einer Maschine."],
       ["Datei auswählen", "Wählt eine CSV-Datei für den Import."],
       ["Speichern / Importieren", "Speichert die Eingaben oder startet den Import."],
       ["Abbrechen / Schließen", "Schließt das aktuelle Fenster ohne weitere Änderung."],
@@ -176,15 +169,6 @@ export default function PageInfo({ page }) {
               <h3>Auf dieser Seite</h3>
               <dl>
                 {help.actions.map(([label, description]) => (
-                  <div key={label}>
-                    <dt>{label}</dt>
-                    <dd>{description}</dd>
-                  </div>
-                ))}
-              </dl>
-              <h3>Immer verfügbar</h3>
-              <dl>
-                {commonActions.map(([label, description]) => (
                   <div key={label}>
                     <dt>{label}</dt>
                     <dd>{description}</dd>

@@ -2,8 +2,10 @@ import { useState, useEffect } from "react";
 import { api } from "../api/client.js";
 import PageInfo from "../components/PageInfo.jsx";
 import { useToasts } from "../providers/ToastProvider.jsx";
+import { useTranslation } from "../i18n/I18nProvider.jsx";
 
 export default function TracesPage() {
+  const { t } = useTranslation();
   const [traces, setTraces] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState("all");
@@ -61,26 +63,26 @@ export default function TracesPage() {
         <div className="mes-page-header">
           <div>
           <div className="mes-title-row">
-            <h1 className="text-2xl font-bold text-neutral-900">Prozessdaten</h1>
+            <h1 className="text-2xl font-bold text-neutral-900">{t("traces.title")}</h1>
             <PageInfo page="traces" />
           </div>
-          <p className="text-sm text-neutral-500 mt-0.5">Zeitlich nachvollziehbare Erfassungsdaten aller Stationen.</p>
+          <p className="text-sm text-neutral-500 mt-0.5">{t("traces.subtitle")}</p>
           </div>
         </div>
 
         <div className="mes-filter-panel flex gap-2 flex-wrap items-end">
           <div>
-            <label className="block text-xs font-semibold text-neutral-500 uppercase tracking-wider mb-1">Key Data Point</label>
+            <label className="block text-xs font-semibold text-neutral-500 uppercase tracking-wider mb-1">{t("traces.key_data_point")}</label>
             <input
               type="text"
               value={keyFilter}
               onChange={(e) => setKeyFilter(e.target.value)}
-              placeholder="z.B. iCarrierID"
+              placeholder={t("traces.key_data_point")}
               className="px-3 py-2 border border-neutral-200 rounded-md text-xs focus:outline-none focus:ring-1 focus:ring-brand-primary w-48"
             />
           </div>
           <div>
-            <label className="block text-xs font-semibold text-neutral-500 uppercase tracking-wider mb-1">Min Value</label>
+            <label className="block text-xs font-semibold text-neutral-500 uppercase tracking-wider mb-1">{t("traces.min_value")}</label>
             <input
               type="number"
               value={minValue}
@@ -90,7 +92,7 @@ export default function TracesPage() {
             />
           </div>
           <div>
-            <label className="block text-xs font-semibold text-neutral-500 uppercase tracking-wider mb-1">Max Value</label>
+            <label className="block text-xs font-semibold text-neutral-500 uppercase tracking-wider mb-1">{t("traces.max_value")}</label>
             <input
               type="number"
               value={maxValue}
@@ -101,35 +103,35 @@ export default function TracesPage() {
           </div>
           <button
             onClick={() => { setKeyFilter(""); setMinValue(""); setMaxValue(""); }}
-            className="px-3 py-2 bg-neutral-100 text-neutral-600 rounded-md text-xs font-semibold hover:bg-neutral-200 transition-colors"
+            className="w-24 h-10 bg-neutral-100 text-neutral-600 rounded-md text-xs font-semibold hover:bg-neutral-200 transition-colors"
           >
-            Filters returnsetzen
+            {t("traces.reset")}
           </button>
         </div>
 
         <div className="flex gap-1.5 flex-wrap" role="group">
           {categories.map((c) => (
             <button key={c} onClick={() => setFilter(c)} className={`px-3.5 py-2 rounded-lg text-xs font-semibold uppercase tracking-wider transition-colors ${filter === c ? "bg-brand-primary text-white" : "bg-white text-neutral-600 border border-neutral-200 hover:bg-neutral-50"}`}>
-              {c === "all" ? "Alle" : c}
+              {c === "all" ? t("traces.filter_all") : c}
             </button>
           ))}
         </div>
 
-        {loading && <p className="text-center text-neutral-400 py-12 text-sm">Laden...</p>}
+        {loading && <p className="text-center text-neutral-400 py-12 text-sm">{t("common.loading")}</p>}
 
-        {!loading && filtered.length === 0 && <p className="text-center text-neutral-400 py-12 text-sm">Keine Traces</p>}
+        {!loading && filtered.length === 0 && <p className="text-center text-neutral-400 py-12 text-sm">{t("traces.no_traces")}</p>}
 
         {filtered.length > 0 && (
           <div className="mes-panel">
             <table className="w-full">
               <thead>
                 <tr className="border-b border-neutral-200">
-                  <th className="px-5 py-3 text-left text-xs font-semibold text-neutral-500 uppercase tracking-wider">ID</th>
-                  <th className="px-5 py-3 text-left text-xs font-semibold text-neutral-500 uppercase tracking-wider">Machine</th>
-                  <th className="px-5 py-3 text-left text-xs font-semibold text-neutral-500 uppercase tracking-wider">Key Data Point</th>
-                  <th className="px-5 py-3 text-left text-xs font-semibold text-neutral-500 uppercase tracking-wider">Wert</th>
-                  <th className="px-5 py-3 text-left text-xs font-semibold text-neutral-500 uppercase tracking-wider">Kategorie</th>
-                  <th className="px-5 py-3 text-left text-xs font-semibold text-neutral-500 uppercase tracking-wider">Zeitstempel</th>
+                  <th className="px-5 py-3 text-left text-xs font-semibold text-neutral-500 uppercase tracking-wider">{t("traces.id")}</th>
+                  <th className="px-5 py-3 text-left text-xs font-semibold text-neutral-500 uppercase tracking-wider">{t("traces.machine")}</th>
+                  <th className="px-5 py-3 text-left text-xs font-semibold text-neutral-500 uppercase tracking-wider">{t("traces.key_data_point_col")}</th>
+                  <th className="px-5 py-3 text-left text-xs font-semibold text-neutral-500 uppercase tracking-wider">{t("traces.value")}</th>
+                  <th className="px-5 py-3 text-left text-xs font-semibold text-neutral-500 uppercase tracking-wider">{t("traces.category")}</th>
+                  <th className="px-5 py-3 text-left text-xs font-semibold text-neutral-500 uppercase tracking-wider">{t("traces.timestamp")}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-neutral-100">

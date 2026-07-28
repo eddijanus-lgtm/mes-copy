@@ -19,6 +19,18 @@
     "description": {
       "type": "string"
     },
+    "manufacturer": {
+      "type": "string"
+    },
+    "model": {
+      "type": "string"
+    },
+    "machineVersion": {
+      "type": "string"
+    },
+    "location": {
+      "type": "string"
+    },
     "transport": {
       "type": "string",
       "enum": ["opcua"]
@@ -299,6 +311,9 @@
           "additionalProperties": {
             "type": "string"
           }
+        },
+        "connection": {
+          "$ref": "#/$defs/connection"
         }
       },
       "required": [

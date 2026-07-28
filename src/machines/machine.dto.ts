@@ -9,7 +9,7 @@ import {
 
 export type MachineStatus = 'online' | 'offline' | 'maintenance' | 'error' | 'idle';
 
-export const MACHINE_CSV_HEADERS = ['name', 'type', 'status', 'location', 'model', 'serial_number', 'resource_id', 'opcua_endpoint_url', 'opcua_node_prefix', 'opcua_enabled'];
+export const MACHINE_CSV_HEADERS = ['name', 'type', 'status', 'location', 'model', 'serial_number', 'resource_id', 'parent_resource_id', 'equipment_level', 'execution_model', 'job_interface', 'opcua_endpoint_url', 'opcua_node_prefix', 'opcua_enabled'];
 
 export class CreateMachineDto {
   @IsNotEmpty()

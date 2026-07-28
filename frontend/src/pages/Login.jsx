@@ -78,7 +78,6 @@ export default function LoginPage() {
               <input
                 type="password"
                 autoComplete="current-password"
-                minLength={8}
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
                 required

@@ -53,7 +53,13 @@ export function AuthProvider({ children }) {
     });
 
     if (!response.ok) {
-      throw new Error(response.status === 401 ? "Benutzername oder Passwort ist falsch." : "Anmeldung fehlgeschlagen.");
+      throw new Error(
+        response.status === 401
+          ? "Benutzername oder Passwort ist falsch."
+          : response.status === 429
+            ? "Zu viele Anmeldeversuche. Bitte 60 Sekunden warten."
+            : "Anmeldung fehlgeschlagen.",
+      );
     }
 
     const { access_token: token } = await response.json();

@@ -208,11 +208,9 @@ export class OpcUaMachineAdapter implements MachineAdapter {
   async readRecoverySnapshot(
     resourceId: number,
   ): Promise<MachineRecoverySnapshot> {
-    const [carrierNumber, requestActive, processBusy] = await Promise.all([
-      this.readRole(resourceId, 'carrierId'),
-      this.readRole(resourceId, 'workRequest'),
-      this.readRole(resourceId, 'processActive'),
-    ]);
+    const carrierNumber = await this.readRole(resourceId, 'carrierId');
+    const requestActive = await this.readRole(resourceId, 'workRequest');
+    const processBusy = await this.readRole(resourceId, 'processActive');
     return {
       carrierNumber: Number(carrierNumber),
       requestActive: Boolean(requestActive),
@@ -239,7 +237,10 @@ export class OpcUaMachineAdapter implements MachineAdapter {
       const signal = this.signal(resourceId, signalKey);
       try {
         this.assertReadable(resourceId, signal);
-        const value: unknown = await this.opcUa.readNode(signal.nodeId);
+        const value: unknown = await this.opcUa.readNode(
+          signal.resourceId,
+          signal.nodeId,
+        );
         return this.fromMachineValue(signal, value);
       } catch (error) {
         if (signal.required) throw error;
@@ -439,7 +440,7 @@ export class OpcUaMachineAdapter implements MachineAdapter {
   private async read(resourceId: number, signalKey: string): Promise<unknown> {
     const signal = this.signal(resourceId, signalKey);
     this.assertReadable(resourceId, signal);
-    const value = await this.opcUa.readNode(signal.nodeId);
+    const value = await this.opcUa.readNode(signal.resourceId, signal.nodeId);
     return this.fromMachineValue(signal, value);
   }
 
@@ -450,7 +451,7 @@ export class OpcUaMachineAdapter implements MachineAdapter {
     const signal = this.role(resourceId, role);
     this.assertReadable(resourceId, signal);
     return this.opcUa
-      .readNode(signal.nodeId)
+      .readNode(signal.resourceId, signal.nodeId)
       .then((value) => this.fromMachineValue(signal, value));
   }
 
@@ -474,6 +475,7 @@ export class OpcUaMachineAdapter implements MachineAdapter {
     const nodes = values.map(([signal, value]) => {
       this.assertWritable(resourceId, signal);
       return {
+        resourceId: signal.resourceId,
         nodeId: signal.nodeId,
         dataType: signal.dataType,
         value: this.toMachineValue(signal, value),

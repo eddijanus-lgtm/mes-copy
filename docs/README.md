@@ -17,3 +17,4 @@ Das MES Shopfloor Gateway ist die OT/IT-Vermittlungsschicht der Demo. Es verbind
 
 - [Normen-Gap-Analyse und Nachweismatrix](standards-gap-analysis.md)
 - [API-Versionierung und Deprecation Policy](guides/11-api-lifecycle.md)
+- [Wizard „Maschine konfigurieren“: Funktionen und Vollständigkeitsprüfung](guides/14-machine-configuration-wizard.md)

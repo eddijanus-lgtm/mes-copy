@@ -21,6 +21,7 @@ import { WIDGET_BY_ID } from "../dashboard/dashboardConfig.js";
 import { useDashboardData } from "../dashboard/useDashboardData.js";
 import { useDashboardLayouts } from "../dashboard/useDashboardLayouts.js";
 import { useAuth } from "../providers/AuthProvider.jsx";
+import { useTranslation } from "../i18n/I18nProvider.jsx";
 import "./dashboard.css";
 
 const BREAKPOINTS = { lg: 1200, md: 900, sm: 600, xs: 360, xxs: 0 };
@@ -31,6 +32,7 @@ export default function Dashboard() {
   const dashboardData = useDashboardData(token);
   const layoutState = useDashboardLayouts(user);
   const { width, containerRef, mounted } = useContainerWidth({ initialWidth: 1200 });
+  const { t } = useTranslation();
   const [activeBreakpoint, setActiveBreakpoint] = useState("lg");
 
   const commitCurrentLayout = useCallback((layout) => {
@@ -93,33 +95,34 @@ export default function Dashboard() {
               ))}
             </ResponsiveGridLayout>
           ) : (
-            <div className="dashboard-grid-loading">Dashboard wird vorbereitet…</div>
+            <div className="dashboard-grid-loading">{t("dashboard.loading")}</div>
           )}
         </div>
       </div>
 
       <p className="dashboard-layout-hint">
         <SlidersHorizontalIcon size={17} aria-hidden="true" />
-        Widgets können im Bearbeitungsmodus verschoben, skaliert und ausgeblendet werden.
+        {t("dashboard.hint")}
       </p>
     </div>
   );
 }
 
 function DashboardHeader({ layoutState }) {
+  const { t } = useTranslation();
   return (
     <header className="dashboard-page__header">
       <div>
         <div className="mes-title-row">
-          <h1>{layoutState.profiles[layoutState.activeProfileId]?.name || "Leitstand"}</h1>
+          <h1>{layoutState.profiles[layoutState.activeProfileId]?.name || t("dashboard.title")}</h1>
           <PageInfo page="dashboard" />
         </div>
-        <p>Produktion, Kennzahlen und Anlagenstatus auf einen Blick.</p>
+        <p>{t("dashboard.subtitle")}</p>
       </div>
 
       <div className="dashboard-page__controls">
         <label>
-          <span>Ansicht</span>
+          <span>{t("dashboard.view")}</span>
           <select
             value={layoutState.activeProfileId}
             onChange={(event) => layoutState.selectProfile(event.target.value)}
@@ -134,18 +137,18 @@ function DashboardHeader({ layoutState }) {
         {layoutState.isEditing ? (
           <>
             <button type="button" className="dashboard-button secondary" onClick={layoutState.resetDraft}>
-              Zurücksetzen
+              {t("dashboard.reset")}
             </button>
             <button type="button" className="dashboard-button secondary" onClick={layoutState.cancelEditing}>
-              <XIcon size={18} /> Abbrechen
+              <XIcon size={18} /> {t("dashboard.cancel")}
             </button>
             <button type="button" className="dashboard-button primary" onClick={layoutState.saveEditing}>
-              <FloppyDiskIcon size={18} /> Speichern
+              <FloppyDiskIcon size={18} /> {t("dashboard.save")}
             </button>
           </>
         ) : (
           <button type="button" className="dashboard-button primary" onClick={layoutState.startEditing}>
-            <PencilSimpleIcon size={18} /> Dashboard bearbeiten
+            <PencilSimpleIcon size={18} /> {t("dashboard.edit")}
           </button>
         )}
       </div>
@@ -154,10 +157,11 @@ function DashboardHeader({ layoutState }) {
 }
 
 function WidgetContent({ id, dashboardData }) {
+  const { t } = useTranslation();
   const { machines, carriers, kpis, stats, connectedMachineCount, isLoading } = dashboardData;
 
   if (isLoading && id !== "reports") {
-    return <div className="widget-loading">Live-Daten werden geladen…</div>;
+    return <div className="widget-loading">{t("dashboard.widget_loading")}</div>;
   }
 
   switch (id) {

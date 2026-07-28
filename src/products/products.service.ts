@@ -4,6 +4,7 @@ import { DataSource, Repository } from 'typeorm';
 import { ProductEntity } from './product.entity';
 import { ProductRouteStepEntity } from './product-route-step.entity';
 import type { CreateProductDto, UpdateProductDto } from './product.dto';
+import { MachineProfileEntity } from '../machines/profiles/machine-profile.entity';
 
 @Injectable()
 export class ProductsService {
@@ -11,14 +12,16 @@ export class ProductsService {
     private readonly dataSource: DataSource,
     @InjectRepository(ProductEntity) private readonly productsRepo: Repository<ProductEntity>,
     @InjectRepository(ProductRouteStepEntity) private readonly routeStepsRepo: Repository<ProductRouteStepEntity>,
+    @InjectRepository(MachineProfileEntity) private readonly profilesRepo: Repository<MachineProfileEntity>,
   ) {}
 
   async create(dto: CreateProductDto) {
-    this.validateRoute(dto.route_steps);
+    await this.validateRoute(dto.route_steps, dto.profile_machine_id);
     return this.dataSource.transaction(async (manager) => {
       const product = await manager.save(ProductEntity, manager.create(ProductEntity, {
         part_no: dto.part_no,
         name: dto.name,
+        profile_machine_id: dto.profile_machine_id,
         description: dto.description,
         is_active: dto.is_active ?? true,
         parameter_definitions: dto.parameter_definitions || [],
@@ -55,6 +58,7 @@ export class ProductsService {
       Object.assign(product, {
         ...(dto.part_no !== undefined ? { part_no: dto.part_no } : {}),
         ...(dto.name !== undefined ? { name: dto.name } : {}),
+        ...(dto.profile_machine_id !== undefined ? { profile_machine_id: dto.profile_machine_id } : {}),
         ...(dto.description !== undefined ? { description: dto.description } : {}),
         ...(dto.is_active !== undefined ? { is_active: dto.is_active } : {}),
         ...(dto.parameter_definitions !== undefined ? { parameter_definitions: dto.parameter_definitions } : {}),
@@ -62,7 +66,10 @@ export class ProductsService {
       const savedProduct = await manager.save(product);
 
       if (dto.route_steps) {
-        this.validateRoute(dto.route_steps);
+        await this.validateRoute(
+          dto.route_steps,
+          dto.profile_machine_id || product.profile_machine_id || '',
+        );
         await manager.delete(ProductRouteStepEntity, { product_id: id });
         await manager.save(ProductRouteStepEntity, dto.route_steps.map((step) => manager.create(ProductRouteStepEntity, {
           ...step,
@@ -82,9 +89,37 @@ export class ProductsService {
     if (result.affected === 0) throw new NotFoundException('Product not found');
   }
 
-  private validateRoute(steps: Array<{ step_no: number }>) {
+  private async validateRoute(
+    steps: Array<{ step_no: number; resource_id: number; operation_no: number }>,
+    machineId: string,
+  ) {
     if (!steps.length) throw new BadRequestException('Product route requires at least one step');
     const uniqueSteps = new Set(steps.map((step) => step.step_no));
     if (uniqueSteps.size !== steps.length) throw new BadRequestException('Product route step numbers must be unique');
+    if (steps.some((step, index) => step.step_no !== index + 1)) {
+      throw new BadRequestException('Product route step numbers must be contiguous from 1');
+    }
+    const profile = await this.profilesRepo.findOne({
+      where: { machine_id: machineId },
+      order: { version: 'DESC' },
+    });
+    if (!profile) throw new BadRequestException(`Machine ${machineId} not found`);
+    const stations = new Map(
+      profile.document.stations.map((station) => [station.resourceId, station]),
+    );
+    for (const step of steps) {
+      const station = stations.get(step.resource_id);
+      if (!station || !station.enabled) {
+        throw new BadRequestException(
+          `Resource ${step.resource_id} does not belong to enabled machine ${machineId}`,
+        );
+      }
+      const operationNo = station.routing?.operationNo || station.resourceId;
+      if (step.operation_no !== operationNo) {
+        throw new BadRequestException(
+          `Operation ${step.operation_no} is not available at resource ${step.resource_id}`,
+        );
+      }
+    }
   }
 }

@@ -100,6 +100,6 @@ export const api = {
   getSilent: (endpoint) => request(endpoint, { method: 'GET', silent: true }),
   post: (endpoint, body) => request(endpoint, { method: 'POST', body }),
   patch: (endpoint, body) => request(endpoint, { method: 'PATCH', body }),
-  del: (endpoint) => request(endpoint, { method: 'DELETE' }),
+  del: (endpoint, body) => request(endpoint, { method: 'DELETE', body }),
   download,
 };

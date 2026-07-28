@@ -218,6 +218,7 @@ export interface MachineStationProfile {
   readonly routing?: MachineStationRoutingProfile;
   readonly inventory?: MachineCarrierInventoryProfile;
   readonly metadata?: Readonly<Record<string, string>>;
+  readonly connection?: MachineConnectionProfile;
 }
 
 export interface MachineOrderParameterOptionProfile {
@@ -261,6 +262,10 @@ export interface MachineProfile {
   readonly machineId: string;
   readonly displayName: string;
   readonly description?: string;
+  readonly manufacturer?: string;
+  readonly model?: string;
+  readonly machineVersion?: string;
+  readonly location?: string;
   readonly transport: MachineProfileTransport;
   readonly operatingMode: MachineProfileOperatingMode;
   readonly connection: MachineConnectionProfile;

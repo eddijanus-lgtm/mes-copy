@@ -20,6 +20,7 @@ _Dieser Ordner enthält Erklärungen, Konzepte und technische Hintergründe für
 | [11-api-lifecycle.md](11-api-lifecycle.md) | API-Versionierung, Breaking Changes und Deprecation Policy | verified |
 | [12-frontend-styleguide.md](12-frontend-styleguide.md) | Verbindliches WARA-Designsystem für Seiten, Komponenten und responsive Bedienung | verified |
 | [13-production-run-csv.md](13-production-run-csv.md) | Standardisierter Produktionslauf-CSV-Export für abgeschlossene Aufträge | verified |
+| [14-machine-configuration-wizard.md](14-machine-configuration-wizard.md) | Frontend-, Backend- und Persistenzreferenz des Wizards „Maschine konfigurieren“ mit Vollständigkeitsprüfung | reviewed |
 
 ---
 

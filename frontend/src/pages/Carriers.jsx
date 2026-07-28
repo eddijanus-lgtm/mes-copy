@@ -3,8 +3,10 @@ import { api } from "../api/client.js";
 import PageInfo from "../components/PageInfo.jsx";
 import { useAuth } from "../providers/AuthProvider.jsx";
 import { hasRole, ROLES } from "../utils/roles.js";
+import { useTranslation } from "../i18n/I18nProvider.jsx";
 
 export default function CarriersPage() {
+  const { t } = useTranslation();
   const { user } = useAuth();
   const canManage = hasRole(user, ROLES.ADMIN, ROLES.OPERATOR);
   const [carriers, setCarriers] = useState([]);
@@ -73,29 +75,29 @@ export default function CarriersPage() {
       <div className="mes-page-header">
         <div>
           <div className="mes-title-row">
-            <h1 className="text-2xl font-bold text-neutral-900">Werkstückträger</h1>
+            <h1 className="text-2xl font-bold text-neutral-900">{t("carriers.title")}</h1>
             <PageInfo page="carriers" />
           </div>
-          <p className="mt-1 text-sm text-neutral-500">Carrier-Position, Auftragszuordnung und aktueller Arbeitsschritt der angebundenen Anlage.</p>
+          <p className="mt-1 text-sm text-neutral-500">{t("carriers.subtitle")}</p>
         </div>
-        <button onClick={load} className="w-fit rounded-lg border border-neutral-200 bg-white px-4 py-2 text-sm font-medium text-neutral-700 hover:border-brand-primary hover:text-brand-primary">Aktualisieren</button>
+        <button onClick={load} className="w-fit rounded-lg border border-neutral-200 bg-white px-4 py-2 text-sm font-medium text-neutral-700 hover:border-brand-primary hover:text-brand-primary">{t("carriers.refresh")}</button>
       </div>
 
       <section className="mes-context-note">
-        <strong>Ablauf:</strong> Das MES entscheidet je Carrier anhand Auftrag und Route, welche Station den nächsten Arbeitsschritt ausführen darf.
+        <strong>{t("carriers.info")}</strong>
       </section>
 
       {normalizedInventory && <InventorySummary inventory={normalizedInventory} />}
 
       {canManage && !machineManagedInventory && (
         <form onSubmit={createCarrier} className="mes-filter-panel flex max-w-lg gap-3">
-          <input type="number" min="1" required value={carrierNumber} onChange={(event) => setCarrierNumber(event.target.value)} placeholder="Carrier-Nummer" className="flex-1 rounded-lg border border-neutral-200 px-3 py-2 text-sm" />
-          <button className="rounded-lg bg-brand-primary px-4 py-2 text-sm font-medium text-white">Anlegen</button>
+          <input type="number" min="1" required value={carrierNumber} onChange={(event) => setCarrierNumber(event.target.value)} placeholder={t("carriers.carrier_number")} className="flex-1 rounded-lg border border-neutral-200 px-3 py-2 text-sm" />
+          <button className="rounded-lg bg-brand-primary px-4 py-2 text-sm font-medium text-white">{t("carriers.create")}</button>
         </form>
       )}
       {canManage && machineManagedInventory && (
         <p className="text-sm text-neutral-500">
-          RFID-Carrier werden von der Maschine erkannt und automatisch synchronisiert.
+          {t("carriers.auto_sync")}
         </p>
       )}
 
@@ -110,21 +112,22 @@ export default function CarriersPage() {
             route={routesByOrder[carrier.order_id] || []}
           />
         ))}
-        {carriers.length === 0 && <p className="rounded-xl border border-neutral-200 bg-white p-8 text-sm text-neutral-400">Noch keine Werkstückträger vorhanden.</p>}
+        {carriers.length === 0 && <p className="rounded-xl border border-neutral-200 bg-white p-8 text-sm text-neutral-400">{t("carriers.no_carriers")}</p>}
       </div>
     </div>
   );
 }
 
 function CarrierCard({ carrier, order, route }) {
+  const { t } = useTranslation();
   const sortedRoute = [...route].sort((a, b) => a.step_no - b.step_no);
   const stages = [
     ...sortedRoute.map((step) => ({
       key: step.id || step.step_no,
       stepNo: step.step_no,
-      label: step.operation || `Schritt ${step.step_no}`,
+      label: step.operation || `${t("carriers.step")} ${step.step_no}`,
     })),
-    { key: "complete", stepNo: null, label: "Fertig" },
+    { key: "complete", stepNo: null, label: t("carriers.done") },
   ];
   const activeIndex =
     carrier.status === "completed"
@@ -149,50 +152,50 @@ function CarrierCard({ carrier, order, route }) {
     <article className="rounded-xl border border-neutral-200 bg-white p-5 shadow-sm">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-wider text-neutral-500">Werkstückträger</p>
+          <p className="text-xs font-semibold uppercase tracking-wider text-neutral-500">{t("carriers.carrier_label")}</p>
           <h2 className="mt-1 font-mono text-2xl font-bold text-neutral-900">Carrier {carrier.carrier_number}</h2>
         </div>
         <StatusPill status={carrier.status} />
       </div>
 
       <div className="mt-4 grid gap-3 sm:grid-cols-3">
-        <MiniMetric label="Auftrag" value={order?.name || "nicht zugeordnet"} />
+        <MiniMetric label={t("carriers.order")} value={order?.name || t("carriers.not_assigned")} />
         <MiniMetric
-          label="Aktueller Schritt"
+          label={t("carriers.current_step")}
           value={
             carrier.status === "completed"
-              ? "Fertig"
+              ? t("carriers.done")
               : carrier.status === "available" ||
                   !carrier.order_id ||
                   carrier.current_step_no == null
-                ? "Kein aktiver Schritt"
+                ? t("carriers.no_active_step")
                 : `Schritt ${carrier.current_step_no}`
           }
         />
-        <MiniMetric label="Resource" value={carrier.current_resource_id ? `R${carrier.current_resource_id}` : "Transport / Wartet"} />
+        <MiniMetric label={t("carriers.resource")} value={carrier.current_resource_id ? `R${carrier.current_resource_id}` : t("carriers.waiting")} />
       </div>
 
       {hasPhysicalData && (
         <div className="mt-4 rounded-lg border border-neutral-200 bg-neutral-50 p-4">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <p className="text-xs font-semibold uppercase tracking-wider text-neutral-500">Physisches Inventar</p>
+            <p className="text-xs font-semibold uppercase tracking-wider text-neutral-500">{t("carriers.physical_inventory")}</p>
             <div className="flex flex-wrap gap-2">
               {carrier.physical_state && <PhysicalStatePill state={carrier.physical_state} />}
-              {carrier.rfid_read_valid === false && <InventoryAlert label="RFID ungültig" />}
-              {carrier.inventory_stale && <InventoryAlert label="Daten veraltet" />}
+              {carrier.rfid_read_valid === false && <InventoryAlert label={t("carriers.rfid_invalid")} />}
+              {carrier.inventory_stale && <InventoryAlert label={t("carriers.data_stale")} />}
             </div>
           </div>
           <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <MiniMetric label="RFID-UID" value={carrier.rfid_uid || "nicht gemeldet"} mono />
-            <MiniMetric label="Lagerplatz" value={carrier.storage_slot || "nicht im Lager"} />
-            <MiniMetric label="RFID-Reader" value={carrier.last_reader_id || "nicht gemeldet"} />
-            <MiniMetric label="Zuletzt erkannt" value={formatLastSeen(carrier.last_seen_at)} />
+            <MiniMetric label={t("carriers.rfid_uid")} value={carrier.rfid_uid || t("carriers.not_reported")} mono />
+            <MiniMetric label={t("carriers.storage_slot")} value={carrier.storage_slot || t("carriers.not_in_storage")} />
+            <MiniMetric label={t("carriers.rfid_reader")} value={carrier.last_reader_id || t("carriers.not_reported")} />
+            <MiniMetric label={t("carriers.last_seen")} value={formatLastSeen(carrier.last_seen_at)} />
           </div>
         </div>
       )}
 
       {sortedRoute.length > 0 ? <div className="mt-5">
-        <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-neutral-500">Routenposition</p>
+        <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-neutral-500">{t("carriers.route_position")}</p>
         <div className="relative flex text-center text-xs">
           <div className="absolute left-[16.66%] right-[16.66%] top-2 h-0.5 bg-neutral-200" />
           {stages.map((stage, index) => (
@@ -202,37 +205,38 @@ function CarrierCard({ carrier, order, route }) {
             </div>
           ))}
         </div>
-      </div> : <p className="mt-5 text-sm text-neutral-400">Keine Route zugeordnet.</p>}
+      </div> : <p className="mt-5 text-sm text-neutral-400">{t("carriers.no_route")}</p>}
     </article>
   );
 }
 
 function InventorySummary({ inventory }) {
+  const { t } = useTranslation();
   const warning = !inventory.valid || inventory.stale || inventory.countMismatch;
   return (
     <section className={`rounded-xl border p-4 ${warning ? "border-amber-200 bg-amber-50" : "border-emerald-200 bg-emerald-50"}`}>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-wider text-neutral-500">Maschinenbestand</p>
+          <p className="text-xs font-semibold uppercase tracking-wider text-neutral-500">{t("carriers.machine_inventory")}</p>
           <p className="mt-1 text-sm text-neutral-700">
-            Physisch von {inventory.source || "der Inventarressource"} gemeldete RFID-Carrier
+            {t("carriers.inventory_source", { source: inventory.source || "der Inventarressource" })}
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          {!inventory.valid && <InventoryAlert label="Snapshot ungültig" />}
-          {inventory.stale && <InventoryAlert label="Verbindung veraltet" />}
-          {inventory.countMismatch && <InventoryAlert label="Bestand stimmt nicht überein" />}
+          {!inventory.valid && <InventoryAlert label={t("carriers.snapshot_invalid")} />}
+          {inventory.stale && <InventoryAlert label={t("carriers.connection_stale")} />}
+          {inventory.countMismatch && <InventoryAlert label={t("carriers.count_mismatch")} />}
         </div>
       </div>
       <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
-        <MiniMetric label="Verfügbar (SPS)" value={inventory.availableCount ?? "–"} />
-        <MiniMetric label="Verfügbar (MES)" value={inventory.reconciledAvailableCount ?? "–"} />
-        <MiniMetric label="Erkannt" value={inventory.observedCount ?? inventory.totalCount ?? "–"} />
-        <MiniMetric label="Kapazität" value={inventory.capacity ?? "–"} />
-        <MiniMetric label="Revision" value={inventory.revision ?? "–"} />
+        <MiniMetric label={t("carriers.available_plc")} value={inventory.availableCount ?? "–"} />
+        <MiniMetric label={t("carriers.available_mes")} value={inventory.reconciledAvailableCount ?? "–"} />
+        <MiniMetric label={t("carriers.detected")} value={inventory.observedCount ?? inventory.totalCount ?? "–"} />
+        <MiniMetric label={t("carriers.capacity")} value={inventory.capacity ?? "–"} />
+        <MiniMetric label={t("carriers.revision")} value={inventory.revision ?? "–"} />
       </div>
       {inventory.updatedAt && (
-        <p className="mt-3 text-xs text-neutral-500">Letzter Snapshot: {formatLastSeen(inventory.updatedAt)}</p>
+        <p className="mt-3 text-xs text-neutral-500">{t("carriers.last_snapshot")} {formatLastSeen(inventory.updatedAt)}</p>
       )}
     </section>
   );
@@ -275,8 +279,8 @@ function formatLastSeen(value) {
 }
 
 function MiniMetric({ label, value, mono = false }) { return <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-3"><p className="text-[10px] uppercase tracking-wider text-neutral-500">{label}</p><p className={`mt-1 break-words text-sm font-semibold text-neutral-900 ${mono ? "font-mono" : ""}`}>{value}</p></div>; }
-function StatusPill({ status }) { const color = status === "completed" ? "bg-emerald-50 text-emerald-700" : status === "in_process" ? "bg-amber-50 text-amber-700" : status === "assigned" ? "bg-sky-50 text-sky-700" : status === "error" ? "bg-red-50 text-red-700" : "bg-neutral-100 text-neutral-600"; return <span className={`rounded-full px-3 py-1 text-xs font-semibold ${color}`}>{carrierStatus(status)}</span>; }
-function PhysicalStatePill({ state }) { const normalized = String(state).toLowerCase(); const color = normalized === "stored" ? "bg-emerald-100 text-emerald-800" : normalized === "rfid_error" || normalized === "missing" ? "bg-red-100 text-red-800" : normalized === "at_station" || normalized === "in_transit" ? "bg-sky-100 text-sky-800" : "bg-neutral-200 text-neutral-700"; return <span className={`rounded-full px-3 py-1 text-xs font-semibold ${color}`}>{physicalStateLabel(normalized)}</span>; }
+function StatusPill({ status }) { const { t } = useTranslation(); const color = status === "completed" ? "bg-emerald-50 text-emerald-700" : status === "in_process" ? "bg-amber-50 text-amber-700" : status === "assigned" ? "bg-sky-50 text-sky-700" : status === "error" ? "bg-red-50 text-red-700" : "bg-neutral-100 text-neutral-600"; return <span className={`rounded-full px-3 py-1 text-xs font-semibold ${color}`}>{carrierStatus(status, t)}</span>; }
+function PhysicalStatePill({ state }) { const { t } = useTranslation(); const normalized = String(state).toLowerCase(); const color = normalized === "stored" ? "bg-emerald-100 text-emerald-800" : normalized === "rfid_error" || normalized === "missing" ? "bg-red-100 text-red-800" : normalized === "at_station" || normalized === "in_transit" ? "bg-sky-100 text-sky-800" : "bg-neutral-200 text-neutral-700"; return <span className={`rounded-full px-3 py-1 text-xs font-semibold ${color}`}>{physicalStateLabel(normalized, t)}</span>; }
 function InventoryAlert({ label }) { return <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-800">{label}</span>; }
-function carrierStatus(status) { return ({ available: "Verfuegbar", assigned: "Zugeordnet", in_process: "In Arbeit", completed: "Fertig", error: "Fehler" })[status] || status; }
-function physicalStateLabel(state) { return ({ stored: "Im Palettenlager", dispensed: "Ausgegeben", in_transit: "Im Transport", at_station: "An Station", returned: "Rücktransport", missing: "Nicht gefunden", rfid_error: "RFID-Fehler", empty: "Leer" })[state] || state; }
+function carrierStatus(status, t) { return ({ available: t("carriers.status_available"), assigned: t("carriers.status_assigned"), in_process: t("carriers.status_in_process"), completed: t("carriers.status_completed"), error: t("carriers.status_error") })[status] || status; }
+function physicalStateLabel(state, t) { return ({ stored: t("carriers.state_stored"), dispensed: t("carriers.state_dispensed"), in_transit: t("carriers.state_in_transit"), at_station: t("carriers.state_at_station"), returned: t("carriers.state_returned"), missing: t("carriers.state_missing"), rfid_error: t("carriers.state_rfid_error"), empty: t("carriers.state_empty") })[state] || state; }
