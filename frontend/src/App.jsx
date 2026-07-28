@@ -17,6 +17,7 @@ import ShiftsPage from "./pages/Shifts.jsx";
 import { useAuth } from "./providers/AuthProvider.jsx";
 import { hasRole, ROLES } from "./utils/roles.js";
 import { I18nProvider } from "./i18n/I18nProvider.jsx";
+import { useTabletMode } from "./hooks/useTabletMode.js";
 
 function AdminRoute({ children }) {
   const { user } = useAuth();
@@ -26,13 +27,14 @@ function AdminRoute({ children }) {
 function ProtectedApp() {
   const { isAuthenticated } = useAuth();
   const location = useLocation();
+  const isTabletDashboard = useTabletMode() && location.pathname === "/";
 
   if (!isAuthenticated) return <Navigate to="/login" replace state={{ from: location.pathname }} />;
 
   return (
     <div className="h-screen w-screen flex overflow-hidden bg-neutral-50">
-      <Sidebar />
-      <main className="app-content relative min-h-0 min-w-0 flex-1 overflow-y-auto">
+      {isTabletDashboard ? null : <Sidebar />}
+      <main className={`app-content relative min-h-0 min-w-0 flex-1 ${isTabletDashboard ? "overflow-hidden" : "overflow-y-auto"}`}>
         <Routes>
           <Route path="/" element={<Dashboard />} />
           <Route path="machines/*" element={<MachinesPage />} />

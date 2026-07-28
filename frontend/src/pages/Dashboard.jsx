@@ -9,6 +9,7 @@ import "react-grid-layout/css/styles.css";
 import "react-resizable/css/styles.css";
 import WidgetCatalog from "../components/dashboard/WidgetCatalog.jsx";
 import WidgetFrame from "../components/dashboard/WidgetFrame.jsx";
+import TabletDashboard from "../components/dashboard/TabletDashboard.jsx";
 import {
   HistoricalTrendsWidget,
   MetricWidget,
@@ -20,6 +21,7 @@ import {
 import { WIDGET_BY_ID } from "../dashboard/dashboardConfig.js";
 import { useDashboardData } from "../dashboard/useDashboardData.js";
 import { useDashboardLayouts } from "../dashboard/useDashboardLayouts.js";
+import { useTabletMode } from "../hooks/useTabletMode.js";
 import { useAuth } from "../providers/AuthProvider.jsx";
 import { useTranslation } from "../i18n/I18nProvider.jsx";
 import "./dashboard.css";
@@ -31,6 +33,16 @@ export default function Dashboard() {
   const { token, user } = useAuth();
   const dashboardData = useDashboardData(token);
   const layoutState = useDashboardLayouts(user);
+  const isTabletMode = useTabletMode();
+
+  if (isTabletMode) {
+    return <TabletDashboard dashboardData={dashboardData} user={user} />;
+  }
+
+  return <DesktopDashboard dashboardData={dashboardData} layoutState={layoutState} />;
+}
+
+function DesktopDashboard({ dashboardData, layoutState }) {
   const { width, containerRef, mounted } = useContainerWidth({ initialWidth: 1200 });
   const { t } = useTranslation();
   const [activeBreakpoint, setActiveBreakpoint] = useState("lg");

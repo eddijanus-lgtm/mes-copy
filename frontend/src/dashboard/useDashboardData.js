@@ -6,6 +6,7 @@ const EMPTY_STATS = { alarms: 0, health: false };
 export function useDashboardData(token) {
   const [machines, setMachines] = useState([]);
   const [carriers, setCarriers] = useState([]);
+  const [activeAlarms, setActiveAlarms] = useState([]);
   const [stats, setStats] = useState(EMPTY_STATS);
   const [kpis, setKpis] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -15,16 +16,20 @@ export function useDashboardData(token) {
     let active = true;
 
     const loadMetadata = async () => {
-      const [machineResult, carrierResult, alarmResult, healthResult, kpiResult] = await Promise.allSettled([
+      const [machineResult, carrierResult, alarmResult, alarmListResult, healthResult, kpiResult] = await Promise.allSettled([
         api.getSilent("/machines"),
         api.getSilent("/carriers"),
         api.getSilent("/alarms/stats/active-count"),
+        api.getSilent("/alarms"),
         api.getSilent("/shopfloor/health"),
         api.getSilent("/dashboard/kpis"),
       ]);
       if (!active) return;
       if (machineResult.status === "fulfilled" && Array.isArray(machineResult.value)) setMachines(machineResult.value);
       if (carrierResult.status === "fulfilled" && Array.isArray(carrierResult.value)) setCarriers(carrierResult.value);
+      if (alarmListResult.status === "fulfilled" && Array.isArray(alarmListResult.value)) {
+        setActiveAlarms(alarmListResult.value.filter((alarm) => !alarm.acknowledged));
+      }
       setStats({
         alarms: alarmResult.status === "fulfilled" && Number.isFinite(alarmResult.value) ? alarmResult.value : 0,
         health: healthResult.status === "fulfilled" && Boolean(healthResult.value?.ok),
@@ -78,6 +83,7 @@ export function useDashboardData(token) {
   return {
     machines,
     carriers,
+    activeAlarms,
     kpis,
     stats,
     isLoading,
