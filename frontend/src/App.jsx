@@ -5,7 +5,7 @@ import SystemStatus from "./components/SystemStatus.jsx";
 import { useAuth } from "./providers/AuthProvider.jsx";
 import { hasRole, ROLES } from "./utils/roles.js";
 import { I18nProvider } from "./i18n/I18nProvider.jsx";
-import { useTabletMode } from "./hooks/useTabletMode.js";
+import { useSmartphoneMode, useTabletMode } from "./hooks/useTabletMode.js";
 
 const Dashboard = lazy(() => import("./pages/Dashboard.jsx"));
 const MachinesPage = lazy(() => import("./pages/Machines.jsx"));
@@ -39,7 +39,7 @@ function useTabletDashboardViewportLock(isLocked) {
     document.documentElement.classList.add("tablet-dashboard-locked");
     viewport?.setAttribute(
       "content",
-      "width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no",
+      "width=device-width, initial-scale=1, viewport-fit=cover",
     );
     window.scrollTo(0, 0);
 
@@ -55,15 +55,17 @@ function useTabletDashboardViewportLock(isLocked) {
 function ProtectedApp() {
   const { isAuthenticated } = useAuth();
   const location = useLocation();
-  const isTabletDashboard = useTabletMode() && location.pathname === "/";
-  useTabletDashboardViewportLock(isAuthenticated && isTabletDashboard);
+  const isTabletMode = useTabletMode();
+  const isSmartphoneMode = useSmartphoneMode();
+  const isTouchDashboard = (isTabletMode || isSmartphoneMode) && location.pathname === "/";
+  useTabletDashboardViewportLock(isAuthenticated && isTouchDashboard);
 
   if (!isAuthenticated) return <Navigate to="/login" replace state={{ from: location.pathname }} />;
 
   return (
     <div className="h-screen w-screen flex overflow-hidden bg-neutral-50">
-      {isTabletDashboard ? null : <Sidebar />}
-      <main className={`app-content relative min-h-0 min-w-0 flex-1 ${isTabletDashboard ? "overflow-hidden" : "overflow-y-auto"}`}>
+      {isTouchDashboard ? null : <Sidebar />}
+      <main className={`app-content relative min-h-0 min-w-0 flex-1 ${isTouchDashboard ? "overflow-hidden" : "overflow-y-auto"}`}>
         <Suspense fallback={<PageLoading />}>
           <Routes>
             <Route path="/" element={<Dashboard />} />

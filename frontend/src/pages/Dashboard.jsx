@@ -12,6 +12,7 @@ import "react-resizable/css/styles.css";
 import WidgetCatalog from "../components/dashboard/WidgetCatalog.jsx";
 import WidgetFrame from "../components/dashboard/WidgetFrame.jsx";
 import TabletDashboard from "../components/dashboard/TabletDashboard.jsx";
+import SmartphoneDashboard from "../components/dashboard/SmartphoneDashboard.jsx";
 import {
   HistoricalTrendsWidget,
   MetricWidget,
@@ -23,7 +24,7 @@ import {
 import { WIDGET_BY_ID } from "../dashboard/dashboardConfig.js";
 import { useDashboardData } from "../dashboard/useDashboardData.js";
 import { useDashboardLayouts } from "../dashboard/useDashboardLayouts.js";
-import { useTabletMode } from "../hooks/useTabletMode.js";
+import { useSmartphoneMode, useTabletMode } from "../hooks/useTabletMode.js";
 import { useAuth } from "../providers/AuthProvider.jsx";
 import { useTranslation } from "../i18n/I18nProvider.jsx";
 import "./dashboard.css";
@@ -36,7 +37,11 @@ export default function Dashboard() {
   const dashboardData = useDashboardData(token);
   const layoutState = useDashboardLayouts(user);
   const isTabletMode = useTabletMode();
+  const isSmartphoneMode = useSmartphoneMode();
 
+  if (isSmartphoneMode) {
+    return <SmartphoneDashboard dashboardData={dashboardData} />;
+  }
   if (isTabletMode) {
     return <TabletDashboard dashboardData={dashboardData} user={user} />;
   }
