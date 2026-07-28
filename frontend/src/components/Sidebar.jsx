@@ -16,6 +16,7 @@ import { useTranslation } from "../i18n/I18nProvider.jsx";
 import { useAuth } from "../providers/AuthProvider.jsx";
 import { hasRole, ROLES } from "../utils/roles.js";
 import { useTheme } from "../providers/ThemeProvider.jsx";
+import { useDosLongPress } from "../hooks/useDosEasterEgg.js";
 
 const navGroups = [
   {
@@ -51,15 +52,16 @@ export default function Sidebar() {
   const { logout, user } = useAuth();
   const { t, locale, changeLocale } = useTranslation();
   const { theme, toggleTheme } = useTheme();
+  const dosLongPress = useDosLongPress();
   const ThemeIcon = theme === "dark" ? SunIcon : MoonIcon;
 
   return (
     <aside className="app-sidebar" aria-label="Hauptnavigation">
       <div className="app-sidebar__brand">
-        <div className="app-sidebar__wordmark" aria-label="WARA">
+        <button type="button" className="app-sidebar__wordmark dos-easter-egg-trigger" aria-label="WARA" {...dosLongPress}>
           <span className="app-sidebar__wordmark-full">WAR<span>A</span></span>
           <span className="app-sidebar__wordmark-short">W</span>
-        </div>
+        </button>
         <div className="app-sidebar__product">
           <strong>MES Shopfloor</strong>
           <span>Production Gateway</span>

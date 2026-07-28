@@ -3,6 +3,20 @@
   background: var(--wara-bg);
 }
 
+.dos-easter-egg-trigger {
+  appearance: none;
+  border: 0;
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  font-family: inherit;
+  cursor: default;
+  user-select: none;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-touch-callout: none;
+}
+
 html.tablet-dashboard-locked,
 html.tablet-dashboard-locked body,
 html.tablet-dashboard-locked #root {

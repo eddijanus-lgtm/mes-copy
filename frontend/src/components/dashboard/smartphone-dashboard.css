@@ -44,6 +44,12 @@
   letter-spacing: -0.085em;
 }
 
+.phone-topbar > .phone-wordmark {
+  display: inline;
+  width: auto;
+  height: auto;
+}
+
 .phone-wordmark span { color: var(--wara-accent); }
 .phone-topbar > div { min-width: 0; }
 .phone-topbar h1, .phone-topbar p { overflow: hidden; margin: 0; text-overflow: ellipsis; white-space: nowrap; }

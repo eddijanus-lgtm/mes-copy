@@ -6,6 +6,7 @@ import { useAuth } from "./providers/AuthProvider.jsx";
 import { hasRole, ROLES } from "./utils/roles.js";
 import { I18nProvider } from "./i18n/I18nProvider.jsx";
 import { useSmartphoneMode, useTabletMode } from "./hooks/useTabletMode.js";
+import { useDosKeyboardShortcut } from "./hooks/useDosEasterEgg.js";
 
 const Dashboard = lazy(() => import("./pages/Dashboard.jsx"));
 const MachinesPage = lazy(() => import("./pages/Machines.jsx"));
@@ -19,6 +20,7 @@ const OrdersPage = lazy(() => import("./pages/Orders.jsx"));
 const RoutesPage = lazy(() => import("./pages/Routes.jsx"));
 const NotificationsPage = lazy(() => import("./pages/Notifications.jsx"));
 const ShiftsPage = lazy(() => import("./pages/Shifts.jsx"));
+const DosMes = lazy(() => import("./pages/DosMes.jsx"));
 
 function PageLoading() {
   return <div className="mes-page-loading" role="status">Ansicht wird geladen…</div>;
@@ -27,6 +29,14 @@ function PageLoading() {
 function AdminRoute({ children }) {
   const { user } = useAuth();
   return hasRole(user, ROLES.ADMIN) ? children : <Navigate to="/" replace />;
+}
+
+function ProtectedDosRoute({ children }) {
+  const { isAuthenticated } = useAuth();
+  const location = useLocation();
+  return isAuthenticated
+    ? children
+    : <Navigate to="/login" replace state={{ from: location.pathname }} />;
 }
 
 function useTabletDashboardViewportLock(isLocked) {
@@ -58,6 +68,7 @@ function ProtectedApp() {
   const isTabletMode = useTabletMode();
   const isSmartphoneMode = useSmartphoneMode();
   const isTouchDashboard = (isTabletMode || isSmartphoneMode) && location.pathname === "/";
+  useDosKeyboardShortcut(isAuthenticated);
   useTabletDashboardViewportLock(isAuthenticated && isTouchDashboard);
 
   if (!isAuthenticated) return <Navigate to="/login" replace state={{ from: location.pathname }} />;
@@ -87,16 +98,20 @@ function ProtectedApp() {
 }
 
 export default function App() {
+  const location = useLocation();
+  const isDosMode = location.pathname.startsWith("/dos");
+
   return (
     <I18nProvider>
       <>
         <Suspense fallback={<PageLoading />}>
           <Routes>
+            <Route path="/dos/*" element={<ProtectedDosRoute><DosMes /></ProtectedDosRoute>} />
             <Route path="/login" element={<LoginPage />} />
             <Route path="/*" element={<ProtectedApp />} />
           </Routes>
         </Suspense>
-        <SystemStatus />
+        {isDosMode ? null : <SystemStatus />}
       </>
     </I18nProvider>
   );

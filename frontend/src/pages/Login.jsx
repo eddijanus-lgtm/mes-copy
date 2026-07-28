@@ -10,8 +10,9 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const returnTarget = location.state?.from || "/";
 
-  if (isAuthenticated) return <Navigate to="/" replace />;
+  if (isAuthenticated) return <Navigate to={returnTarget} replace />;
 
   async function handleSubmit(event) {
     event.preventDefault();
@@ -20,7 +21,7 @@ export default function LoginPage() {
 
     try {
       await login(username, password);
-      navigate(location.state?.from || "/", { replace: true });
+      navigate(returnTarget, { replace: true });
     } catch (loginError) {
       setError(loginError.message);
     } finally {

@@ -11,6 +11,7 @@ import { PencilSimpleIcon } from "@phosphor-icons/react/PencilSimple";
 import { SquaresFourIcon } from "@phosphor-icons/react/SquaresFour";
 import { XIcon } from "@phosphor-icons/react/X";
 import "./smartphone-dashboard.css";
+import { useDosLongPress } from "../../hooks/useDosEasterEgg.js";
 
 const NAV_ITEMS = [
   { label: "Dashboard", icon: SquaresFourIcon, path: "/" },
@@ -21,6 +22,7 @@ const NAV_ITEMS = [
 
 export default function SmartphoneDashboard({ dashboardData }) {
   const navigate = useNavigate();
+  const dosLongPress = useDosLongPress();
   const [sheet, setSheet] = useState(null);
   const stations = useMemo(
     () => [...dashboardData.machines]
@@ -40,7 +42,9 @@ export default function SmartphoneDashboard({ dashboardData }) {
   return (
     <main className="phone-dashboard">
       <header className="phone-topbar">
-        <span className="phone-wordmark" aria-label="WARA">WAR<span>A</span></span>
+        <button type="button" className="phone-wordmark dos-easter-egg-trigger" aria-label="WARA" {...dosLongPress}>
+          WAR<span>A</span>
+        </button>
         <div><h1>Dashboard</h1><p>Produktion live</p></div>
         <button type="button" onClick={() => setSheet("edit")} aria-label="Dashboard bearbeiten">
           <PencilSimpleIcon size={22} weight="bold" />

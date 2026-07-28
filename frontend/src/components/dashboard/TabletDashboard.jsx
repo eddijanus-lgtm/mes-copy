@@ -18,6 +18,7 @@ import { SquaresFourIcon } from "@phosphor-icons/react/SquaresFour";
 import { XIcon } from "@phosphor-icons/react/X";
 import { openDashboardReport } from "../../dashboard/dashboardReport.js";
 import Button from "../../design-system/components/Button.jsx";
+import { useDosLongPress } from "../../hooks/useDosEasterEgg.js";
 import "./tablet-dashboard.css";
 
 const MAX_WIDGETS = 4;
@@ -61,6 +62,7 @@ function loadTabletWidgets(user) {
 
 export default function TabletDashboard({ dashboardData, user }) {
   const navigate = useNavigate();
+  const dosLongPress = useDosLongPress();
   const [visibleWidgetIds, setVisibleWidgetIds] = useState(() => loadTabletWidgets(user));
   const [isEditing, setIsEditing] = useState(false);
   const [draggingWidgetId, setDraggingWidgetId] = useState(null);
@@ -218,7 +220,9 @@ export default function TabletDashboard({ dashboardData, user }) {
     <main className={`tablet-dashboard${isEditing ? " is-editing" : ""}`}>
       <header className="tablet-topbar">
         <div className="tablet-brand">
-          <span className="tablet-wordmark">WAR<span>A</span></span>
+          <button type="button" className="tablet-wordmark dos-easter-egg-trigger" aria-label="WARA" {...dosLongPress}>
+            WAR<span>A</span>
+          </button>
           <span>MES Shopfloor</span>
         </div>
         <div className="tablet-heading">
