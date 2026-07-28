@@ -1,0 +1,233 @@
+.halt-stopp-backdrop {
+  display: grid;
+  position: fixed;
+  z-index: 20000;
+  inset: 0;
+  place-items: center;
+  overflow: auto;
+  padding:
+    max(16px, env(safe-area-inset-top))
+    max(16px, env(safe-area-inset-right))
+    max(16px, env(safe-area-inset-bottom))
+    max(16px, env(safe-area-inset-left));
+  background:
+    repeating-linear-gradient(
+      -45deg,
+      rgb(255 198 0 / 8%) 0 12px,
+      transparent 12px 24px
+    ),
+    rgb(5 7 9 / 92%);
+  backdrop-filter: blur(7px);
+  overscroll-behavior: contain;
+  animation: halt-stopp-backdrop-in 140ms ease-out;
+}
+
+.halt-stopp-dialog {
+  width: min(720px, 100%);
+  max-height: calc(100dvh - 32px);
+  overflow: auto;
+  border: 3px solid #ffc400;
+  border-radius: 4px;
+  padding: clamp(18px, 3vw, 30px);
+  color: #fff9db;
+  background: #0b0d0f;
+  box-shadow:
+    0 0 0 6px #0b0d0f,
+    0 0 0 8px #ffc400,
+    0 28px 90px rgb(0 0 0 / 72%);
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  text-align: center;
+  animation: halt-stopp-dialog-in 180ms cubic-bezier(0.2, 0.9, 0.25, 1.25);
+}
+
+.halt-stopp-beacon {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  margin-bottom: 13px;
+}
+
+.halt-stopp-beacon span {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #ff3028;
+  box-shadow: 0 0 16px rgb(255 48 40 / 88%);
+  animation: halt-stopp-pulse 620ms ease-in-out infinite alternate;
+}
+
+.halt-stopp-beacon span:nth-child(2) {
+  animation-delay: 120ms;
+}
+
+.halt-stopp-beacon span:nth-child(3) {
+  animation-delay: 240ms;
+}
+
+.halt-stopp-dialog header > span {
+  color: #ffc400;
+  font-size: clamp(0.62rem, 1.8vw, 0.78rem);
+  font-weight: 800;
+  letter-spacing: 0.13em;
+}
+
+.halt-stopp-dialog h2 {
+  margin: 8px 0 0;
+  color: #ff3b31;
+  font-size: clamp(2.7rem, 9vw, 5.4rem);
+  font-weight: 950;
+  letter-spacing: -0.07em;
+  line-height: 0.9;
+  text-shadow: 3px 3px 0 #650600;
+}
+
+.halt-stopp-dialog header p {
+  margin: 12px 0 18px;
+  color: #fff9db;
+  font-size: clamp(0.86rem, 2.4vw, 1.15rem);
+  font-weight: 750;
+}
+
+.halt-stopp-image-frame {
+  width: min(420px, 100%);
+  aspect-ratio: 56 / 45;
+  overflow: hidden;
+  margin: 0 auto;
+  border: 2px solid #ffc400;
+  background: #000;
+}
+
+.halt-stopp-image-frame img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  image-rendering: auto;
+}
+
+.halt-stopp-dialog footer {
+  display: grid;
+  justify-items: center;
+  gap: 9px;
+  margin-top: 18px;
+}
+
+.halt-stopp-dialog button {
+  min-width: min(320px, 100%);
+  min-height: 48px;
+  border: 2px solid #ffc400;
+  border-radius: 2px;
+  padding: 10px 18px;
+  color: #0b0d0f;
+  background: #ffc400;
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 850;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.halt-stopp-dialog button:hover {
+  background: #ffe071;
+}
+
+.halt-stopp-dialog button:focus-visible {
+  outline: 3px solid #fff;
+  outline-offset: 3px;
+}
+
+.halt-stopp-dialog small {
+  color: #aeb3b8;
+  font-size: 0.66rem;
+}
+
+@media (max-width: 600px) {
+  .halt-stopp-backdrop {
+    place-items: end center;
+    padding:
+      max(10px, env(safe-area-inset-top))
+      max(10px, env(safe-area-inset-right))
+      max(10px, env(safe-area-inset-bottom))
+      max(10px, env(safe-area-inset-left));
+  }
+
+  .halt-stopp-dialog {
+    width: 100%;
+    max-height: calc(100dvh - 20px);
+    padding: 18px 14px 14px;
+  }
+
+  .halt-stopp-dialog h2 {
+    font-size: clamp(2.65rem, 15vw, 4rem);
+  }
+
+  .halt-stopp-dialog button {
+    width: 100%;
+    min-height: 54px;
+    font-size: 0.78rem;
+  }
+}
+
+@media (max-height: 560px) and (orientation: landscape) {
+  .halt-stopp-dialog {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(260px, 1.3fr);
+    align-items: center;
+    gap: 12px 18px;
+    padding: 12px 16px;
+  }
+
+  .halt-stopp-beacon {
+    display: none;
+  }
+
+  .halt-stopp-dialog header,
+  .halt-stopp-dialog footer {
+    grid-column: 1;
+  }
+
+  .halt-stopp-dialog h2 {
+    font-size: clamp(2.2rem, 8vw, 4rem);
+  }
+
+  .halt-stopp-dialog header p,
+  .halt-stopp-dialog footer {
+    margin: 8px 0 0;
+  }
+
+  .halt-stopp-image-frame {
+    grid-column: 2;
+    grid-row: 1 / span 2;
+    width: min(310px, 100%);
+  }
+
+  .halt-stopp-dialog small {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .halt-stopp-backdrop,
+  .halt-stopp-dialog,
+  .halt-stopp-beacon span {
+    animation: none;
+  }
+}
+
+@keyframes halt-stopp-backdrop-in {
+  from { opacity: 0; }
+}
+
+@keyframes halt-stopp-dialog-in {
+  from {
+    opacity: 0;
+    transform: scale(0.9);
+  }
+}
+
+@keyframes halt-stopp-pulse {
+  to {
+    opacity: 0.28;
+    transform: scale(0.75);
+  }
+}
