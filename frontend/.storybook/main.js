@@ -4,6 +4,7 @@ const config = {
     "../src/design-system/**/*.mdx",
     "../src/design-system/**/*.stories.@(js|jsx)",
     "../src/components/**/*.stories.@(js|jsx)",
+    "../src/features/**/*.stories.@(js|jsx)",
   ],
   addons: [
     "@storybook/addon-docs",

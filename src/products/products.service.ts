@@ -16,7 +16,10 @@ export class ProductsService {
   ) {}
 
   async create(dto: CreateProductDto) {
-    await this.validateRoute(dto.route_steps, dto.profile_machine_id);
+    const normalizedSteps = await this.validateRoute(
+      dto.route_steps,
+      dto.profile_machine_id,
+    );
     return this.dataSource.transaction(async (manager) => {
       const product = await manager.save(ProductEntity, manager.create(ProductEntity, {
         part_no: dto.part_no,
@@ -26,7 +29,7 @@ export class ProductsService {
         is_active: dto.is_active ?? true,
         parameter_definitions: dto.parameter_definitions || [],
       }));
-      const route_steps = await manager.save(ProductRouteStepEntity, dto.route_steps.map((step) => manager.create(ProductRouteStepEntity, {
+      const route_steps = await manager.save(ProductRouteStepEntity, normalizedSteps.map((step) => manager.create(ProductRouteStepEntity, {
         ...step,
         product_id: product.id,
         parameters: step.parameters || {},
@@ -66,12 +69,12 @@ export class ProductsService {
       const savedProduct = await manager.save(product);
 
       if (dto.route_steps) {
-        await this.validateRoute(
+        const normalizedSteps = await this.validateRoute(
           dto.route_steps,
-          dto.profile_machine_id || product.profile_machine_id || '',
+          dto.profile_machine_id ?? product.profile_machine_id ?? '',
         );
         await manager.delete(ProductRouteStepEntity, { product_id: id });
-        await manager.save(ProductRouteStepEntity, dto.route_steps.map((step) => manager.create(ProductRouteStepEntity, {
+        await manager.save(ProductRouteStepEntity, normalizedSteps.map((step) => manager.create(ProductRouteStepEntity, {
           ...step,
           product_id: id,
           parameters: step.parameters || {},
@@ -90,9 +93,21 @@ export class ProductsService {
   }
 
   private async validateRoute(
-    steps: Array<{ step_no: number; resource_id: number; operation_no: number }>,
+    steps: Array<{
+      step_no: number;
+      resource_id: number;
+      operation_no: number;
+      operation: string;
+      parameters?: Record<string, number>;
+    }>,
     machineId: string,
-  ) {
+  ): Promise<Array<{
+    step_no: number;
+    resource_id: number;
+    operation_no: number;
+    operation: string;
+    parameters?: Record<string, number>;
+  }>> {
     if (!steps.length) throw new BadRequestException('Product route requires at least one step');
     const uniqueSteps = new Set(steps.map((step) => step.step_no));
     if (uniqueSteps.size !== steps.length) throw new BadRequestException('Product route step numbers must be unique');
@@ -107,7 +122,7 @@ export class ProductsService {
     const stations = new Map(
       profile.document.stations.map((station) => [station.resourceId, station]),
     );
-    for (const step of steps) {
+    return steps.map((step) => {
       const station = stations.get(step.resource_id);
       if (!station || !station.enabled) {
         throw new BadRequestException(
@@ -120,6 +135,13 @@ export class ProductsService {
           `Operation ${step.operation_no} is not available at resource ${step.resource_id}`,
         );
       }
-    }
+      return {
+        ...step,
+        operation:
+          station.routing?.operation?.trim() ||
+          station.displayName?.trim() ||
+          'Standardaktion',
+      };
+    });
   }
 }

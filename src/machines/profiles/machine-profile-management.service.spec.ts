@@ -150,6 +150,58 @@ describe('MachineProfileManagementService', () => {
     expect(result.createdBy).toBe('admin');
   });
 
+  it('stores an offline draft before stations or OPC UA data exist', async () => {
+    const { service } = setup();
+
+    const result = await service.create(
+      {
+        machineId: 'lernfabrik-linie-c',
+        displayName: 'Lernfabrik 4.0 – Linie C',
+        stations: [],
+      },
+      'admin',
+    );
+
+    expect(result).toMatchObject({
+      status: 'draft',
+      active: false,
+      document: {
+        machineId: 'lernfabrik-linie-c',
+        displayName: 'Lernfabrik 4.0 – Linie C',
+        operatingMode: 'observe',
+        stations: [],
+      },
+    });
+  });
+
+  it('keeps technical machine IDs unique for incomplete drafts', async () => {
+    const existingDocument = profile();
+    const { service } = setup([
+      {
+        id: 'v1',
+        profile_id: '00000000-0000-4000-8000-000000000001',
+        version: 1,
+        machine_id: 'lernfabrik-linie-c',
+        status: 'draft',
+        active: false,
+        document: existingDocument,
+        created_by: 'admin',
+        created_at: new Date(),
+      },
+    ]);
+
+    await expect(
+      service.create(
+        {
+          machineId: 'lernfabrik-linie-c',
+          displayName: 'Zweiter Entwurf',
+          stations: [],
+        },
+        'admin',
+      ),
+    ).rejects.toBeInstanceOf(ConflictException);
+  });
+
   it('rejects persisted secrets instead of returning or storing them', async () => {
     const { service, rows } = setup();
     const document = profile() as any;

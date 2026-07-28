@@ -47,7 +47,7 @@ export const parameters = {
   layout: "centered",
   options: {
     storySort: {
-      order: ["Grundlagen", "Komponenten", "Muster", "Dashboard"],
+      order: ["Grundlagen", "Komponenten", "Muster", "MES-Seiten", "Dashboard"],
     },
   },
 };

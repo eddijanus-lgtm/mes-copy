@@ -445,6 +445,21 @@ export class MachineProfileManagementService {
     document: Record<string, any>,
     profileId?: string,
   ) {
+    const machineId =
+      typeof document.machineId === 'string' ? document.machineId : '';
+    const otherVersions = await this.versions.find({
+      where: profileId ? { profile_id: Not(profileId) } : {},
+      order: { version: 'DESC' },
+    });
+    if (
+      this.latestRows(otherVersions).some(
+        (row) => row.machine_id === machineId,
+      )
+    ) {
+      throw new ConflictException(
+        `machineId ${machineId} wird bereits verwendet`,
+      );
+    }
     const validation = this.validator.validateDocument(document);
     if (!validation.profile) return;
     const errors = await this.identifierErrors(validation.profile, profileId);

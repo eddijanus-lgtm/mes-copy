@@ -4,7 +4,9 @@ import {
   emptyMachineProfile,
   namespacesFromArray,
   normalizeProfileDocument,
+  profileSetupSummary,
   sortedRoutingPreview,
+  stationSetupState,
   validateProfileDraft,
 } from './machineProfileConfig.js';
 
@@ -97,4 +99,60 @@ test('OPC UA namespace arrays become stable profile namespaces', () => {
       { key: 'ns1', uri: 'urn:SIMATIC.S7-1500.OPC-UA.Application:PLC_1' },
     ],
   );
+});
+
+test('offline drafts can start without technical machine or station data', () => {
+  const draft = emptyMachineProfile();
+  assert.equal(draft.machineId, '');
+  assert.deepEqual(draft.stations, []);
+  assert.deepEqual(validateProfileDraft(draft), []);
+});
+
+test('planned stations become progressively ready without blocking the draft', () => {
+  const planned = {
+    stationId: 'presse01',
+    displayName: 'Presse01',
+    signals: [],
+    connection: { endpointUrl: '' },
+  };
+  const connected = {
+    ...planned,
+    resourceId: 30,
+    connection: { endpointUrl: 'opc.tcp://192.168.0.30:4840' },
+  };
+  const mapped = {
+    ...connected,
+    signals: [{ key: 'carrier', role: 'carrierId' }],
+  };
+
+  assert.equal(stationSetupState(planned).key, 'planned');
+  assert.equal(stationSetupState(connected).key, 'discoverable');
+  assert.equal(stationSetupState(mapped).key, 'mapped');
+  assert.deepEqual(
+    profileSetupSummary({ stations: [planned, connected, mapped] }),
+    {
+      stationCount: 3,
+      endpointCount: 2,
+      mappedCount: 1,
+      counts: {
+        planned: 1,
+        connection_configured: 0,
+        discoverable: 1,
+        mapped: 1,
+      },
+    },
+  );
+});
+
+test('draft validation ignores missing resource IDs but reports real duplicates', () => {
+  const errors = validateProfileDraft({
+    stations: [
+      { displayName: 'Geplant A' },
+      { displayName: 'Geplant B' },
+      { stationId: 'ready-a', resourceId: 30 },
+      { stationId: 'ready-b', resourceId: 30 },
+    ],
+  });
+  assert.equal(errors.length, 1);
+  assert.match(errors[0], /Ressourcen-ID 30/);
 });

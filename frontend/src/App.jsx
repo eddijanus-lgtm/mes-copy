@@ -1,4 +1,4 @@
-import React, { lazy, Suspense } from "react";
+import React, { lazy, Suspense, useEffect } from "react";
 import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import Sidebar from "./components/Sidebar.jsx";
 import SystemStatus from "./components/SystemStatus.jsx";
@@ -29,10 +29,34 @@ function AdminRoute({ children }) {
   return hasRole(user, ROLES.ADMIN) ? children : <Navigate to="/" replace />;
 }
 
+function useTabletDashboardViewportLock(isLocked) {
+  useEffect(() => {
+    if (!isLocked) return undefined;
+
+    const viewport = document.querySelector('meta[name="viewport"]');
+    const previousViewport = viewport?.getAttribute("content");
+
+    document.documentElement.classList.add("tablet-dashboard-locked");
+    viewport?.setAttribute(
+      "content",
+      "width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no",
+    );
+    window.scrollTo(0, 0);
+
+    return () => {
+      document.documentElement.classList.remove("tablet-dashboard-locked");
+      if (viewport && previousViewport) {
+        viewport.setAttribute("content", previousViewport);
+      }
+    };
+  }, [isLocked]);
+}
+
 function ProtectedApp() {
   const { isAuthenticated } = useAuth();
   const location = useLocation();
   const isTabletDashboard = useTabletMode() && location.pathname === "/";
+  useTabletDashboardViewportLock(isAuthenticated && isTabletDashboard);
 
   if (!isAuthenticated) return <Navigate to="/login" replace state={{ from: location.pathname }} />;
 

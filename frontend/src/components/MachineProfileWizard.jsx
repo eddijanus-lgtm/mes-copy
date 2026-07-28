@@ -5,7 +5,8 @@ import {
   emptyMachineProfile,
   namespacesFromArray,
   normalizeProfileDocument,
-  sortedRoutingPreview,
+  profileSetupSummary,
+  stationSetupState,
   validateProfileDraft,
 } from '../utils/machineProfileConfig.js';
 
@@ -50,7 +51,7 @@ export const MACHINE_SIGNAL_ROLES = Object.freeze([
   'custom',
 ]);
 
-const STEPS = ['Maschine', 'Stationen', 'Signale', 'Speichern'];
+const STEPS = ['Anlage', 'SPS-Verbindungen', 'Daten zuordnen', 'Prüfen & aktivieren'];
 const CAPABILITIES = [
   'production',
   'routing',
@@ -71,14 +72,31 @@ const DATA_TYPES = [
   'String',
   'DateTime',
 ];
+const SIGNAL_HANDSHAKE_ROLES = [
+  'workRequest',
+  'requestBusy',
+  'requestAccepted',
+  'requestRejected',
+  'carrierId',
+  'resourceId',
+  'orderId',
+  'partNumber',
+  'operationId',
+  'stepNumber',
+  'nextStationId',
+  'processActive',
+  'processCompleted',
+  'processResult',
+  'completedCarrierId',
+];
 
-function newStation(resourceId = 1) {
+function newStation(resourceId = '') {
   return {
     stationId: '',
-    resourceId: Number(resourceId) || 1,
+    resourceId: resourceId === '' ? '' : Number(resourceId),
     displayName: '',
     description: '',
-    enabled: true,
+    enabled: false,
     equipmentLevel: 'work_unit',
     executionModel: 'machine_job',
     jobInterface: 'telemetry_only',
@@ -128,6 +146,29 @@ function opcUaEndpointHost(endpointUrl = '') {
     .match(/^opc\.tcp:\/\/(\[[^\]]+\]|[^/:]+)/i)?.[1]
     ?.replace(/^\[|\]$/g, '')
     .toLowerCase();
+}
+
+function technicalId(value) {
+  return String(value || '')
+    .toLowerCase()
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+}
+
+function uniqueStationId(displayName, stations, editedIndex) {
+  const base = technicalId(displayName) || 'station';
+  const used = new Set(
+    stations
+      .filter((_, index) => index !== editedIndex)
+      .map((station) => String(station.stationId || '').trim())
+      .filter(Boolean),
+  );
+  let candidate = base;
+  let suffix = 2;
+  while (used.has(candidate)) candidate = `${base}-${suffix++}`;
+  return candidate;
 }
 
 export default function MachineProfileWizard({
@@ -235,8 +276,6 @@ export default function MachineProfileWizard({
 
   function startNew() {
     const nextDocument = emptyMachineProfile(suggestion);
-    if (suggestion.resourceId)
-      nextDocument.stations = [newStation(suggestion.resourceId)];
     setProfile(null);
     setDocument(nextDocument);
     setPersistedDocument('');
@@ -293,24 +332,33 @@ export default function MachineProfileWizard({
 
   async function saveDocument() {
     if (!canEdit) return profile;
-    if (!document.machineId.trim() || !document.displayName.trim())
-      throw new Error('Maschinen-ID und Anzeigename sind erforderlich.');
-    if (!document.stations.length)
-      throw new Error('Mindestens eine Station ist erforderlich.');
-    if (!changeSummary.trim())
-      throw new Error('Bitte eine Änderungszusammenfassung angeben.');
+    if (!document.displayName.trim())
+      throw new Error('Bitte einen Namen für die Anlage angeben.');
     if (profile && persistedDocument === JSON.stringify(document))
       return profile;
-    const body = { document, changeSummary: changeSummary.trim() };
+    const documentToSave = structuredClone(document);
+    if (!documentToSave.machineId?.trim()) {
+      const generated = await api.getSilent(
+        `/machine-profiles/suggestions?displayName=${encodeURIComponent(documentToSave.displayName)}`,
+      );
+      documentToSave.machineId =
+        generated?.machineId || technicalId(documentToSave.displayName);
+    }
+    const body = {
+      document: documentToSave,
+      changeSummary: changeSummary.trim() || undefined,
+    };
     const saved = profile
       ? await api.patch(`/machine-profiles/${profile.profileId}`, body)
       : await api.post('/machine-profiles', body);
     const nextProfile = saved?.profileId
       ? saved
-      : { ...profile, ...saved, document };
+      : { ...profile, ...saved, document: documentToSave };
     setProfile(nextProfile);
-    setDocument(structuredClone(nextProfile.document || document));
-    setPersistedDocument(JSON.stringify(nextProfile.document || document));
+    setDocument(structuredClone(nextProfile.document || documentToSave));
+    setPersistedDocument(
+      JSON.stringify(nextProfile.document || documentToSave),
+    );
     setProfiles((current) => [
       nextProfile,
       ...current.filter((item) => item.profileId !== nextProfile.profileId),
@@ -379,16 +427,22 @@ export default function MachineProfileWizard({
     }
   }
 
+  async function handleQuickCreate() {
+    setError('');
+    setLoading(true);
+    try {
+      await saveDocument();
+      setStep(1);
+    } catch (requestError) {
+      setError(requestError.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
   function saveStation() {
-    if (
-      !stationEditor.stationId.trim() ||
-      !stationEditor.displayName.trim() ||
-      !Number(stationEditor.resourceId) ||
-      !stationEditor.connection?.endpointUrl?.trim()
-    ) {
-      setError(
-        'Stations-ID, Ressourcen-ID, Anzeigename und OPC-UA-Endpoint sind erforderlich.',
-      );
+    if (!stationEditor.displayName.trim()) {
+      setError('Bitte einen Namen für die Station angeben.');
       return;
     }
     const host = opcUaEndpointHost(stationEditor.connection.endpointUrl);
@@ -407,8 +461,22 @@ export default function MachineProfileWizard({
       const stations = current.stations.slice();
       const normalized = {
         ...stationEditor,
-        resourceId: Number(stationEditor.resourceId),
+        stationId:
+          stationEditor.stationId?.trim() ||
+          uniqueStationId(
+            stationEditor.displayName,
+            current.stations,
+            stationEditorIndex,
+          ),
       };
+      if (
+        Number.isInteger(Number(stationEditor.resourceId)) &&
+        Number(stationEditor.resourceId) > 0
+      )
+        normalized.resourceId = Number(stationEditor.resourceId);
+      else delete normalized.resourceId;
+      if (!normalized.connection?.endpointUrl?.trim())
+        normalized.enabled = false;
       if (normalized.parentResourceId)
         normalized.parentResourceId = Number(normalized.parentResourceId);
       else delete normalized.parentResourceId;
@@ -445,10 +513,15 @@ export default function MachineProfileWizard({
       const station = document.stations.find(
         (item) => item.stationId === stationId,
       );
+      if (!station?.connection?.endpointUrl?.trim()) {
+        throw new Error(
+          'Für diese Station ist noch keine OPC-UA-Verbindung eingetragen.',
+        );
+      }
       const response = await api.post(
         '/machine-profiles/commissioning/browse',
         {
-          connection: station?.connection || document.connection,
+          connection: station.connection,
           nodeId,
           maxNodes: 100,
         },
@@ -474,10 +547,15 @@ export default function MachineProfileWizard({
     setError('');
     setMappingResult(null);
     try {
+      if (!station.connection?.endpointUrl?.trim()) {
+        throw new Error(
+          'Für diese Station ist noch keine OPC-UA-Verbindung eingetragen.',
+        );
+      }
       const result = await api.post(
         '/machine-profiles/commissioning/discover-signals',
         {
-          connection: station.connection || document.connection,
+          connection: station.connection,
           maxDepth: 6,
           maxNodes: 2000,
         },
@@ -485,7 +563,8 @@ export default function MachineProfileWizard({
       let addedCount = 0;
       setDocument((current) => {
         const stations = structuredClone(current.stations);
-        const signals = stations[stationIndex].signals;
+        const mappedStation = stations[stationIndex];
+        const signals = mappedStation.signals;
         const addresses = new Set(
           signals.map((signal) => `${signal.namespace}:${signal.identifier}`),
         );
@@ -506,13 +585,26 @@ export default function MachineProfileWizard({
             role: suggestion.role,
             identifier: suggestion.identifier,
             dataType: suggestion.dataType,
-            access: 'read',
-            direction: 'machineToMes',
+            access: suggestion.access,
+            direction: suggestion.direction,
             description: `Automatisch erkannt: ${suggestion.path}`,
           });
           addresses.add(address);
           keys.add(key);
           addedCount += 1;
+        }
+        const mappedRoles = new Set(signals.map((signal) => signal.role));
+        if (SIGNAL_HANDSHAKE_ROLES.every((role) => mappedRoles.has(role))) {
+          mappedStation.jobInterface = 'signal_handshake';
+          mappedStation.executionModel = 'work_unit_jobs';
+          mappedStation.capabilities = [
+            ...new Set([
+              ...(mappedStation.capabilities || []),
+              'production',
+              'routing',
+              'telemetry',
+            ]),
+          ];
         }
         return { ...current, stations };
       });
@@ -668,6 +760,8 @@ export default function MachineProfileWizard({
                   document={document}
                   profile={profile}
                   disabled={!canEdit}
+                  loading={loading}
+                  onQuickCreate={handleQuickCreate}
                   update={updateDocument}
                 />
               )}
@@ -681,7 +775,6 @@ export default function MachineProfileWizard({
                   setEditorIndex={setStationEditorIndex}
                   saveEditor={saveStation}
                   update={setDocument}
-                  suggestion={suggestion}
                   onTestConnection={testDraftConnection}
                   connectionTestResult={connectionTestResult}
                   loading={loading}
@@ -820,7 +913,14 @@ export default function MachineProfileWizard({
   );
 }
 
-function MasterDataStep({ document, profile, disabled, update }) {
+function MasterDataStep({
+  document,
+  profile,
+  disabled,
+  loading,
+  onQuickCreate,
+  update,
+}) {
   const effectiveMode = document.operatingMode;
   const modeLabels = {
     observe: 'Beobachten',
@@ -836,30 +936,59 @@ function MasterDataStep({ document, profile, disabled, update }) {
   };
   return (
     <Step
-      title="1. Maschine anlegen"
-      intro="Die Maschine ist der gemeinsame Root-Eintrag. OPC-UA-Adressen werden ausschließlich an den Stationen gepflegt."
+      title="1. Anlage anlegen"
+      intro="Ein Name genügt. Stationen, IP-Adressen und OPC-UA-Daten können vollständig nachgetragen werden, sobald die Anlage physisch verfügbar ist."
     >
       <div className="profile-mode-note">
-        <strong>{modeLabels[effectiveMode]}</strong>
-        <span>{modeDescriptions[effectiveMode]}</span>
+        <strong>{profile ? modeLabels[effectiveMode] : 'Entwurf'}</strong>
+        <span>
+          {profile
+            ? modeDescriptions[effectiveMode]
+            : 'Die Anlage bleibt offline und führt keine Verbindungs- oder Schreibzugriffe aus.'}
+        </span>
       </div>
-      <div className="profile-form-grid">
+      <div className="profile-quick-create">
         <Field
-          label="Maschinen-ID *"
-          value={document.machineId}
-          disabled={disabled}
-          onChange={(value) => update(['machineId'], value)}
-        />
-        <Field
-          label="Anzeigename *"
+          label="Name der gesamten Anlage *"
           value={document.displayName}
           disabled={disabled}
           onChange={(value) => update(['displayName'], value)}
+          hint="Zum Beispiel: Lernfabrik 4.0 – Linie C"
         />
+        {!disabled && !profile && (
+          <button
+            type="button"
+            className="profile-primary"
+            disabled={loading || !document.displayName.trim()}
+            onClick={onQuickCreate}
+          >
+            {loading ? 'Wird angelegt…' : 'Anlage als Entwurf anlegen'}
+          </button>
+        )}
       </div>
+      {profile && (
+        <div className="profile-draft-saved" role="status">
+          <strong>Entwurf gespeichert</strong>
+          <span>
+            Die Anlagenstruktur kann jetzt unabhängig vom physischen
+            SPS-Zustand ergänzt werden.
+          </span>
+        </div>
+      )}
       <details className="profile-advanced">
         <summary>Weitere Profildaten</summary>
         <div className="profile-form-grid">
+        <Field
+          label="Technische Maschinen-ID"
+          value={document.machineId}
+          disabled={disabled || Boolean(profile)}
+          onChange={(value) => update(['machineId'], value)}
+          hint={
+            profile
+              ? 'Nach dem Anlegen stabil.'
+              : 'Wird beim Anlegen automatisch aus dem Namen erzeugt.'
+          }
+        />
         <Field
           label="Hersteller"
           value={document.manufacturer || ''}
@@ -1223,11 +1352,12 @@ function StationsStep({
   setEditorIndex,
   saveEditor,
   update,
-  suggestion,
   onTestConnection,
   connectionTestResult,
   loading,
 }) {
+  const setup = profileSetupSummary(document);
+
   function edit(station, index) {
     setEditor(structuredClone(station));
     setEditorIndex(index);
@@ -1239,49 +1369,75 @@ function StationsStep({
     }));
   }
   function add() {
-    const used = document.stations.map((station) => Number(station.resourceId));
-    let resourceId = Number(suggestion.resourceId) || 1;
-    while (used.includes(resourceId)) resourceId += 1;
-    setEditor(newStation(resourceId));
+    setEditor(newStation());
     setEditorIndex(-1);
   }
   return (
     <Step
-      title="2. Stationen"
-      intro="Legen Sie die Stationen an, die im MES angezeigt und mit OPC UA verbunden werden sollen."
+      title="2. SPS-Verbindungen"
+      intro="Stationen dürfen zunächst nur geplant werden. Später benötigt das MES je Station nur die SPS-Verbindung – RFID-Reader, Fördertechnik und Roboter bleiben Aufgabe der SPS."
     >
+      <div className="profile-setup-summary">
+        <article>
+          <span>Stationen</span>
+          <strong>{setup.stationCount}</strong>
+        </article>
+        <article>
+          <span>Endpoint eingetragen</span>
+          <strong>{setup.endpointCount}</strong>
+        </article>
+        <article>
+          <span>Daten zugeordnet</span>
+          <strong>{setup.mappedCount}</strong>
+        </article>
+      </div>
       <div className="profile-section-heading">
-        <span>{document.stations.length} Stationen</span>
+        <span>Stationsstruktur</span>
         {!disabled && (
           <button type="button" onClick={add}>
-            + Station hinzufügen
+            + Geplante Station
           </button>
         )}
       </div>
       <div className="profile-station-list">
-        {document.stations.map((station, index) => (
-          <article key={`${station.stationId}-${index}`}>
-            <div>
-              <strong>{station.displayName || 'Unbenannte Station'}</strong>
-              <span>
-                {station.stationId || 'Keine ID'} · R{station.resourceId}
-              </span>
-            </div>
-            <div>
-              <small>{station.enabled ? 'aktiv' : 'deaktiviert'}</small>
-              <button type="button" onClick={() => edit(station, index)}>
-                {disabled ? 'Ansehen' : 'Bearbeiten'}
-              </button>
-              {!disabled && (
-                <button type="button" onClick={() => remove(index)}>
-                  Entfernen
+        {document.stations.map((station, index) => {
+          const state = stationSetupState(station);
+          return (
+            <article key={`${station.stationId || 'planned'}-${index}`}>
+              <div>
+                <strong>{station.displayName || 'Unbenannte Station'}</strong>
+                <span>
+                  {station.stationId || 'ID wird automatisch erzeugt'}
+                  {station.resourceId ? ` · R${station.resourceId}` : ''}
+                </span>
+                <small>
+                  {station.connection?.endpointUrl || 'Noch kein OPC-UA-Endpoint'}
+                </small>
+              </div>
+              <div>
+                <span className={`profile-setup-state is-${state.key}`}>
+                  {state.label}
+                </span>
+                <button type="button" onClick={() => edit(station, index)}>
+                  {disabled ? 'Ansehen' : 'Ergänzen'}
                 </button>
-              )}
-            </div>
-          </article>
-        ))}
+                {!disabled && (
+                  <button type="button" onClick={() => remove(index)}>
+                    Entfernen
+                  </button>
+                )}
+              </div>
+            </article>
+          );
+        })}
         {!document.stations.length && (
-          <p className="profile-empty">Noch keine Station angelegt.</p>
+          <div className="profile-empty-state">
+            <strong>Noch keine Station geplant</strong>
+            <span>
+              Das ist für einen Anlagenentwurf in Ordnung. Stationen können
+              jederzeit ergänzt werden.
+            </span>
+          </div>
         )}
       </div>
       {editor && (
@@ -1327,32 +1483,40 @@ function StationEditor({
   return (
     <div className="profile-inline-editor">
       <h4>{title}</h4>
+      <p className="profile-editor-intro">
+        Nur der Stationsname ist erforderlich. Später wird der OPC-UA-Endpoint
+        der SPS ergänzt. Eine separate RFID-Reader- oder Roboter-IP braucht das
+        MES nicht.
+      </p>
       <div className="profile-form-grid">
         <Field
-          label="Stations-ID *"
-          value={station.stationId}
-          disabled={disabled}
-          onChange={(value) => set('stationId', value)}
-        />
-        <Field
-          type="number"
-          label="Ressourcen-ID *"
-          value={station.resourceId}
-          disabled={disabled}
-          onChange={(value) => set('resourceId', value)}
-        />
-        <Field
-          label="Anzeigename *"
+          label="Stationsname *"
           value={station.displayName}
           disabled={disabled}
           onChange={(value) => set('displayName', value)}
+          hint="Zum Beispiel: Presse01"
         />
         <Field
-          label="OPC-UA-Endpoint *"
+          type="number"
+          label="Ressourcen-ID"
+          value={station.resourceId}
+          disabled={disabled}
+          onChange={(value) => set('resourceId', value)}
+          hint="Erst vor der Aktivierung erforderlich."
+        />
+        <Field
+          label="Technische Stations-ID"
+          value={station.stationId}
+          disabled={disabled}
+          onChange={(value) => set('stationId', value)}
+          hint="Wird automatisch aus dem Stationsnamen erzeugt."
+        />
+        <Field
+          label="OPC-UA-Endpoint"
           value={connection.endpointUrl}
           disabled={disabled}
           onChange={(value) => setConnection(['endpointUrl'], value)}
-          hint="z. B. opc.tcp://192.168.0.1:4840"
+          hint="Optional, z. B. opc.tcp://192.168.0.30:4840"
         />
       </div>
       {!disabled && (
@@ -1380,13 +1544,21 @@ function StationEditor({
           options={[
             '',
             ...stations
-              .filter((item) => item.resourceId !== Number(station.resourceId))
+              .filter(
+                (item) =>
+                  Number(item.resourceId) > 0 &&
+                  item.resourceId !== Number(station.resourceId),
+              )
               .map((item) => item.resourceId),
           ]}
           labels={[
             'Keine',
             ...stations
-              .filter((item) => item.resourceId !== Number(station.resourceId))
+              .filter(
+                (item) =>
+                  Number(item.resourceId) > 0 &&
+                  item.resourceId !== Number(station.resourceId),
+              )
               .map((item) => `R${item.resourceId} · ${item.displayName}`),
           ]}
           onChange={(value) =>
@@ -1457,8 +1629,17 @@ function StationEditor({
         <label className="profile-check">
         <input
           type="checkbox"
-          disabled={disabled}
+          disabled={
+            disabled ||
+            !connection.endpointUrl?.trim() ||
+            !(Number(station.resourceId) > 0)
+          }
           checked={station.enabled}
+          title={
+            connection.endpointUrl && Number(station.resourceId) > 0
+              ? undefined
+              : 'Endpoint und Ressourcen-ID vor der Aktivierung ergänzen'
+          }
           onChange={(event) => set('enabled', event.target.checked)}
         />{' '}
         Station aktiviert
@@ -1701,8 +1882,8 @@ function SignalsStep({
   }
   return (
     <Step
-      title="3. Stationssignale"
-      intro="Öffnen Sie den erkannten OPC-UA-Adressraum und ordnen Sie Variablen einer fachlichen MES-Rolle zu. Der Browser bleibt auch bei konfigurierten Schreibsignalen ausschließlich lesend."
+      title="3. Daten zuordnen"
+      intro="Sobald eine SPS erreichbar ist, erkennt das MES DB151- und stMES-Signale automatisch. RFID und Robotersteuerung bleiben intern in der SPS; das MES benötigt nur Prozessauftrag, Status und Ergebnis."
     >
       <div className="profile-section-heading">
         <SelectField
@@ -1722,7 +1903,7 @@ function SignalsStep({
             <button
               type="button"
               className="profile-primary"
-              disabled={loading}
+              disabled={loading || !station.connection?.endpointUrl?.trim()}
               onClick={() => autoMapSignals(stationIndex)}
             >
               {loading ? 'Signale werden erkannt…' : 'Signale automatisch erkennen'}
@@ -1733,6 +1914,15 @@ function SignalsStep({
           </div>
         )}
       </div>
+      {!station.connection?.endpointUrl?.trim() && (
+        <div className="profile-planned-note">
+          <strong>{station.displayName} ist noch geplant</strong>
+          <span>
+            Tragen Sie unter „SPS-Verbindungen“ später den Endpoint ein. Bis
+            dahin sind keine technischen Daten notwendig.
+          </span>
+        </div>
+      )}
       {mappingResult?.stationId === station.stationId && (
         <div className="profile-mapping-result" role="status">
           <strong>{mappingResult.addedCount} Signale ergänzt</strong>
@@ -2028,7 +2218,15 @@ function SummaryStep({
   onDeactivate,
 }) {
   const localErrors = validateProfileDraft(document);
-  const route = sortedRoutingPreview(document.stations);
+  const setup = profileSetupSummary(document);
+  const activationReady =
+    setup.stationCount > 0 &&
+    setup.endpointCount === setup.stationCount &&
+    document.stations.every(
+      (station) =>
+        station.stationId?.trim() && Number(station.resourceId) > 0,
+    ) &&
+    document.namespaces.some((namespace) => namespace.uri?.trim());
   const requiredSignals = document.stations.flatMap((station) =>
     station.signals
       .filter((signal) => signal.required)
@@ -2045,8 +2243,8 @@ function SummaryStep({
   const liveResult = profile?.liveValidationResult;
   return (
     <Step
-      title="4. Profil speichern"
-      intro="Prüfen Sie Name und Umfang. Beim Speichern wird ein neuer Profilentwurf angelegt."
+      title="4. Prüfen & aktivieren"
+      intro="Der Entwurf kann jederzeit gespeichert werden. Erst die Aktivierung verlangt eine vollständig eingerichtete und geprüfte Anlage."
     >
       <div className="profile-summary">
         <article>
@@ -2058,11 +2256,7 @@ function SummaryStep({
           <span>Umfang</span>
           <strong>{document.stations.length} Stationen</strong>
           <small>
-            {document.stations.reduce(
-              (sum, station) => sum + station.signals.length,
-              0,
-            )}{' '}
-            Signale
+            {setup.endpointCount} mit Endpoint · {setup.mappedCount} mit Daten
           </small>
         </article>
         <article>
@@ -2111,18 +2305,14 @@ function SummaryStep({
           {document.stations
             .map(
               (station) =>
-                `${station.stationId} (R${station.resourceId}${station.parentResourceId ? ` unter R${station.parentResourceId}` : ''})`,
+                `${station.stationId || station.displayName} (${station.resourceId ? `R${station.resourceId}` : 'Ressource offen'}${station.parentResourceId ? ` unter R${station.parentResourceId}` : ''})`,
             )
             .join(', ') || 'fehlt'}
         </p>
         <p>
-          <strong>Standardroute:</strong>{' '}
-          {route
-            .map(
-              (station) =>
-                `${station.routing.sequence}. ${station.routing.operation}`,
-            )
-            .join(' → ') || 'keine'}
+          <strong>Produktrouten:</strong>{' '}
+          werden nach der Stationsfreigabe separat unter „Routenplanung“
+          angelegt.
         </p>
         <p>
           <strong>Pflichtsignale:</strong>{' '}
@@ -2143,7 +2333,7 @@ function SummaryStep({
       </details>
       {localErrors.length > 0 && (
         <div className="profile-error">
-          <strong>Im Entwurf erkannt:</strong>
+          <strong>Vor der Aktivierung zu klären:</strong>
           <ul>
             {localErrors.map((error) => (
               <li key={error}>{error}</li>
@@ -2160,7 +2350,7 @@ function SummaryStep({
               disabled={loading}
               onClick={onSave}
             >
-              Profil speichern
+              Entwurf speichern
             </button>
           </div>
           <details className="profile-advanced">
@@ -2197,9 +2387,14 @@ function SummaryStep({
               ) : (
                 <button
                   type="button"
-                  disabled={loading || !profile}
+                  disabled={loading || !profile || !activationReady}
                   className="profile-danger"
                   onClick={onActivate}
+                  title={
+                    activationReady
+                      ? undefined
+                      : 'Alle Stationen benötigen Endpoint und Ressourcen-ID; außerdem muss mindestens ein Namespace erkannt sein.'
+                  }
                 >
                   Aktivieren…
                 </button>

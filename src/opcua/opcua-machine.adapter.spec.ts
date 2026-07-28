@@ -593,6 +593,36 @@ describe('OpcUaMachineAdapter profile contract', () => {
     ]);
   });
 
+  it('describes a product-routed station without a legacy route sequence', () => {
+    profileService.getProfile.mockReturnValue({
+      ...profile,
+      stations: [
+        {
+          stationId: 'press-cell',
+          resourceId: 30,
+          displayName: 'Press 01',
+          enabled: true,
+          capabilities: ['production', 'routing'],
+          signals: [],
+        },
+      ],
+    });
+
+    expect(adapter.getStations()).toEqual([
+      {
+        resourceId: 30,
+        stationId: 'press-cell',
+        displayName: 'Press 01',
+        enabled: true,
+        routeSequence: undefined,
+        operationNo: 30,
+        operation: 'Press 01',
+        capabilities: ['production', 'routing'],
+        availableCommands: [],
+      },
+    ]);
+  });
+
   it('rejects an enabled station without a valid resource id', () => {
     profileService.getProfile.mockReturnValue({
       ...profile,

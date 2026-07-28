@@ -8,15 +8,15 @@
 .route-card { border: 1px solid var(--wara-border); border-radius: 9px; padding: 16px 18px; background: var(--wara-surface); box-shadow: var(--wara-shadow); }
 .route-card > header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
 .route-card > header > div:first-child { display: grid; gap: 2px; }
-.route-card span, .route-dialog header span { color: var(--wara-accent); font-size: .62rem; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+.route-card span, .route-dialog header span { color: var(--ds-color-action-primary); font-size: .62rem; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
 .route-card h2 { margin: 0; font-size: .95rem; }
 .route-card small { color: var(--wara-text-muted); font-size: .64rem; }
 .route-card button, .route-dialog button { border: 1px solid var(--wara-border-strong); border-radius: 6px; padding: 7px 10px; background: var(--wara-surface); font-size: .7rem; font-weight: 700; }
-.route-delete, .route-action-delete { margin-left: 6px; color: var(--wara-error); }
+.route-delete, .route-action-delete { display: inline-grid; margin-left: 6px; place-items: center; color: var(--wara-error); }
 .route-card ol { display: flex; overflow-x: auto; margin: 16px 0 0; padding: 0; gap: 28px; list-style: none; }
 .route-card li { position: relative; display: flex; min-width: 165px; align-items: center; gap: 9px; }
 .route-card li:not(:last-child)::after { position: absolute; right: -22px; color: var(--wara-border-strong); content: "→"; }
-.route-card li b { display: grid; width: 27px; height: 27px; flex: 0 0 27px; place-items: center; border-radius: 50%; color: #fff; background: var(--wara-accent); font-size: .65rem; }
+.route-card li b { display: grid; width: 27px; height: 27px; flex: 0 0 27px; place-items: center; border-radius: 50%; color: #fff; background: var(--ds-color-action-primary); font-size: .65rem; }
 .route-card li div { display: flex; flex-direction: column; }
 .route-card li strong { font-size: .7rem; }
 .routes-empty { border: 1px dashed var(--wara-border-strong); border-radius: 8px; padding: 38px; color: var(--wara-text-muted); text-align: center; }
@@ -29,15 +29,19 @@
 .route-form-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
 .route-form-grid label { display: flex; flex-direction: column; gap: 5px; }
 .route-form-grid span { color: var(--wara-text-muted); font-size: .66rem; font-weight: 720; }
-.route-form-grid input, .route-form-grid select, .route-action-row input, .route-action-row select { min-height: 38px; border: 1px solid var(--wara-border-strong); border-radius: 6px; padding: 8px 10px; color: var(--wara-text); background: var(--wara-surface); font-size: .72rem; }
+.route-form-grid input, .route-form-grid select, .route-action-row select { min-height: 38px; border: 1px solid var(--wara-border-strong); border-radius: 6px; padding: 8px 10px; color: var(--wara-text); background: var(--wara-surface); font-size: .72rem; }
 .route-actions-heading { display: flex; align-items: end; justify-content: space-between; border-top: 1px solid var(--wara-border); padding-top: 16px; }
 .route-actions-heading > div:first-child { display: flex; flex-direction: column; }
 .route-actions-heading small { color: var(--wara-text-muted); font-size: .64rem; }
-.route-actions-heading button { width: 32px; height: 32px; margin-left: 6px; padding: 0; font-size: 1rem; }
+.route-actions-heading .route-add-step { display: inline-flex; width: auto; height: 34px; align-items: center; gap: 6px; margin-left: 12px; padding: 0 11px; white-space: nowrap; }
 .route-actions-list { display: grid; gap: 7px; }
 .route-actions-list > p { margin: 12px 0; color: var(--wara-text-muted); font-size: .72rem; text-align: center; }
-.route-action-row { display: grid; grid-template-columns: 30px minmax(160px, 1.3fr) minmax(145px, 1fr) minmax(145px, 1fr) 34px; align-items: center; gap: 8px; border: 1px solid var(--wara-border); border-radius: 7px; padding: 8px; background: var(--wara-surface-subtle); }
-.route-action-row > b { display: grid; width: 25px; height: 25px; place-items: center; border-radius: 50%; color: #fff; background: var(--wara-accent); font-size: .63rem; }
+.route-action-row { display: grid; grid-template-columns: 30px minmax(180px, 1fr) minmax(180px, 1fr) 34px; align-items: center; gap: 10px; border: 1px solid var(--wara-border); border-radius: 7px; padding: 8px; background: var(--wara-surface-subtle); }
+.route-action-row > b { display: grid; width: 25px; height: 25px; place-items: center; border-radius: 50%; color: #fff; background: var(--ds-color-action-primary); font-size: .63rem; }
+.route-action-row > label, .route-action-operation { display: flex; min-width: 0; flex-direction: column; gap: 4px; }
+.route-action-row > label > span, .route-action-operation > span { color: var(--wara-text-muted); font-size: .6rem; font-weight: 720; }
+.route-action-operation strong { overflow: hidden; font-size: .72rem; text-overflow: ellipsis; white-space: nowrap; }
+.route-action-operation small { color: var(--wara-text-muted); font-size: .62rem; }
 .route-action-delete { width: 30px; height: 30px; padding: 0 !important; border-radius: 50% !important; }
 .route-dialog footer { display: flex; justify-content: flex-end; gap: 8px; border-top: 1px solid var(--wara-border); padding-top: 16px; }
-@media (max-width: 760px) { .routes-header { align-items: stretch; flex-direction: column; } .route-form-grid { grid-template-columns: 1fr; } .route-action-row { grid-template-columns: 28px 1fr 32px; } .route-action-row select { grid-column: 2; } .route-action-delete { grid-column: 3; grid-row: 1; } }
+@media (max-width: 760px) { .routes-header { align-items: stretch; flex-direction: column; } .route-form-grid { grid-template-columns: 1fr; } .route-actions-heading { align-items: stretch; flex-direction: column; gap: 10px; } .route-actions-heading .route-add-step { align-self: flex-start; margin-left: 0; } .route-action-row { grid-template-columns: 28px 1fr 32px; } .route-action-row > label, .route-action-operation { grid-column: 2; } .route-action-delete { grid-column: 3; grid-row: 1; } }

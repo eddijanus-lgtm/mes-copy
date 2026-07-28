@@ -4,6 +4,7 @@ import { getRepositoryToken } from '@nestjs/typeorm';
 import { Test, TestingModule } from '@nestjs/testing';
 import * as bcrypt from 'bcryptjs';
 import { UserRoleEnum, UserEntity } from '../users/user.entity';
+import { UsersService } from '../users/users.service';
 import { AuthService } from './auth.service';
 
 jest.mock('bcryptjs', () => ({
@@ -21,6 +22,10 @@ describe('AuthService', () => {
   const jwtService = {
     signAsync: jest.fn(),
   };
+  const usersService = {
+    updateLastLogon: jest.fn(),
+    syncRegister: jest.fn(),
+  };
 
   beforeEach(async () => {
     jest.clearAllMocks();
@@ -30,6 +35,7 @@ describe('AuthService', () => {
         AuthService,
         { provide: getRepositoryToken(UserEntity), useValue: userRepository },
         { provide: JwtService, useValue: jwtService },
+        { provide: UsersService, useValue: usersService },
       ],
     }).compile();
 
@@ -56,6 +62,7 @@ describe('AuthService', () => {
     jwtService.signAsync.mockResolvedValue('signed-token');
 
     await expect(service.login({ id: 'u1', username: 'admin', role: UserRoleEnum.ADMIN })).resolves.toEqual({ access_token: 'signed-token' });
+    expect(usersService.updateLastLogon).toHaveBeenCalledWith('u1');
     expect(jwtService.signAsync).toHaveBeenCalledWith({ sub: 'u1', username: 'admin', role: UserRoleEnum.ADMIN });
   });
 
@@ -72,5 +79,9 @@ describe('AuthService', () => {
     await expect(service.register({ username: 'operator', password: 'secret', role: UserRoleEnum.OPERATOR })).resolves.toEqual({ message: 'User created successfully' });
     expect(userRepository.create).toHaveBeenCalledWith({ username: 'operator', password: 'hashed-secret', role: UserRoleEnum.OPERATOR });
     expect(userRepository.save).toHaveBeenCalledWith({ username: 'operator', password: 'hashed-secret', role: UserRoleEnum.OPERATOR });
+    expect(usersService.syncRegister).toHaveBeenCalledWith(
+      { username: 'operator', password: 'hashed-secret', role: UserRoleEnum.OPERATOR },
+      'secret',
+    );
   });
 });

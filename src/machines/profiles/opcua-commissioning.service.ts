@@ -9,6 +9,7 @@ import { readFileSync } from 'node:fs';
 import type {
   MachineConnectionProfile,
   MachineProfile,
+  MachineSignalRole,
   MachineSignalProfile,
   MachineStationProfile,
 } from './machine-profile.types';
@@ -310,7 +311,12 @@ export class OpcUaCommissioningService {
           ]);
           const dataType = this.dataType(values[0]);
           const actualAccess = this.access(values[1]);
-          if (!dataType || actualAccess === 'none' || actualAccess === 'write') {
+          const direction = this.signalDirection(suggestion.role);
+          const usable =
+            direction === 'mesToMachine'
+              ? actualAccess === 'write' || actualAccess === 'readWrite'
+              : actualAccess === 'read' || actualAccess === 'readWrite';
+          if (!dataType || !usable) {
             continue;
           }
           signals.push({
@@ -323,8 +329,8 @@ export class OpcUaCommissioningService {
             displayName,
             path,
             dataType,
-            access: 'read',
-            direction: 'machineToMes',
+            access: actualAccess,
+            direction,
             required: false,
             event: { trigger: 'change' },
           });
@@ -427,9 +433,16 @@ export class OpcUaCommissioningService {
     return nodeId.replace(/^ns=\d+;/, '');
   }
 
-  private signalSuggestion(name: string) {
+  private signalSuggestion(
+    name: string,
+  ):
+    | { key: string; role: MachineSignalRole; confidence: 'high' }
+    | undefined {
     const normalized = name.toLowerCase().replace(/[^a-z0-9]/g, '');
-    const exact: Record<string, { key: string; role: string }> = {
+    const exact: Record<
+      string,
+      { key: string; role: MachineSignalRole }
+    > = {
       workrequest: { key: 'workRequest', role: 'workRequest' },
       requestbusy: { key: 'requestBusy', role: 'requestBusy' },
       requestaccepted: { key: 'requestAccepted', role: 'requestAccepted' },
@@ -473,6 +486,28 @@ export class OpcUaCommissioningService {
       };
     }
     return undefined;
+  }
+
+  private signalDirection(
+    role: MachineSignalRole,
+  ): 'machineToMes' | 'mesToMachine' {
+    const mesToMachineRoles = new Set<MachineSignalRole>([
+      'requestBusy',
+      'requestAccepted',
+      'requestRejected',
+      'orderId',
+      'partNumber',
+      'operationId',
+      'stepNumber',
+      'nextStationId',
+      'processResult',
+      'routingParameter',
+      'controlStart',
+      'controlStop',
+      'controlReset',
+      'controlPause',
+    ]);
+    return mesToMachineRoles.has(role) ? 'mesToMachine' : 'machineToMes';
   }
 
   private async checkSignal(

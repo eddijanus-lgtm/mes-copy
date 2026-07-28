@@ -1,4 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
+import { PlusIcon } from "@phosphor-icons/react/Plus";
+import { TrashIcon } from "@phosphor-icons/react/Trash";
+import { XIcon } from "@phosphor-icons/react/X";
 import { api } from "../api/client.js";
 import PageInfo from "../components/PageInfo.jsx";
 import Button from "../design-system/components/Button.jsx";
@@ -84,7 +87,7 @@ export default function RoutesPage() {
           step_no: current.route_steps.length + 1,
           resource_id: station.resourceId,
           operation_no: operationFor(station).operationNo,
-          operation: "Neue Stationsaktion",
+          operation: operationFor(station).name,
           parameters: {},
         },
       ]),
@@ -111,7 +114,11 @@ export default function RoutesPage() {
     const station = stations.find((candidate) => candidate.resourceId === Number(resourceId));
     if (!station) return;
     const action = operationFor(station);
-    updateStep(index, { resource_id: station.resourceId, operation_no: action.operationNo });
+    updateStep(index, {
+      resource_id: station.resourceId,
+      operation_no: action.operationNo,
+      operation: action.name,
+    });
   }
 
   async function save(event) {
@@ -159,7 +166,7 @@ export default function RoutesPage() {
         <PageHeader
           className="routes-header"
           title="Routenplanung"
-          description="Wiederverwendbare Maschinenrouten in ihrer tatsächlichen Ausführungsreihenfolge."
+          description="Produktbezogene Arbeitspläne aus den freigegebenen Stationen einer Anlage."
           titleAccessory={<PageInfo page="routes" />}
           actions={canEdit ? <Button onClick={startNew}>Neue Route anlegen</Button> : null}
         />
@@ -169,7 +176,7 @@ export default function RoutesPage() {
             {routes.map((route) => {
               const profile = profiles.find((item) => item.document?.machineId === route.profile_machine_id);
               return <article key={route.id} className="route-card">
-                <header><div><span>{route.part_no}</span><h2>{route.name}</h2><small>{profile?.document?.displayName || route.profile_machine_id || "Keine Maschine"}</small></div><div>{canEdit && <button onClick={() => editRoute(route)}>Bearbeiten</button>}{canDelete && <button className="route-delete" onClick={() => deleteRoute(route)}>×</button>}</div></header>
+                <header><div><span>{route.part_no}</span><h2>{route.name}</h2><small>{profile?.document?.displayName || route.profile_machine_id || "Keine Anlage"}</small></div><div>{canEdit && <button onClick={() => editRoute(route)}>Bearbeiten</button>}{canDelete && <button className="route-delete" aria-label={`Route ${route.name} löschen`} title="Route löschen" onClick={() => deleteRoute(route)}><TrashIcon size={15} aria-hidden="true" /></button>}</div></header>
                 <ol>{(route.route_steps || []).map((step, index) => <li key={step.id || `${step.step_no}-${index}`}><b>{index + 1}</b><div><strong>{step.operation}</strong><small>{stationName(profile, step.resource_id)} · R{step.resource_id}</small></div></li>)}</ol>
               </article>;
             })}
@@ -177,23 +184,23 @@ export default function RoutesPage() {
         ) : <p className="routes-empty">Noch keine Routen angelegt.</p>}
       </main>
 
-      {open && <div className="route-dialog-backdrop" onMouseDown={() => !saving && setOpen(false)}><section className="route-dialog" role="dialog" aria-modal="true" onMouseDown={(event) => event.stopPropagation()}>
-        <header><div><span>Routenplanung</span><h2>{form.id ? "Route bearbeiten" : "Neue Route anlegen"}</h2></div><button type="button" onClick={() => setOpen(false)}>×</button></header>
+      {open && <div className="route-dialog-backdrop" onMouseDown={() => !saving && setOpen(false)}><section className="route-dialog" role="dialog" aria-modal="true" aria-labelledby="route-dialog-title" onMouseDown={(event) => event.stopPropagation()}>
+        <header><div><span>Routenplanung</span><h2 id="route-dialog-title">{form.id ? "Route bearbeiten" : "Neue Route anlegen"}</h2></div><button type="button" aria-label="Routenplanung schließen" title="Schließen" onClick={() => setOpen(false)}><XIcon size={16} aria-hidden="true" /></button></header>
         <form onSubmit={save}>
           {error && <p className="routes-error">{error}</p>}
           <div className="route-form-grid">
             <RouteField label="Routenname" value={form.name} onChange={(value) => setForm((current) => ({ ...current, name: value }))} required />
             <RouteField label="Routen-ID" value={form.part_no} onChange={(value) => setForm((current) => ({ ...current, part_no: value }))} required />
-            <label><span>Maschine</span><select value={form.profile_machine_id} onChange={(event) => changeMachine(event.target.value)} required><option value="">Maschine auswählen</option>{profiles.map((profile) => <option key={profile.profileId} value={profile.document?.machineId}>{profile.document?.displayName || profile.document?.machineId}</option>)}</select></label>
+            <label><span>Anlage</span><select value={form.profile_machine_id} onChange={(event) => changeMachine(event.target.value)} required><option value="">Anlage auswählen</option>{profiles.map((profile) => <option key={profile.profileId} value={profile.document?.machineId}>{profile.document?.displayName || profile.document?.machineId}</option>)}</select></label>
           </div>
-          <div className="route-actions-heading"><div><strong>Stationsaktionen</strong><small>Die Reihenfolge wird von oben nach unten ausgeführt.</small></div><div><button type="button" onClick={addStep} disabled={!stations.length}>+</button><button type="button" onClick={() => removeStep(form.route_steps.length - 1)} disabled={!form.route_steps.length}>−</button></div></div>
+          <div className="route-actions-heading"><div><strong>Arbeitsschritte</strong><small>Reihenfolge und Station werden hier festgelegt. Die ausführbare Aktion kommt aus der Stationskonfiguration.</small></div><button type="button" className="route-add-step" onClick={addStep} disabled={!stations.length}><PlusIcon size={15} aria-hidden="true" /> Schritt hinzufügen</button></div>
           <div className="route-actions-list">
             {form.route_steps.map((step, index) => {
               const station = stations.find((candidate) => candidate.resourceId === step.resource_id);
               const action = station ? operationFor(station) : null;
-              return <div className="route-action-row" key={`${index}-${step.resource_id}`}><b>{index + 1}</b><input aria-label={`Name von Aktion ${index + 1}`} value={step.operation} onChange={(event) => updateStep(index, { operation: event.target.value })} /><select aria-label={`Station von Aktion ${index + 1}`} value={step.resource_id} onChange={(event) => selectStation(index, event.target.value)}>{stations.map((item) => <option key={item.stationId} value={item.resourceId}>{item.displayName}</option>)}</select><select aria-label={`Aktionstyp von Aktion ${index + 1}`} value={step.operation_no} onChange={(event) => updateStep(index, { operation_no: Number(event.target.value) })}>{action && <option value={action.operationNo}>{action.name}</option>}</select><button type="button" className="route-action-delete" onClick={() => removeStep(index)}>×</button></div>;
+              return <div className="route-action-row" key={`${index}-${step.resource_id}`}><b>{index + 1}</b><label><span>Station</span><select aria-label={`Station für Schritt ${index + 1}`} value={step.resource_id} onChange={(event) => selectStation(index, event.target.value)}>{stations.map((item) => <option key={item.stationId} value={item.resourceId}>{item.displayName}</option>)}</select></label><div className="route-action-operation"><span>Stationsaktion</span><strong>{action?.name || step.operation}</strong><small>Operation {action?.operationNo || step.operation_no}</small></div><button type="button" className="route-action-delete" aria-label={`Schritt ${index + 1} entfernen`} title="Schritt entfernen" onClick={() => removeStep(index)}><TrashIcon size={15} aria-hidden="true" /></button></div>;
             })}
-            {!form.route_steps.length && <p>Mit + die erste Stationsaktion hinzufügen.</p>}
+            {!form.route_steps.length && <p>{stations.length ? "Fügen Sie den ersten Arbeitsschritt hinzu." : "Aktivieren Sie zuerst mindestens eine Station in der gewählten Anlage."}</p>}
           </div>
           <footer><button type="button" onClick={() => setOpen(false)}>Abbrechen</button><button type="submit" className="routes-primary" disabled={saving || !form.profile_machine_id}>{saving ? "Speichert…" : "Route speichern"}</button></footer>
         </form>
@@ -211,7 +218,10 @@ function normalizeSteps(steps) {
 }
 
 function operationFor(station) {
-  return { operationNo: station.routing?.operationNo || station.resourceId, name: station.routing?.operation || "Standardaktion" };
+  return {
+    operationNo: station.routing?.operationNo || station.resourceId,
+    name: station.routing?.operation?.trim() || station.displayName?.trim() || "Standardaktion",
+  };
 }
 
 function stationName(profile, resourceId) {
