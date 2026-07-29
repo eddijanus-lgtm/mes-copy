@@ -140,14 +140,6 @@ function resultState(result) {
   return 'Ergebnis vorhanden';
 }
 
-function opcUaEndpointHost(endpointUrl = '') {
-  return endpointUrl
-    .trim()
-    .match(/^opc\.tcp:\/\/(\[[^\]]+\]|[^/:]+)/i)?.[1]
-    ?.replace(/^\[|\]$/g, '')
-    .toLowerCase();
-}
-
 function technicalId(value) {
   return String(value || '')
     .toLowerCase()
@@ -155,6 +147,10 @@ function technicalId(value) {
     .replace(/[\u0300-\u036f]/g, '')
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '');
+}
+
+function normalizedOpcUaEndpoint(endpointUrl = '') {
+  return endpointUrl.trim().replace(/\/$/, '').toLowerCase();
 }
 
 function uniqueStationId(displayName, stations, editedIndex) {
@@ -178,6 +174,7 @@ export default function MachineProfileWizard({
   onProfilesChanged,
   editProfileId,
   editStationResourceId,
+  addStationOnOpen = false,
 }) {
   const [profiles, setProfiles] = useState([]);
   const [profile, setProfile] = useState(null);
@@ -236,7 +233,16 @@ export default function MachineProfileWizard({
             setProfile(match);
             setDocument(nextDocument);
             setPersistedDocument(JSON.stringify(nextDocument));
-            if (editStationResourceId) {
+            if (addStationOnOpen) {
+              const usedResourceIds = new Set(
+                nextDocument.stations.map((station) => Number(station.resourceId)),
+              );
+              let resourceId = Number(nextSuggestion?.resourceId) || 1;
+              while (usedResourceIds.has(resourceId)) resourceId += 1;
+              setStationEditor(newStation(resourceId));
+              setStationEditorIndex(-1);
+              setStep(1);
+            } else if (editStationResourceId) {
               const index = nextDocument.stations.findIndex(
                 (s) => String(s.resourceId) === String(editStationResourceId),
               );
@@ -255,7 +261,7 @@ export default function MachineProfileWizard({
       })
       .catch((requestError) => setError(requestError.message))
       .finally(() => setLoading(false));
-  }, [isOpen, editProfileId, editStationResourceId]);
+  }, [isOpen, editProfileId, editStationResourceId, addStationOnOpen]);
 
   if (!isOpen) return null;
 
@@ -445,15 +451,17 @@ export default function MachineProfileWizard({
       setError('Bitte einen Namen für die Station angeben.');
       return;
     }
-    const host = opcUaEndpointHost(stationEditor.connection.endpointUrl);
+    const endpoint = normalizedOpcUaEndpoint(
+      stationEditor.connection.endpointUrl,
+    );
     const duplicate = document.stations.find(
       (station, index) =>
         index !== stationEditorIndex &&
-        opcUaEndpointHost(station.connection?.endpointUrl) === host,
+        normalizedOpcUaEndpoint(station.connection?.endpointUrl) === endpoint,
     );
-    if (host && duplicate) {
+    if (endpoint && duplicate) {
       setError(
-        `Die OPC-UA-IP ${host} wird bereits von Station ${duplicate.displayName || duplicate.stationId} verwendet.`,
+        `Der OPC-UA-Endpoint ${stationEditor.connection.endpointUrl.trim()} wird bereits von Station ${duplicate.displayName || duplicate.stationId} verwendet. Jede Station benötigt einen eigenen Endpoint.`,
       );
       return;
     }

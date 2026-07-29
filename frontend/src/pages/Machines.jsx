@@ -27,6 +27,7 @@ export default function MachinesPage() {
   const [showProfileWizard, setShowProfileWizard] = useState(false);
   const [editProfileId, setEditProfileId] = useState(null);
   const [editStationResourceId, setEditStationResourceId] = useState(null);
+  const [addStationOnOpen, setAddStationOnOpen] = useState(false);
   const [deleteCandidate, setDeleteCandidate] = useState(null);
   const [deleting, setDeleting] = useState(false);
   const [form, setForm] = useState({ id: null, name: "", type: "CNC", status: "offline", location: "" });
@@ -94,6 +95,7 @@ export default function MachinesPage() {
   }
 
   function handleEdit(m) {
+    setAddStationOnOpen(false);
     if (m._nodeKind === "profile-root" || m._nodeKind === "profile-station") {
       if (inlineEditor?.nodeId === m.id) {
         setInlineEditor(null);
@@ -126,6 +128,13 @@ export default function MachinesPage() {
     setForm({ id: m.id, name: m.name || m.machineName || "", type: m.type || "CNC", status: m.status || "offline", location: m.location || "" });
   }
 
+  function handleAddStation(machine) {
+    setEditProfileId(machine._profileId);
+    setEditStationResourceId(null);
+    setAddStationOnOpen(true);
+    setShowProfileWizard(true);
+  }
+
   function saveInlineEditor() {
     if (!inlineEditor) return;
     setSavingInline(true);
@@ -148,6 +157,7 @@ export default function MachinesPage() {
     );
     setEditProfileId(inlineEditor.profileId);
     setEditStationResourceId(station ? String(station.resourceId) : null);
+    setAddStationOnOpen(false);
     setInlineEditor(null);
     setShowProfileWizard(true);
   }
@@ -342,6 +352,11 @@ export default function MachinesPage() {
                         {m._nodeKind === "profile-station" && <small className="machine-tree-type-detail">{formatJobInterface(m.job_interface)}</small>}
                       </td>
                       {canManage && <td className="px-5 py-3.5 text-right whitespace-nowrap">
+                        {canConfigureProfiles && m._nodeKind === "profile-root" && (
+                          <button onClick={() => handleAddStation(m)} className="machine-tree-edit">
+                            + Station
+                          </button>
+                        )}
                         <button onClick={() => handleEdit(m)} className="machine-tree-edit">
                           {t("common.edit")}
                         </button>
@@ -506,7 +521,8 @@ export default function MachinesPage() {
           canEdit={canConfigureProfiles}
           editProfileId={editProfileId}
           editStationResourceId={editStationResourceId}
-          onClose={() => { setShowProfileWizard(false); setEditProfileId(null); setEditStationResourceId(null); }}
+          addStationOnOpen={addStationOnOpen}
+          onClose={() => { setShowProfileWizard(false); setEditProfileId(null); setEditStationResourceId(null); setAddStationOnOpen(false); }}
           onProfilesChanged={refreshList}
         />
 

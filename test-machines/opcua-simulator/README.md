@@ -55,3 +55,41 @@ Bestandssnapshot testen.
 Für den Wechsel auf eine reale Maschine wird nur `MACHINE_PROFILE_PATH` auf das
 Profil der realen Anlage gesetzt. MES-Fachlogik und Adapter-Provider bleiben
 unverändert.
+
+## Virtuelle SPS fuer ein echtes MES
+
+Das Docker-Deployment bildet den bei der echten SPS gelesenen Siemens-Vertrag
+einschließlich Namespace-Reihenfolge, `dbProcessData`-Node-IDs, Datentypen und
+Schreibrechten nach. Docker veröffentlicht OPC UA auf Port `4840` des PCs. Ein
+MES auf demselben Rechner verwendet dafür `127.0.0.1`; die physische SPS kann
+unter `192.168.0.1` verbunden bleiben. Macvlan, eine weitere IP-Adresse und
+`sudo` werden nicht benötigt.
+
+```bash
+./tools/virtual-plc.sh start
+```
+
+Das echte MES verbindet sich anschließend ohne Simulator-Sonderweg mit:
+
+```text
+opc.tcp://127.0.0.1:4840
+Security: None
+Authentication: Anonymous
+```
+
+Falls die Adresse oder der externe Port des PCs abweicht, können sie vor dem
+Start überschrieben werden:
+
+```bash
+PLC_ADVERTISED_HOST=192.168.0.20 \
+PLC_OPCUA_PORT=4840 \
+./tools/virtual-plc.sh start
+```
+
+Status, Logs und Beenden:
+
+```bash
+./tools/virtual-plc.sh status
+./tools/virtual-plc.sh logs
+./tools/virtual-plc.sh stop
+```

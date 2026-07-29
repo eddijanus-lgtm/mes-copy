@@ -1,0 +1,22 @@
+services:
+  virtual-plc:
+    build:
+      context: .
+      dockerfile: test-machines/opcua-simulator/Dockerfile
+    container_name: wara-virtual-plc
+    restart: unless-stopped
+    ports:
+      - "${PLC_BIND_ADDRESS:-0.0.0.0}:${PLC_OPCUA_PORT:-4840}:4840"
+    environment:
+      OPC_UA_TEST_SERVER_PORT: 4840
+      OPC_UA_SERVER_HOST: ${PLC_ADVERTISED_HOST:-127.0.0.1}
+      PLC_AUTO_COMPLETE_MS: ${PLC_AUTO_COMPLETE_MS:-5000}
+      MES_API_URL: ${PLC_MES_API_URL:-http://192.168.0.254:3000/api/v1}
+      MES_API_USER: ${PLC_MES_API_USER:-admin}
+      MES_API_PASS: ${PLC_MES_API_PASS:-admin123!}
+      DEMO_CARRIER_IDS: ${PLC_DEMO_CARRIER_IDS:-128,129,130,131}
+      DEMO_INVENTORY_CAPACITY: ${PLC_INVENTORY_CAPACITY:-4}
+      DEMO_INVENTORY_CARRIER_IDS: ${PLC_INVENTORY_CARRIER_IDS:-128,129,130,131}
+      SIMULATOR_SCRAP_RATE_S01: ${PLC_SCRAP_RATE_S01:-0}
+      SIMULATOR_SCRAP_RATE_S02: ${PLC_SCRAP_RATE_S02:-0}
+      SIMULATOR_SCRAP_RATE_Q01: ${PLC_SCRAP_RATE_Q01:-0}
