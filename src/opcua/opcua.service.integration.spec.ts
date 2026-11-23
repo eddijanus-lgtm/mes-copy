@@ -55,4 +55,13 @@ describe('OpcUaService integration contract', () => {
 
     expect(write).toHaveBeenCalledWith(expect.arrayContaining([expect.objectContaining({ nodeId: 'ns=1;s=Station1.stMES.Control.xCmdStart' })]));
   });
+
+  it('uses a configured station endpoint from the database', async () => {
+    const machines = { findOne: jest.fn(async () => ({ opcua_endpoint_url: 'opc.tcp://plc-2:4841/UA/WaraMesTest' })) };
+    const configured = new OpcUaService(config as unknown as ConfigService, machines as any);
+    (configured as any).address = 'opc.tcp://localhost:4840/UA/WaraMesTest';
+
+    await expect((configured as any).addressFor(2)).resolves.toBe('opc.tcp://plc-2:4841/UA/WaraMesTest');
+    expect(machines.findOne).toHaveBeenCalledWith({ where: { resource_id: 2, opcua_enabled: true } });
+  });
 });

@@ -12,9 +12,10 @@ import { ConnectionRecoveryService } from './connection-recovery.service';
 import { OrderEntity } from '../orders/order.entity';
 import { OrderRouteStepEntity } from '../orders/order-route-step.entity';
 import { CarrierEntity } from '../carriers/carrier.entity';
+import { MachineEntity } from '../machines/machine.entity';
 
 @Module({
-  imports: [ConfigModule, OrdersModule, AlarmsModule, TypeOrmModule.forFeature([StMesHandshakeEntity, OrderEntity, OrderRouteStepEntity, CarrierEntity])],
+  imports: [ConfigModule, OrdersModule, AlarmsModule, TypeOrmModule.forFeature([StMesHandshakeEntity, OrderEntity, OrderRouteStepEntity, CarrierEntity, MachineEntity])],
   providers: [OpcUaService, MqttGatewayService, StMesHandshakeService, WebshopOrdersService, ConnectionRecoveryService],
   exports: [OpcUaService, MqttGatewayService, StMesHandshakeService, WebshopOrdersService, ConnectionRecoveryService],
 })

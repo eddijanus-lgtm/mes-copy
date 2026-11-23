@@ -1,5 +1,8 @@
 import { BadGatewayException, ForbiddenException, Injectable, Logger, OnModuleDestroy, OnModuleInit, ServiceUnavailableException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { MachineEntity } from '../machines/machine.entity';
 import { ShopfloorTelemetryEvent } from './shopfloor-telemetry';
 
 const nodeOpcua = require('node-opcua');
@@ -19,6 +22,8 @@ export class OpcUaService implements OnModuleInit, OnModuleDestroy {
   private subscription: any;
   private monitoredItems: any[] = [];
   private address = '';
+  private readonly stationErrors = new Map<number, string>();
+  private readonly stationAddresses = new Map<number, string>();
   private readonly telemetryCallbacks = new Set<(event: ShopfloorTelemetryEvent) => void>();
   private readonly stMesCallbacks = new Set<(resourceId: number, active: boolean) => void>();
   private readonly processCompletedCallbacks = new Set<(resourceId: number, timestamp: Date) => void>();
@@ -26,7 +31,7 @@ export class OpcUaService implements OnModuleInit, OnModuleDestroy {
   private readonly disconnectedCallbacks = new Set<(reason: string) => void>();
   private readonly lastStMesStartState = new Map<number, boolean>();
 
-  constructor(private readonly configService: ConfigService) {}
+  constructor(private readonly configService: ConfigService, @InjectRepository(MachineEntity) private readonly machinesRepo?: Repository<MachineEntity>) {}
 
   async onModuleInit() {
     this.address = this.configService.get('OPC_UA_SERVER_ADDRESS', 'opc.tcp://localhost:4840/UA/WaraMesTest');
@@ -34,7 +39,7 @@ export class OpcUaService implements OnModuleInit, OnModuleDestroy {
   }
 
   private async connect() {
-    if (this.connecting || this.connected || this.shuttingDown) return;
+    if (this.connecting || this.shuttingDown) return;
     this.connecting = true;
 
     try {
@@ -44,18 +49,28 @@ export class OpcUaService implements OnModuleInit, OnModuleDestroy {
           connectionStrategy: { initialDelay: 500, maxDelay: 5000, maxRetry: 0 },
         });
         client.on('connection_lost', () => this.handleDisconnect(`station ${resourceId} connection lost`));
-        const address = this.configService.get(`OPC_UA_STATION_${resourceId}_ADDRESS`,
-          this.address.replace(/:(\d+)(\/|$)/, (_, port, suffix) => `:${Number(port) + resourceId - 1}${suffix}`));
-        await client.connect(address);
+        const address = await this.addressFor(resourceId);
+        this.stationAddresses.set(resourceId, address);
+        try {
+          await client.connect(address);
+        } catch (error) {
+          this.stationErrors.set(resourceId, (error as Error).message);
+          try { await client.disconnect(); } catch { /* connection never opened */ }
+          continue;
+        }
         const session = await client.createSession();
+        this.stationErrors.delete(resourceId);
         this.stationConnections.set(resourceId, { client, session });
       }
-      this.client = this.stationConnections.get(1)?.client;
-      this.session = this.stationConnections.get(1)?.session;
-      this.connected = true;
+      this.client = [...this.stationConnections.values()][0]?.client;
+      this.session = [...this.stationConnections.values()][0]?.session;
+      this.connected = this.stationConnections.size > 0;
       this.logger.log('Connected to OPC UA server at ' + this.address);
-      await this.startStMesSubscriptions();
-      this.startPolling();
+      if (this.connected) {
+        await this.startStMesSubscriptions();
+        this.startPolling();
+      }
+      if (this.stationConnections.size < this.resourceIds().length) this.scheduleReconnect();
       for (const cb of this.connectedCallbacks) try { cb(); } catch (e) { this.logger.error('connected callback failed', e); }
     } catch (error) {
       this.connected = false;
@@ -79,7 +94,7 @@ export class OpcUaService implements OnModuleInit, OnModuleDestroy {
     if (!allowedPrefixes.some((prefix) => nodeId.startsWith(prefix))) {
       throw new ForbiddenException('OPC UA node is not allowed');
     }
-    if (!this.session || !this.connected) throw new ServiceUnavailableException('OPC UA server is not connected');
+    if (!this.connected) throw new ServiceUnavailableException('OPC UA server is not connected');
     try {
       const dataValue = await this.sessionFor(nodeId).readVariableValue(nodeOpcua.resolveNodeId(nodeId));
       return dataValue?.value?.value;
@@ -89,7 +104,7 @@ export class OpcUaService implements OnModuleInit, OnModuleDestroy {
   }
 
   async writeNodes(nodes: Array<{ nodeId: string; dataType: string; value: unknown }>): Promise<void> {
-    if (!this.session || !this.connected) throw new ServiceUnavailableException('OPC UA server is not connected');
+    if (!this.connected) throw new ServiceUnavailableException('OPC UA server is not connected');
     const allowedPrefixes = this.configService.get('OPC_UA_ALLOWED_NODE_PREFIXES', 'ns=1;s=Station').split(',');
     if (nodes.some((node) => !allowedPrefixes.some((prefix) => node.nodeId.startsWith(prefix)))) {
       throw new ForbiddenException('OPC UA node is not allowed');
@@ -117,12 +132,51 @@ export class OpcUaService implements OnModuleInit, OnModuleDestroy {
     return session;
   }
 
+  private async addressFor(resourceId: number): Promise<string> {
+    const machine = await this.machinesRepo?.findOne({ where: { resource_id: resourceId, opcua_enabled: true } });
+    if (machine?.opcua_endpoint_url) return machine.opcua_endpoint_url;
+    return this.configService.get(`OPC_UA_STATION_${resourceId}_ADDRESS`,
+      this.address.replace(/:(\d+)(\/|$)/, (_, port, suffix) => `:${Number(port) + resourceId - 1}${suffix}`));
+  }
+
+  async reconnect(): Promise<void> {
+    if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
+    this.reconnectTimer = undefined;
+    if (this.pollingTimer) clearInterval(this.pollingTimer);
+    await this.closeConnection();
+    this.connected = false;
+    await this.connect();
+  }
+
+  async testStation(resourceId: number): Promise<{ connected: boolean; endpoint: string; resourceId: number; message: string }> {
+    if (!this.resourceIds().includes(resourceId)) throw new ForbiddenException('Unknown station');
+    const endpoint = await this.addressFor(resourceId);
+    const client = nodeOpcua.OPCUAClient.create({ endpointMustExist: false, connectionStrategy: { maxRetry: 0 } });
+    try {
+      await client.connect(endpoint);
+      const session = await client.createSession();
+      const nodeId = `ns=1;s=Station${resourceId}.stMES.Query.uiResourceId`;
+      const value = await session.readVariableValue(nodeOpcua.resolveNodeId(nodeId));
+      await session.close();
+      if (Number(value?.value?.value) !== resourceId) throw new Error('Stations-ID im OPC-UA-Protokoll stimmt nicht überein');
+      return { connected: true, endpoint, resourceId, message: 'Verbindung und Stations-ID geprüft' };
+    } catch (error) {
+      return { connected: false, endpoint, resourceId, message: (error as Error).message };
+    } finally {
+      try { await client.disconnect(); } catch { /* connection failed */ }
+    }
+  }
+
   isConnected(): boolean {
     return this.connected;
   }
 
   async getServerStatus(): Promise<any> {
-    return { connected: this.connected, endpoint: this.address };
+    return { connected: this.connected, stations: this.resourceIds().map((resourceId) => ({
+      resourceId, endpoint: this.stationAddresses.get(resourceId),
+      connected: this.stationConnections.has(resourceId) && this.connected,
+      error: this.stationErrors.get(resourceId) || null,
+    })) };
   }
 
   onTelemetry(callback: (event: ShopfloorTelemetryEvent) => void): () => void {
@@ -165,6 +219,7 @@ export class OpcUaService implements OnModuleInit, OnModuleDestroy {
     this.polling = true;
     try {
       for (const resourceId of this.resourceIds()) {
+        if (!this.stationConnections.has(resourceId)) continue;
         const prefix = `ns=1;s=Station${resourceId}.dbProcessData.`;
         const queryPrefix = `ns=1;s=Station${resourceId}.stMES.Query.`;
         const statePrefix = `ns=1;s=Station${resourceId}.stMES.State.`;
@@ -212,7 +267,7 @@ export class OpcUaService implements OnModuleInit, OnModuleDestroy {
       }
     } catch (error) {
       this.logger.warn('OPC UA telemetry read failed: ' + (error as Error).message);
-      this.handleDisconnect('telemetry read failed');
+      this.scheduleReconnect();
     } finally {
       this.polling = false;
     }
@@ -244,7 +299,7 @@ export class OpcUaService implements OnModuleInit, OnModuleDestroy {
     if (this.shuttingDown || this.reconnectTimer) return;
     this.reconnectTimer = setTimeout(() => {
       this.reconnectTimer = undefined;
-      void this.connect();
+      void this.reconnect();
     }, 5000);
   }
 
@@ -264,6 +319,7 @@ export class OpcUaService implements OnModuleInit, OnModuleDestroy {
 
   private async startStMesSubscriptions() {
     for (const resourceId of this.resourceIds()) {
+      if (!this.stationConnections.has(resourceId)) continue;
       const subscription = await this.stationConnections.get(resourceId)!.session.createSubscription2({
         requestedPublishingInterval: 250,
         requestedLifetimeCount: 120,

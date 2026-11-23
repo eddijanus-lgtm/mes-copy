@@ -1,6 +1,7 @@
 import { ApiTags, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
 import { Controller, Get, Post, Patch, Delete, Body, Param, Req, Res, UseInterceptors, HttpCode, HttpStatus } from '@nestjs/common';
 import { MachinesService } from './machines.service';
+import { OpcUaService } from '../opcua/opcua.service';
 import { CreateMachineDto, UpdateMachineDto } from './machine.dto';
 import { Roles } from '../auth/roles.decorator';
 import { UserRoleEnum } from '../users/user.entity';
@@ -14,6 +15,7 @@ export class MachinesController {
   constructor(
     private readonly machinesService: MachinesService,
     private readonly downtimeService: DowntimeService,
+    private readonly opcUaService: OpcUaService,
   ) {}
 
   @Post()
@@ -38,7 +40,23 @@ export class MachinesController {
 
   @Patch(':id')
   @Roles(UserRoleEnum.ADMIN, UserRoleEnum.OPERATOR)
-  update(@Param('id') id: string, @Body() dto: UpdateMachineDto) { return this.machinesService.update(id, dto); }
+  async update(@Param('id') id: string, @Body() dto: UpdateMachineDto) {
+    const machine = await this.machinesService.update(id, dto);
+    if (dto.opcua_endpoint_url !== undefined || dto.opcua_enabled !== undefined || dto.resource_id !== undefined) {
+      await this.opcUaService.reconnect();
+    }
+    return machine;
+  }
+
+  @Post(':id/opcua/test')
+  @Roles(UserRoleEnum.ADMIN, UserRoleEnum.OPERATOR)
+  async testOpcUa(@Param('id') id: string) {
+    const machine = await this.machinesService.findOne(id);
+    if (machine.is_machine || !machine.resource_id || !machine.opcua_enabled || !machine.opcua_endpoint_url) {
+      return { connected: false, resourceId: machine.resource_id, message: 'Station benötigt Resource-ID und aktivierten OPC-UA-Endpunkt' };
+    }
+    return this.opcUaService.testStation(machine.resource_id);
+  }
 
   @Delete(':id')
   @Roles(UserRoleEnum.ADMIN)
