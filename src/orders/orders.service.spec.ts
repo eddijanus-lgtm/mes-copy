@@ -49,6 +49,14 @@ describe('OrdersService', () => {
     expect(ordersRepo.create).toHaveBeenCalledWith(expect.objectContaining(dto));
   });
 
+  it('starts the route at station 2 when station 1 is skipped', async () => {
+    carriersRepo.find.mockResolvedValueOnce([{ id: 'carrier-1' }]);
+    const result = await service.create({ name: 'Skip first', priority: 1, machine_id: 'm2', operation: 'assemble', quantity: 1, skip_first_station: true } as any);
+
+    expect(result.route.map((step) => [step.step_no, step.resource_id])).toEqual([[1, 2], [2, 3]]);
+    expect(result.carriers[0].current_step_no).toBe(1);
+  });
+
   it('returns all orders sorted by creation date', async () => {
     ordersRepo.find.mockResolvedValue([{ id: 'o1' }]);
 

@@ -76,8 +76,8 @@ async function fetchCarriersFromMes() {
     return await Promise.all(carriers
       .filter((c) => c.order_id && (c.status === 'assigned' || c.status === 'in_process') && !carriersInLine.has(c.carrier_number))
       .map(async (c) => {
-        let resourceId = c.current_resource_id ?? 1;
-        if (c.current_resource_id == null && c.current_step_no > 1) {
+        let resourceId = c.current_resource_id;
+        if (resourceId == null) {
           if (!routes.has(c.order_id)) routes.set(c.order_id, get(`/orders/${c.order_id}/route`));
           const route = await routes.get(c.order_id);
           resourceId = route.find((step) => step.step_no === c.current_step_no)?.resource_id;

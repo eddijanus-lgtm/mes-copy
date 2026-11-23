@@ -6,7 +6,7 @@ import { canDeleteOrders, canManageOrders } from "../utils/roles.js";
 import { useTranslation } from "../i18n/I18nProvider.jsx";
 import PageInfo from "../components/PageInfo.jsx";
 
-const EMPTY_FORM = { id: null, name: "", priority: 1, machine_id: "", operation: "Webshop-Produkt konfigurieren", quantity: 1, completed_quantity: 0, red_balls: 0, green_balls: 0, blue_balls: 0, status: "pending" };
+const EMPTY_FORM = { id: null, name: "", priority: 1, machine_id: "", operation: "Webshop-Produkt konfigurieren", quantity: 1, completed_quantity: 0, red_balls: 0, green_balls: 0, blue_balls: 0, skip_first_station: false, status: "pending" };
 
 const STATUS_LABELS_RAW = { pending: "Ausstehend", in_progress: "In Arbeit", completed: "Abgeschlossen", cancelled: "Abgebrochen", on_hold: "Pausiert" };
 
@@ -28,6 +28,7 @@ export default function OrdersPage() {
   const [saving, setSaving] = useState(false);
   const [deleteCandidate, setDeleteCandidate] = useState(null);
   const [deleting, setDeleting] = useState(false);
+  const [routeSaving, setRouteSaving] = useState(null);
   const canManage = canManageOrders(user);
   const canDelete = canDeleteOrders(user);
 
@@ -53,7 +54,8 @@ export default function OrdersPage() {
 
   async function submit(event) {
     event.preventDefault(); setSaving(true); setError("");
-    const payload = { name: form.name.trim(), priority: Number(form.priority), machine_id: form.machine_id, operation: form.operation.trim(), quantity: Number(form.quantity), red_balls: Number(form.red_balls), green_balls: Number(form.green_balls), blue_balls: Number(form.blue_balls) };
+    const payload = { name: form.name.trim(), priority: Number(form.priority), machine_id: form.skip_first_station ? machines.find((machine) => machine.resource_id === 2)?.id || form.machine_id : form.machine_id, operation: form.operation.trim(), quantity: Number(form.quantity), red_balls: Number(form.red_balls), green_balls: Number(form.green_balls), blue_balls: Number(form.blue_balls) };
+    if (!form.id) payload.skip_first_station = Boolean(form.skip_first_station);
     if (form.id) { payload.status = form.status; payload.completed_quantity = Number(form.completed_quantity); }
     try {
       if (form.id) await api.patch(`/orders/${form.id}`, payload); else await api.post("/orders", payload);
@@ -66,6 +68,21 @@ export default function OrdersPage() {
   async function remove() {
     if (!deleteCandidate) return; setError(""); setDeleting(true);
     try { await api.del(`/orders/${deleteCandidate.id}`); await refresh(); setDeleteCandidate(null); } catch (requestError) { setError(requestError.message); } finally { setDeleting(false); }
+  }
+
+  async function skipStep(order, step) {
+    const route = routes[order.id] || [];
+    if (route.length < 2) return;
+    setError(""); setRouteSaving(order.id);
+    try {
+      const steps = route.filter((entry) => entry.id !== step.id).map((entry, index) => ({
+        step_no: index + 1, resource_id: entry.resource_id, operation_no: entry.operation_no,
+        operation: entry.operation, parameters: entry.parameters || {},
+      }));
+      await api.patch(`/orders/${order.id}/route`, { steps });
+      await refresh();
+    } catch (requestError) { setError(requestError.message); }
+    finally { setRouteSaving(null); }
   }
 
   const machineNames = Object.fromEntries(machines.map((machine) => [machine.id, machine.name]));
@@ -104,7 +121,7 @@ export default function OrdersPage() {
       </div>}
 
       <div className="grid gap-4">
-        {filtered.map((order) => <OrderCard key={order.id} order={order} route={routes[order.id] || []} carriers={carriersByOrder[order.id] || []} machineName={machineNames[order.machine_id]} resourceNames={resourceNames} canManage={canManage} canDelete={canDelete} onEdit={openEdit} onDelete={requestDelete} t={t} STATUS_LABELS={STATUS_LABELS} />)}
+        {filtered.map((order) => <OrderCard key={order.id} order={order} route={routes[order.id] || []} carriers={carriersByOrder[order.id] || []} machineName={machineNames[order.machine_id]} resourceNames={resourceNames} canManage={canManage} canDelete={canDelete} onEdit={openEdit} onDelete={requestDelete} onSkip={skipStep} routeSaving={routeSaving === order.id} t={t} STATUS_LABELS={STATUS_LABELS} />)}
         {loaded && filtered.length === 0 && <p className="rounded-xl border border-neutral-200 bg-white p-10 text-center text-sm text-neutral-400">{t("orders.noOrders")}</p>}
       </div>
 
@@ -135,7 +152,9 @@ function DeleteOrderDialog({ order, deleting, onCancel, onConfirm, t, STATUS_LAB
   );
 }
 
-function OrderCard({ order, route, carriers, machineName, resourceNames, canManage, canDelete, onEdit, onDelete, t, STATUS_LABELS }) {
+function OrderCard({ order, route, carriers, machineName, resourceNames, canManage, canDelete, onEdit, onDelete, onSkip, routeSaving, t, STATUS_LABELS }) {
+  const routeEditable = canManage && ['pending', 'in_progress'].includes(order.status) && !order.completed_quantity &&
+    carriers.every((carrier) => carrier.status === 'assigned' && carrier.current_step_no === 1 && carrier.current_resource_id == null);
   return (
     <article className="overflow-hidden rounded-xl border border-neutral-200 bg-white shadow-sm">
       <div className="grid gap-4 p-5 lg:grid-cols-[1.2fr_1fr]">
@@ -160,7 +179,7 @@ function OrderCard({ order, route, carriers, machineName, resourceNames, canMana
           <p className="text-xs font-semibold uppercase tracking-wider text-neutral-500">{t("orders.route")}</p>
           <div className="mt-3 grid gap-2">
             {route.length === 0 && <p className="text-sm text-neutral-400">{t("orders.noRoute")}</p>}
-            {route.map((step) => <RouteStep key={step.id || step.step_no} step={step} stationName={resourceNames[step.resource_id]} t={t} />)}
+            {route.map((step) => <div key={step.id || step.step_no} className="flex items-center gap-2"><div className="min-w-0 flex-1"><RouteStep step={step} stationName={resourceNames[step.resource_id]} t={t} /></div>{routeEditable && route.length > 1 && <button type="button" disabled={routeSaving} onClick={() => onSkip(order, step)} className="rounded border border-amber-300 px-2 py-1 text-xs font-medium text-amber-800 disabled:opacity-50">Station überspringen</button>}</div>)}
           </div>
         </div>
       </div>
@@ -184,6 +203,7 @@ function OrderModal({ form, setForm, machines, carriers, saving, onSubmit, onClo
         <form onSubmit={onSubmit} className="grid gap-4 p-6 sm:grid-cols-2">
           <Field label={t("orders.orderName")}><input required value={form.name} onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} className="form-input" /></Field>
           <Field label={t("orders.startStation")}><select required value={form.machine_id} onChange={(event) => setForm((current) => ({ ...current, machine_id: event.target.value }))} className="form-input"><option value="">{t("orders.selectStation")}</option>{machines.map((machine) => <option key={machine.id} value={machine.id}>{machine.name}</option>)}</select></Field>
+          {!form.id && <label className="flex items-center gap-2 text-sm font-medium text-neutral-700 sm:col-span-2"><input type="checkbox" checked={Boolean(form.skip_first_station)} disabled={!machines.some((machine) => machine.resource_id === 2)} onChange={(event) => setForm((current) => ({ ...current, skip_first_station: event.target.checked, machine_id: machines.find((machine) => machine.resource_id === (event.target.checked ? 2 : 1))?.id || current.machine_id }))} />Station 1 überspringen – Produktion beginnt an Station 2</label>}
           <Field label={t("orders.productOperation")}><input required value={form.operation} onChange={(event) => setForm((current) => ({ ...current, operation: event.target.value }))} className="form-input" /></Field>
           <Field label={t("orders.priority")}><input required type="number" min="1" value={form.priority} onChange={(event) => setForm((current) => ({ ...current, priority: event.target.value }))} className="form-input" /></Field>
           <Field label={`${t("orders.quantity")} (${t("orders.maxQuantity")} ${availableCount})`}><input required type="number" min="1" max={availableCount} value={form.quantity} onChange={(event) => setForm((current) => ({ ...current, quantity: event.target.value }))} className="form-input" /></Field>

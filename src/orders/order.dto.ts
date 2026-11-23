@@ -1,7 +1,10 @@
 import { Type } from 'class-transformer';
-import { IsDate, IsEnum, IsInt, IsNotEmpty, IsOptional, IsString, IsUUID, Min } from 'class-validator';
+import { IsBoolean, IsDate, IsEnum, IsInt, IsNotEmpty, IsOptional, IsString, IsUUID, Min } from 'class-validator';
 
 export class CreateOrderDto {
+  @IsOptional()
+  @IsBoolean()
+  skip_first_station?: boolean;
   @IsNotEmpty()
   @IsString()
   name: string;

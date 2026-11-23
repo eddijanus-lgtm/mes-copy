@@ -48,9 +48,18 @@ export class RoutingService {
     if (!dto.steps.length) throw new BadRequestException('Route requires at least one step');
     const uniqueSteps = new Set(dto.steps.map((step) => step.step_no));
     if (uniqueSteps.size !== dto.steps.length) throw new BadRequestException('Route step numbers must be unique');
+    if (dto.steps.some((step, index) => step.step_no !== index + 1)) {
+      throw new BadRequestException('Route steps must be numbered consecutively from 1');
+    }
 
     return this.dataSource.transaction(async (manager) => {
-      if (!await manager.findOne(OrderEntity, { where: { id: orderId } })) throw new NotFoundException('Order not found');
+      const carriers = await manager.find(CarrierEntity, { where: { order_id: orderId }, lock: { mode: 'pessimistic_write' } });
+      const order = await manager.findOne(OrderEntity, { where: { id: orderId }, lock: { mode: 'pessimistic_write' } });
+      if (!order) throw new NotFoundException('Order not found');
+      if (!['pending', 'in_progress'].includes(order.status) || order.completed_quantity > 0 ||
+          carriers.some((carrier) => carrier.status !== CarrierStatusEnum.ASSIGNED || carrier.current_step_no !== 1 || carrier.current_resource_id !== null)) {
+        throw new BadRequestException('Route can only be changed before production starts');
+      }
       await manager.delete(OrderRouteStepEntity, { order_id: orderId });
       return manager.save(OrderRouteStepEntity, dto.steps.map((step) => manager.create(OrderRouteStepEntity, {
         ...step,
