@@ -8,8 +8,8 @@ _Status: demo verified - not production compatible_
 
 ## Demo-Topologie
 
-- Ein eigener OPC-UA-Prozess simuliert drei Stationen: Deckelzuführung (Resource 1), Kugeldosierung (Resource 2) und Endkontrolle (Resource 3).
-- Die Demo-Carrier 128 und 129 starten an der Deckelzuführung und folgen der vom MES gemeldeten nächsten Resource.
+- Ein eigener OPC-UA-Prozess simuliert drei Stationen: Kugelbefüllung (Resource 1), Deckelbereitstellung (Resource 2) und Endkontrolle (Resource 3).
+- Die Demo-Carrier 128 und 129 starten an der Kugelbefüllung und folgen der vom MES gemeldeten nächsten Resource.
 - Jede Station besitzt eigene `stMES.State`, `stMES.Query` und `dbProcessData [DB151]`-Bäume.
 - Das Backend verarbeitet Stationen parallel, aber pro Station seriell.
 

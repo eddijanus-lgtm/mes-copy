@@ -35,7 +35,7 @@ async function seed() {
     { severity: 'error', machine_id: machines[1].id, message: 'Füller-Positionierung außerhalb Toleranz (±0.5mm) — automatische Abschaltung', source: 'machine-controller' },
     { severity: 'warning', machine_id: machines[1].id, message: 'Kugelfarbe Blau fast aufgebraucht (< 10%) — Nachlage anfordern', source: 'material-monitor' },
     { severity: 'warning', machine_id: machines[machines.length - 1 > 0 ? machines.length - 1 : 0].id, message: 'Endkontrolle: 3 hintereinander defekte Trays — Reinigungszyklus empfohlen', source: 'quality-gate' },
-    { severity: 'info', machine_id: machines[1].id, message: 'Opération "Kugeln dosieren" abgeschlossen — Carrier erfolgreich weitergeleitet', source: 'handshake-manager' },
+    { severity: 'info', machine_id: machines[1].id, message: 'Opération "Deckelfarbe bereitstellen" abgeschlossen — Carrier erfolgreich weitergeleitet', source: 'handshake-manager' },
     { severity: 'warning', machine_id: machines[0].id, message: 'Lagertemperatur 4.2°C über Sollwert (35°C) — Klimagerät prüft', source: 'environmental-sensor' },
     { severity: 'critical', machine_id: machines[machines.length - 1 > 0 ? machines.length - 1 : 0].id, message: 'Not-Halt aktiv an Station Q01 — Personal informieren', source: 'safety-controller' },
     { severity: 'info', machine_id: machines[0].id, message: 'Wartung geplant: Nächste Kalibrierung in 12 Stunden', source: 'maintenance-scheduler' },

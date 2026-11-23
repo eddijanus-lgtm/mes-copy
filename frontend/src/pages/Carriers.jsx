@@ -11,11 +11,12 @@ export default function CarriersPage() {
   const canManage = hasRole(user, ROLES.ADMIN, ROLES.OPERATOR);
   const [carriers, setCarriers] = useState([]);
   const [orders, setOrders] = useState([]);
+  const [routes, setRoutes] = useState({});
   const [carrierNumber, setCarrierNumber] = useState("");
   const [error, setError] = useState("");
 
   async function load() {
-    try { const [carrierData, orderData] = await Promise.all([api.get("/carriers"), api.get("/orders")]); setCarriers(Array.isArray(carrierData) ? carrierData : []); setOrders(Array.isArray(orderData) ? orderData : []); }
+    try { const [carrierData, orderData] = await Promise.all([api.get("/carriers"), api.get("/orders")]); setCarriers(Array.isArray(carrierData) ? carrierData : []); setOrders(Array.isArray(orderData) ? orderData : []); const ids = [...new Set((carrierData || []).map((carrier) => carrier.order_id).filter(Boolean))]; const entries = await Promise.all(ids.map((id) => api.get(`/orders/${id}/route`).then((route) => [id, route]).catch(() => [id, []]))); setRoutes(Object.fromEntries(entries)); }
     catch (requestError) { setError(requestError.message); }
   }
 
@@ -52,15 +53,15 @@ export default function CarriersPage() {
       {error && <p className="rounded-lg bg-status-error-bg p-3 text-sm text-status-error">{error}</p>}
 
       <div className="grid gap-4 xl:grid-cols-2">
-        {carriers.map((carrier) => <CarrierCard key={carrier.id} carrier={carrier} order={orderById[carrier.order_id]} t={t} />)}
+        {carriers.map((carrier) => <CarrierCard key={carrier.id} carrier={carrier} order={orderById[carrier.order_id]} route={routes[carrier.order_id] || []} t={t} />)}
         {carriers.length === 0 && <p className="rounded-xl border border-neutral-200 bg-white p-8 text-sm text-neutral-400">{t("carriers.noCarriers")}</p>}
       </div>
     </div>
   );
 }
 
-function CarrierCard({ carrier, order, t }) {
-  const activeStep = carrier.status === "completed" ? 4 : carrier.current_step_no;
+function CarrierCard({ carrier, order, route, t }) {
+  const activeStep = carrier.status === "completed" ? route.length + 1 : carrier.current_step_no;
   return (
     <article className="rounded-xl border border-neutral-200 bg-white p-5 shadow-sm">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -69,17 +70,17 @@ function CarrierCard({ carrier, order, t }) {
       </div>
       <div className="mt-4 grid gap-3 sm:grid-cols-3">
         <MiniMetric label={t("carriers.order")} value={order?.name || t("carriers.notAssigned")} />
-        <MiniMetric label={t("carriers.currentStep")} value={carrier.status === "completed" ? t("carriers.complete") : STEP_LABELS[carrier.current_step_no] || `${t("carriers.step")} ${carrier.current_step_no}`} />
+        <MiniMetric label={t("carriers.currentStep")} value={carrier.status === "completed" ? t("carriers.complete") : route.find((step) => step.step_no === carrier.current_step_no)?.operation || `${t("carriers.step")} ${carrier.current_step_no}`} />
         <MiniMetric label={t("carriers.resource")} value={carrier.current_resource_id ? ROUTE_LABELS[carrier.current_resource_id] || `R${carrier.current_resource_id}` : t("carriers.transport")} />
       </div>
       <div className="mt-5">
         <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-neutral-500">{t("carriers.routePosition")}</p>
-        <div className="relative grid grid-cols-3 text-center text-xs">
+        <div className="relative flex justify-between text-center text-xs">
           <div className="absolute left-[16.66%] right-[16.66%] top-2 h-0.5 bg-neutral-200" />
-          {[1, 2, 3, 4].map((step) => (
+          {[...route.map((entry) => entry.step_no), route.length + 1].map((step) => (
             <div key={step} className="relative z-10 flex flex-col items-center gap-2">
               <span className={`h-4 w-4 rounded-full border-2 ${step < activeStep ? "border-emerald-500 bg-emerald-500" : step === activeStep ? "border-amber-400 bg-amber-400 ring-4 ring-amber-200" : "border-neutral-300 bg-white"}`} />
-              <span className={step === activeStep ? "font-semibold text-neutral-900" : "text-neutral-500"}>{step === 1 ? t("carriers.deckel") : step === 2 ? t("carriers.dosieren") : step === 3 ? t("carriers.pruefen") : t("carriers.fertig")}</span>
+              <span className={step === activeStep ? "font-semibold text-neutral-900" : "text-neutral-500"}>{step > route.length ? t("carriers.fertig") : route.find((entry) => entry.step_no === step)?.operation || `${t("carriers.step")} ${step}`}</span>
             </div>
           ))}
         </div>
@@ -88,8 +89,7 @@ function CarrierCard({ carrier, order, t }) {
   );
 }
 
-const ROUTE_LABELS = { 1: "S01 Deckelzufuehrung", 2: "S02 Kugeldosierung", 3: "Q01 Endkontrolle" };
-const STEP_LABELS = { 1: "Deckelfarbe bereitstellen", 2: "Kugeln dosieren", 3: "Deckel und Kugeln pruefen" };
+const ROUTE_LABELS = { 1: "S01 Kugelbefüllung", 2: "S02 Deckelbereitstellung", 3: "Q01 Endkontrolle" };
 function MiniMetric({ label, value }) { return <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-3"><p className="text-[10px] uppercase tracking-wider text-neutral-500">{label}</p><p className="mt-1 break-words text-sm font-semibold text-neutral-900">{value}</p></div>; }
 function StatusPill({ status, t }) { const color = status === "completed" ? "bg-emerald-50 text-emerald-700" : status === "in_process" ? "bg-amber-50 text-amber-700" : status === "assigned" ? "bg-sky-50 text-sky-700" : status === "error" ? "bg-red-50 text-red-700" : "bg-neutral-100 text-neutral-600"; return <span className={`rounded-full px-3 py-1 text-xs font-semibold ${color}`}>{carrierStatusLabel(status, t)}</span>; }
 function carrierStatusLabel(status, t) { return ({ available: t("carriers.available"), assigned: t("carriers.assigned"), in_process: t("carriers.inProcess"), completed: t("carriers.completed"), error: t("carriers.error") })[status] || status; }

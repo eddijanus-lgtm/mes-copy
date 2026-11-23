@@ -54,6 +54,7 @@ describe('OrdersService', () => {
     const result = await service.create({ name: 'Skip first', priority: 1, machine_id: 'm2', operation: 'assemble', quantity: 1, skip_first_station: true } as any);
 
     expect(result.route.map((step) => [step.step_no, step.resource_id])).toEqual([[1, 2], [2, 3]]);
+    expect(result.route[0].operation).toBe('Deckelfarbe bereitstellen');
     expect(result.carriers[0].current_step_no).toBe(1);
   });
 
@@ -62,6 +63,7 @@ describe('OrdersService', () => {
     const result = await service.create({ name: 'Skip middle', priority: 1, machine_id: 'm1', operation: 'assemble', quantity: 1, skipped_station_ids: [2] } as any);
 
     expect(result.route.map((step) => [step.step_no, step.resource_id])).toEqual([[1, 1], [2, 3]]);
+    expect(result.route[0].operation).toBe('Kugeln dosieren');
   });
 
   it('rejects a route with every station skipped before saving an order', async () => {

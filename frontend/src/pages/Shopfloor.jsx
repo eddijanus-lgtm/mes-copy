@@ -9,7 +9,7 @@ import "./shopfloor.css";
 
 const RESULT_TEXT = { 0: "OK", 1: "Carrier unbekannt", 2: "Auftrag oder Schritt fehlt", 3: "Falsche Station", 4: "Bereits abgeschlossen", 9: "Interner Fehler" };
 const STATION_CODES = { 1: "S01", 2: "S02", 3: "Q01" };
-const STATION_TITLES = { 1: "lidStation", 2: "ballStation", 3: "checkStation" };
+const STATION_TITLES = { 1: "ballStation", 2: "lidStation", 3: "checkStation" };
 const STATION_STALE_SECONDS = 10;
 const FLOW_ENDPOINTS = ["/carriers", "/orders", "/shopfloor/stmes/handshakes", "/shopfloor/mqtt/messages", "/shopfloor/webshop/orders"];
 

@@ -23,8 +23,8 @@ Es werden drei OPC-UA-/SPS-Stationen simuliert:
 
 | Schritt | Resource | Station | Operation | Zykluszeit |
 | --- | ---: | --- | --- | ---: |
-| 1 | 1 | `S01 Deckelzufuehrung` | `Deckelfarbe bereitstellen` | 90 s |
-| 2 | 2 | `S02 Kugeldosierung` | `Kugeln dosieren` | 120 s |
+| 1 | 1 | `S01 Kugelbefuellung` | `Kugeln dosieren` | 120 s |
+| 2 | 2 | `S02 Deckelbereitstellung` | `Deckelfarbe bereitstellen` | 90 s |
 | 3 | 3 | `Q01 Endkontrolle` | `Deckel und Kugeln pruefen` | 60 s |
 
 Die Stationen werden durch `tools/opcua-test-server.js` bereitgestellt. Die Kommunikation erfolgt trotzdem ueber echte OPC-UA-Nodes und nicht nur ueber eine Frontend-Animation.
@@ -122,7 +122,7 @@ Danach steht der Carrier in der DB auf:
 
 ### 3. Station 1 produziert
 
-Station 1 simuliert die Operation `Deckelfarbe bereitstellen`. Nach Ablauf der Zykluszeit schreibt die OPC-UA-Testanlage Prozessdaten in den DB151-Bereich.
+Station 1 simuliert die Operation `Kugeln dosieren`. Nach Ablauf der Zykluszeit schreibt die OPC-UA-Testanlage Prozessdaten in den DB151-Bereich.
 
 Danach schaltet das Backend den Carrier auf den naechsten Routenschritt weiter:
 
@@ -159,7 +159,7 @@ Bei Erfolg wird der Carrier an Station 2 in Bearbeitung gesetzt:
 
 ### 5. Station 2 produziert
 
-Station 2 simuliert die Operation `Kugeln dosieren`. Die Parameter aus dem Webshop werden weiterverwendet:
+Station 2 simuliert die Operation `Deckelfarbe bereitstellen`. Die Parameter aus dem Webshop werden weiterverwendet:
 
 ```json
 {

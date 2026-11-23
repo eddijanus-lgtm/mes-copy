@@ -10,20 +10,20 @@ const resourcePath = '/UA/WaraMesTest';
 const stationConfigs = [
   {
     resourceId: 1,
-    name: 'S01 Deckelzufuehrung',
-    stationType: 'lid_feeder',
+    name: 'S01 Kugelbefuellung',
+    stationType: 'ball_dispenser',
     operationNo: 10,
-    operation: 'Deckelfarbe bereitstellen',
-    cycleTimeMs: 5000,
+    operation: 'Kugeln dosieren',
+    cycleTimeMs: 6000,
     scrapRate: 0,
   },
   {
     resourceId: 2,
-    name: 'S02 Kugeldosierung',
-    stationType: 'ball_dispenser',
+    name: 'S02 Deckelbereitstellung',
+    stationType: 'lid_feeder',
     operationNo: 20,
-    operation: 'Kugeln dosieren',
-    cycleTimeMs: 6000,
+    operation: 'Deckelfarbe bereitstellen',
+    cycleTimeMs: 5000,
     scrapRate: 0,
   },
   {
@@ -47,6 +47,24 @@ const releaseEveryMs = 30000;
 const handshakeResetMs = 600;
 const carriersInLine = new Set();
 const completedFixedCarriers = new Set();
+let mesAccessToken;
+let mesTokenExpiresAt = 0;
+
+async function getMesAccessToken() {
+  if (mesAccessToken && Date.now() < mesTokenExpiresAt - 30000) return mesAccessToken;
+  const loginRes = await fetch(`${mesApiUrl}/auth/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username: mesApiUser, password: mesApiPass }),
+    signal: AbortSignal.timeout(5000),
+  });
+  if (!loginRes.ok) throw new Error(`Login failed: ${loginRes.status}`);
+  const { access_token: token } = await loginRes.json();
+  const payload = JSON.parse(Buffer.from(token.split('.')[1], 'base64url').toString('utf8'));
+  mesAccessToken = token;
+  mesTokenExpiresAt = payload.exp * 1000;
+  return token;
+}
 
 async function fetchCarriersFromMes() {
   if (configuredCarriers) {
@@ -55,26 +73,20 @@ async function fetchCarriersFromMes() {
       .map((carrierId) => ({ carrierId, resourceId: 1 }));
   }
   try {
-    const loginRes = await fetch(`${mesApiUrl}/auth/login`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username: mesApiUser, password: mesApiPass }),
-      signal: AbortSignal.timeout(5000),
-    });
-    if (!loginRes.ok) throw new Error(`Login failed: ${loginRes.status}`);
-    const { access_token } = await loginRes.json();
+    const access_token = await getMesAccessToken();
     const get = async (path) => {
       const response = await fetch(mesApiUrl + path, {
         headers: { Authorization: `Bearer ${access_token}` },
         signal: AbortSignal.timeout(5000),
       });
+      if (response.status === 401) { mesAccessToken = undefined; mesTokenExpiresAt = 0; }
       if (!response.ok) throw new Error(`GET ${path}: ${response.status}`);
       return response.json();
     };
     const carriers = await get('/carriers');
     const routes = new Map();
     return await Promise.all(carriers
-      .filter((c) => c.order_id && (c.status === 'assigned' || c.status === 'in_process') && !carriersInLine.has(c.carrier_number))
+      .filter((c) => c.order_id && (c.status === 'assigned' || c.status === 'in_process'))
       .map(async (c) => {
         let resourceId = c.current_resource_id;
         if (resourceId == null) {
@@ -302,7 +314,10 @@ function completeStationCycle(station) {
     console.log(`${station.name}: carrier ${carrier.carrierId} wird zu ${nextStation.name} transportiert (${transferMs} ms)`);
     setTimeout(() => requestMesData(nextStation, carrier), transferMs).unref();
   } else {
-    carriersInLine.delete(carrier.carrierId);
+    // In automatic mode the MES releases the carrier only after persisting the
+    // final station timestamp. Keep it reserved until the next MES poll confirms
+    // that the assignment has disappeared.
+    if (configuredCarriers) carriersInLine.delete(carrier.carrierId);
     if (configuredCarriers && !failed && station.query.uiNextResourceId === 0) {
       completedFixedCarriers.add(carrier.carrierId);
     }
@@ -411,6 +426,9 @@ async function refreshCarriers() {
   const plans = await fetchCarriersFromMes();
   if (!plans) return;
   const activeIds = new Set(plans.map(({ carrierId }) => carrierId));
+  for (const id of carriersInLine) {
+    if (!activeIds.has(id)) carriersInLine.delete(id);
+  }
   for (const id of nextCarrierRelease.keys()) {
     if (!activeIds.has(id) && !carriersInLine.has(id)) nextCarrierRelease.delete(id);
   }
@@ -442,7 +460,7 @@ async function start() {
     console.log(`Station ${station.resourceId}: opc.tcp://localhost:${port + station.resourceId - 1}${resourcePath}`);
   }
   console.log('Product: WEBSHOP-PRODUCT-DEMO / Deckelfarbe + rote/gruene/blaue Kugeln');
-  console.log('Route: 10 Deckelfarbe bereitstellen -> 20 Kugeln dosieren -> 30 Endkontrolle');
+  console.log('Route: 10 Kugeln dosieren -> 20 Deckelfarbe bereitstellen -> 30 Endkontrolle');
   console.log('Stations:');
   for (const station of stations) {
     console.log(`- Resource ${station.resourceId}: ${station.name}, operation=${station.operation}, cycle=${station.cycleTimeMs} ms`);

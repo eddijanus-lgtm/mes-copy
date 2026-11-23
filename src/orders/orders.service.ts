@@ -51,8 +51,8 @@ export class OrdersService {
     const savedOrder = await this.ordersRepo.save(order);
 
     const routeStepsData = [
-      { step_no: 1, resource_id: 1, operation_no: 10, operation: 'Deckelfarbe bereitstellen', parameters: { iPar1: 1, iPar2: dto.red_balls ?? 0, iPar3: dto.green_balls ?? 0, iPar4: dto.blue_balls ?? 0 } },
-      { step_no: 2, resource_id: 2, operation_no: 20, operation: 'Kugeln dosieren', parameters: { iPar1: 1, iPar2: dto.red_balls ?? 0, iPar3: dto.green_balls ?? 0, iPar4: dto.blue_balls ?? 0 } },
+      { step_no: 1, resource_id: 1, operation_no: 10, operation: 'Kugeln dosieren', parameters: { iPar1: 1, iPar2: dto.red_balls ?? 0, iPar3: dto.green_balls ?? 0, iPar4: dto.blue_balls ?? 0 } },
+      { step_no: 2, resource_id: 2, operation_no: 20, operation: 'Deckelfarbe bereitstellen', parameters: { iPar1: 1, iPar2: dto.red_balls ?? 0, iPar3: dto.green_balls ?? 0, iPar4: dto.blue_balls ?? 0 } },
       { step_no: 3, resource_id: 3, operation_no: 30, operation: 'Deckel und Kugeln pruefen', parameters: { iPar1: 1, iPar2: dto.red_balls ?? 0, iPar3: dto.green_balls ?? 0, iPar4: dto.blue_balls ?? 0 } },
     ];
     const selectedSteps = routeStepsData.filter((step) => !skippedStationIds.has(step.resource_id))

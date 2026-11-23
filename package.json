@@ -16,6 +16,7 @@
     "start:opcua-test": "npm run start:machine-simulator",
     "create-admin": "node tools/create-admin.js",
     "seed:stmes-demo": "node tools/seed-stmes-demo.js",
+    "migrate:demo-station-roles": "node tools/migrate-demo-station-roles.js",
     "seed-demo-alarms": "node tools/seed-demo-alarms.js",
     "migrate:machine-hierarchy": "node tools/migrate-machine-hierarchy.js",
     "migrate:order-balls": "node tools/migrate-order-balls.js",

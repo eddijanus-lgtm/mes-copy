@@ -31,9 +31,9 @@ async function seed() {
   const stationDefinitions = [
     {
       resource_id: 1,
-      name: 'S01 Deckelzufuehrung',
+      name: 'S01 Kugelbefuellung',
       status: 'online',
-      type: 'lid_feeder',
+      type: 'ball_dispenser',
       location: 'Webshop Demo Linie',
       model: 'WARA-DEMO-S01',
       opcua_endpoint_url: process.env.OPC_UA_STATION_1_ADDRESS || endpoint,
@@ -42,9 +42,9 @@ async function seed() {
     },
     {
       resource_id: 2,
-      name: 'S02 Kugeldosierung',
+      name: 'S02 Deckelbereitstellung',
       status: 'online',
-      type: 'ball_dispenser',
+      type: 'lid_feeder',
       location: 'Webshop Demo Linie',
       model: 'WARA-DEMO-S02',
       opcua_endpoint_url: process.env.OPC_UA_STATION_2_ADDRESS || endpoint.replace(/:(\d+)(\/|$)/, (_, port, suffix) => `:${Number(port) + 1}${suffix}`),
@@ -120,8 +120,8 @@ async function seed() {
     method: 'PATCH',
     body: {
       steps: [
-        { step_no: 1, resource_id: 1, operation_no: 10, operation: 'Deckelfarbe bereitstellen', parameters: { iPar1: 1, iPar2: 3, iPar3: 5, iPar4: 7 } },
-        { step_no: 2, resource_id: 2, operation_no: 20, operation: 'Kugeln dosieren', parameters: { iPar1: 1, iPar2: 3, iPar3: 5, iPar4: 7 } },
+        { step_no: 1, resource_id: 1, operation_no: 10, operation: 'Kugeln dosieren', parameters: { iPar1: 1, iPar2: 3, iPar3: 5, iPar4: 7 } },
+        { step_no: 2, resource_id: 2, operation_no: 20, operation: 'Deckelfarbe bereitstellen', parameters: { iPar1: 1, iPar2: 3, iPar3: 5, iPar4: 7 } },
         { step_no: 3, resource_id: 3, operation_no: 30, operation: 'Deckel und Kugeln pruefen', parameters: { iPar1: 1, iPar2: 3, iPar3: 5, iPar4: 7 } },
       ],
     },
