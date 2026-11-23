@@ -6,7 +6,7 @@ import { canDeleteOrders, canManageOrders } from "../utils/roles.js";
 import { useTranslation } from "../i18n/I18nProvider.jsx";
 import PageInfo from "../components/PageInfo.jsx";
 
-const EMPTY_FORM = { id: null, name: "", priority: 1, machine_id: "", operation: "Webshop-Produkt konfigurieren", quantity: 1, completed_quantity: 0, red_balls: 0, green_balls: 0, blue_balls: 0, skip_first_station: false, status: "pending" };
+const EMPTY_FORM = { id: null, name: "", priority: 1, machine_id: "", operation: "Webshop-Produkt konfigurieren", quantity: 1, completed_quantity: 0, red_balls: 0, green_balls: 0, blue_balls: 0, skipped_station_ids: [], status: "pending" };
 
 const STATUS_LABELS_RAW = { pending: "Ausstehend", in_progress: "In Arbeit", completed: "Abgeschlossen", cancelled: "Abgebrochen", on_hold: "Pausiert" };
 
@@ -54,8 +54,9 @@ export default function OrdersPage() {
 
   async function submit(event) {
     event.preventDefault(); setSaving(true); setError("");
-    const payload = { name: form.name.trim(), priority: Number(form.priority), machine_id: form.skip_first_station ? machines.find((machine) => machine.resource_id === 2)?.id || form.machine_id : form.machine_id, operation: form.operation.trim(), quantity: Number(form.quantity), red_balls: Number(form.red_balls), green_balls: Number(form.green_balls), blue_balls: Number(form.blue_balls) };
-    if (!form.id) payload.skip_first_station = Boolean(form.skip_first_station);
+    const firstStationId = [1, 2, 3].find((id) => !(form.skipped_station_ids || []).includes(id));
+    const payload = { name: form.name.trim(), priority: Number(form.priority), machine_id: form.id ? form.machine_id : machines.find((machine) => machine.resource_id === firstStationId)?.id || form.machine_id, operation: form.operation.trim(), quantity: Number(form.quantity), red_balls: Number(form.red_balls), green_balls: Number(form.green_balls), blue_balls: Number(form.blue_balls) };
+    if (!form.id) payload.skipped_station_ids = form.skipped_station_ids || [];
     if (form.id) { payload.status = form.status; payload.completed_quantity = Number(form.completed_quantity); }
     try {
       if (form.id) await api.patch(`/orders/${form.id}`, payload); else await api.post("/orders", payload);
@@ -202,8 +203,8 @@ function OrderModal({ form, setForm, machines, carriers, saving, onSubmit, onClo
         <div className="border-b border-neutral-100 px-6 py-5"><p className="text-xs font-semibold uppercase tracking-wider text-brand-primary">{t("orders.productionPlanning")}</p><h2 className="mt-1 text-xl font-bold text-neutral-900">{form.id ? t("orders.editOrder") : t("orders.newOrderTitle")}</h2></div>
         <form onSubmit={onSubmit} className="grid gap-4 p-6 sm:grid-cols-2">
           <Field label={t("orders.orderName")}><input required value={form.name} onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} className="form-input" /></Field>
-          <Field label={t("orders.startStation")}><select required value={form.machine_id} onChange={(event) => setForm((current) => ({ ...current, machine_id: event.target.value }))} className="form-input"><option value="">{t("orders.selectStation")}</option>{machines.map((machine) => <option key={machine.id} value={machine.id}>{machine.name}</option>)}</select></Field>
-          {!form.id && <label className="flex items-center gap-2 text-sm font-medium text-neutral-700 sm:col-span-2"><input type="checkbox" checked={Boolean(form.skip_first_station)} disabled={!machines.some((machine) => machine.resource_id === 2)} onChange={(event) => setForm((current) => ({ ...current, skip_first_station: event.target.checked, machine_id: machines.find((machine) => machine.resource_id === (event.target.checked ? 2 : 1))?.id || current.machine_id }))} />Station 1 überspringen – Produktion beginnt an Station 2</label>}
+          <Field label={t("orders.startStation")}><select required disabled={!form.id} value={form.id ? form.machine_id : machines.find((machine) => machine.resource_id === [1, 2, 3].find((id) => !(form.skipped_station_ids || []).includes(id)))?.id || form.machine_id} onChange={(event) => setForm((current) => ({ ...current, machine_id: event.target.value }))} className="form-input"><option value="">{t("orders.selectStation")}</option>{machines.map((machine) => <option key={machine.id} value={machine.id}>{machine.name}</option>)}</select></Field>
+          {!form.id && <fieldset className="rounded-lg border border-neutral-200 p-3 sm:col-span-2"><legend className="px-1 text-sm font-semibold text-neutral-700">Stationen überspringen</legend><div className="flex flex-wrap gap-4">{[1, 2, 3].map((id) => <label key={id} className="flex items-center gap-2 text-sm"><input type="checkbox" checked={(form.skipped_station_ids || []).includes(id)} disabled={!(form.skipped_station_ids || []).includes(id) && (form.skipped_station_ids || []).length >= 2} onChange={(event) => setForm((current) => ({ ...current, skipped_station_ids: event.target.checked ? [...current.skipped_station_ids, id] : current.skipped_station_ids.filter((value) => value !== id) }))} />Station {id}{machines.find((machine) => machine.resource_id === id)?.name ? ` · ${machines.find((machine) => machine.resource_id === id).name}` : ""}</label>)}</div><p className="mt-2 text-xs text-neutral-500">Mindestens eine Station bleibt in der Route. Der Auftrag startet an der ersten nicht übersprungenen Station.</p></fieldset>}
           <Field label={t("orders.productOperation")}><input required value={form.operation} onChange={(event) => setForm((current) => ({ ...current, operation: event.target.value }))} className="form-input" /></Field>
           <Field label={t("orders.priority")}><input required type="number" min="1" value={form.priority} onChange={(event) => setForm((current) => ({ ...current, priority: event.target.value }))} className="form-input" /></Field>
           <Field label={`${t("orders.quantity")} (${t("orders.maxQuantity")} ${availableCount})`}><input required type="number" min="1" max={availableCount} value={form.quantity} onChange={(event) => setForm((current) => ({ ...current, quantity: event.target.value }))} className="form-input" /></Field>

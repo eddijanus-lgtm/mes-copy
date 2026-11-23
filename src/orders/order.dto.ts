@@ -1,10 +1,17 @@
 import { Type } from 'class-transformer';
-import { IsBoolean, IsDate, IsEnum, IsInt, IsNotEmpty, IsOptional, IsString, IsUUID, Min } from 'class-validator';
+import { ArrayUnique, IsArray, IsBoolean, IsDate, IsEnum, IsIn, IsInt, IsNotEmpty, IsOptional, IsString, IsUUID, Min } from 'class-validator';
 
 export class CreateOrderDto {
   @IsOptional()
   @IsBoolean()
   skip_first_station?: boolean;
+
+  @IsOptional()
+  @IsArray()
+  @ArrayUnique()
+  @IsInt({ each: true })
+  @IsIn([1, 2, 3], { each: true })
+  skipped_station_ids?: number[];
   @IsNotEmpty()
   @IsString()
   name: string;

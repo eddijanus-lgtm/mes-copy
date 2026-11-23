@@ -52,7 +52,7 @@ In **Maschinen** eine Produktionsmaschine und darunter drei Stationen anlegen od
 
 ### Station in der Auftragsroute überspringen
 
-Unter **Aufträge** kann beim Erstellen **Station 1 überspringen** gewählt werden. Bei einem vorhandenen, noch nicht gestarteten Auftrag entfernt **Station überspringen** den gewählten Schritt; die übrigen Schritte werden neu nummeriert. Sobald ein Carrier einen Schritt begonnen hat, lehnt das MES Änderungen an der Route ab. Für die Simulation mit angepasster Route die automatische Carrier-Abfrage mit `DEMO_ADMIN_USERNAME` und `DEMO_ADMIN_PASSWORD` verwenden: nur so liest der Simulator die erste Station aus der Auftragsroute. `DEMO_CARRIER_IDS` speist Carrier fest an Station 1 ein.
+Unter **Aufträge** können beim Erstellen Station 1, 2 und 3 einzeln zum Überspringen ausgewählt werden. Mindestens eine Station bleibt in der Route; die übrigen Schritte werden fortlaufend nummeriert. Bei einem vorhandenen, noch nicht gestarteten Auftrag entfernt **Station überspringen** den gewählten Schritt. Sobald ein Carrier einen Schritt begonnen hat, lehnt das MES Änderungen an der Route ab. Für die Simulation mit angepasster Route die automatische Carrier-Abfrage mit `DEMO_ADMIN_USERNAME` und `DEMO_ADMIN_PASSWORD` verwenden: nur so liest der Simulator die erste Station aus der Auftragsroute. `DEMO_CARRIER_IDS` speist Carrier fest an Station 1 ein.
 
 Der Simulator läuft als eigener OPC-UA-Server. Das MES verwendet seinen regulären OPC-UA-Client für Stationszustände, Auftragsparameter, Steuerbefehle und Fertigmeldungen. Die Linie besteht aus Deckelzuführung, Kugeldosierung und Endkontrolle.
 

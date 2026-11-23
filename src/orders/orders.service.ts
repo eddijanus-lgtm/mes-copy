@@ -18,6 +18,11 @@ export class OrdersService {
   ) {}
 
   async create(dto: CreateOrderDto) {
+    const skippedStationIds = new Set(dto.skipped_station_ids || []);
+    if (dto.skip_first_station) skippedStationIds.add(1);
+    if ([...skippedStationIds].some((id) => ![1, 2, 3].includes(id)) || skippedStationIds.size === 3) {
+      throw new BadRequestException('At least one valid station must remain in the route');
+    }
     const availableCarriers = await this.carriersRepo.find({
       where: { status: CarrierStatusEnum.AVAILABLE },
       order: { carrier_number: 'ASC' },
@@ -50,7 +55,7 @@ export class OrdersService {
       { step_no: 2, resource_id: 2, operation_no: 20, operation: 'Kugeln dosieren', parameters: { iPar1: 1, iPar2: dto.red_balls ?? 0, iPar3: dto.green_balls ?? 0, iPar4: dto.blue_balls ?? 0 } },
       { step_no: 3, resource_id: 3, operation_no: 30, operation: 'Deckel und Kugeln pruefen', parameters: { iPar1: 1, iPar2: dto.red_balls ?? 0, iPar3: dto.green_balls ?? 0, iPar4: dto.blue_balls ?? 0 } },
     ];
-    const selectedSteps = (dto.skip_first_station ? routeStepsData.slice(1) : routeStepsData)
+    const selectedSteps = routeStepsData.filter((step) => !skippedStationIds.has(step.resource_id))
       .map((step, index) => ({ ...step, step_no: index + 1 }));
     const route = await this.routeStepsRepo.save(
       selectedSteps.map(step => this.routeStepsRepo.create({ ...step, order_id: savedOrder.id })),

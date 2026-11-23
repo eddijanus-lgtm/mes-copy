@@ -57,6 +57,18 @@ describe('OrdersService', () => {
     expect(result.carriers[0].current_step_no).toBe(1);
   });
 
+  it('allows selecting other stations to skip independently', async () => {
+    carriersRepo.find.mockResolvedValueOnce([{ id: 'carrier-1' }]);
+    const result = await service.create({ name: 'Skip middle', priority: 1, machine_id: 'm1', operation: 'assemble', quantity: 1, skipped_station_ids: [2] } as any);
+
+    expect(result.route.map((step) => [step.step_no, step.resource_id])).toEqual([[1, 1], [2, 3]]);
+  });
+
+  it('rejects a route with every station skipped before saving an order', async () => {
+    await expect(service.create({ name: 'Invalid', priority: 1, machine_id: 'm1', operation: 'assemble', quantity: 1, skipped_station_ids: [1, 2, 3] } as any)).rejects.toBeInstanceOf(BadRequestException);
+    expect(ordersRepo.save).not.toHaveBeenCalled();
+  });
+
   it('returns all orders sorted by creation date', async () => {
     ordersRepo.find.mockResolvedValue([{ id: 'o1' }]);
 
