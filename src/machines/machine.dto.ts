@@ -1,15 +1,10 @@
 import { Transform } from 'class-transformer';
-import { IsBoolean, IsDateString, IsInt, IsNotEmpty, IsString, IsEnum, IsOptional, Min } from 'class-validator';
-import {
-  EquipmentLevelEnum,
-  ExecutionModelEnum,
-  JobInterfaceEnum,
-  MachineStatusEnum,
-} from './machine.entity';
+import { IsBoolean, IsInt, IsNotEmpty, IsString, IsEnum, IsOptional, IsUUID, Min, Max } from 'class-validator';
+import { MachineStatusEnum } from './machine.entity';
 
 export type MachineStatus = 'online' | 'offline' | 'maintenance' | 'error' | 'idle';
 
-export const MACHINE_CSV_HEADERS = ['name', 'type', 'status', 'location', 'model', 'serial_number', 'resource_id', 'parent_resource_id', 'equipment_level', 'execution_model', 'job_interface', 'opcua_endpoint_url', 'opcua_node_prefix', 'opcua_enabled'];
+export const MACHINE_CSV_HEADERS = ['name', 'type', 'status', 'location', 'model', 'serial_number', 'resource_id', 'opcua_endpoint_url', 'opcua_node_prefix', 'opcua_enabled'];
 
 export class CreateMachineDto {
   @IsNotEmpty()
@@ -37,26 +32,31 @@ export class CreateMachineDto {
   serial_number?: string;
 
   @IsOptional()
+  @IsBoolean()
+  is_machine?: boolean;
+
+  @IsOptional()
+  @IsUUID()
+  parent_machine_id?: string;
+
+  @IsOptional()
+  @IsString()
+  ip_address?: string;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(65535)
+  connection_port?: number;
+
+  @IsOptional()
+  @IsString()
+  connection_protocol?: string;
+
+  @IsOptional()
   @IsInt()
   @Min(1)
   resource_id?: number;
-
-  @IsOptional()
-  @IsInt()
-  @Min(1)
-  parent_resource_id?: number;
-
-  @IsOptional()
-  @IsEnum(EquipmentLevelEnum)
-  equipment_level?: EquipmentLevelEnum;
-
-  @IsOptional()
-  @IsEnum(ExecutionModelEnum)
-  execution_model?: ExecutionModelEnum;
-
-  @IsOptional()
-  @IsEnum(JobInterfaceEnum)
-  job_interface?: JobInterfaceEnum;
 
   @IsOptional()
   @IsString()
@@ -98,26 +98,31 @@ export class UpdateMachineDto {
   serial_number?: string;
 
   @IsOptional()
+  @IsBoolean()
+  is_machine?: boolean;
+
+  @IsOptional()
+  @IsUUID()
+  parent_machine_id?: string;
+
+  @IsOptional()
+  @IsString()
+  ip_address?: string;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(65535)
+  connection_port?: number;
+
+  @IsOptional()
+  @IsString()
+  connection_protocol?: string;
+
+  @IsOptional()
   @IsInt()
   @Min(1)
   resource_id?: number;
-
-  @IsOptional()
-  @IsInt()
-  @Min(1)
-  parent_resource_id?: number;
-
-  @IsOptional()
-  @IsEnum(EquipmentLevelEnum)
-  equipment_level?: EquipmentLevelEnum;
-
-  @IsOptional()
-  @IsEnum(ExecutionModelEnum)
-  execution_model?: ExecutionModelEnum;
-
-  @IsOptional()
-  @IsEnum(JobInterfaceEnum)
-  job_interface?: JobInterfaceEnum;
 
   @IsOptional()
   @IsString()
@@ -130,18 +135,4 @@ export class UpdateMachineDto {
   @IsOptional()
   @IsBoolean()
   opcua_enabled?: boolean;
-}
-
-export class ImportMachinesCsvDto {
-  @IsString()
-  @IsNotEmpty()
-  content: string;
-}
-
-export class DowntimePeriodQueryDto {
-  @IsDateString()
-  start_date: string;
-
-  @IsDateString()
-  end_date: string;
 }

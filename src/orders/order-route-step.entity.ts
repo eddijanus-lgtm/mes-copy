@@ -23,7 +23,7 @@ export class OrderRouteStepEntity {
   operation: string;
 
   @Column({ type: 'jsonb', default: {} })
-  parameters: Record<string, number>;
+  parameters: { iPar1?: number; iPar2?: number; iPar3?: number; iPar4?: number };
 
   @CreateDateColumn()
   created_at: Date;

@@ -2,14 +2,9 @@ import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { Test, TestingModule } from '@nestjs/testing';
 import { CarrierEntity } from '../carriers/carrier.entity';
-import { MachineEntity } from '../machines/machine.entity';
-import { ProductRouteStepEntity } from '../products/product-route-step.entity';
-import { ProductEntity } from '../products/product.entity';
 import { OrderRouteStepEntity } from './order-route-step.entity';
 import { OrderEntity } from './order.entity';
 import { OrdersService } from './orders.service';
-import { OrderProductionLogService } from './order-production-log.service';
-import { MachineProfileService } from '../machines/profiles/machine-profile.service';
 
 describe('OrdersService', () => {
   let service: OrdersService;
@@ -22,69 +17,17 @@ describe('OrdersService', () => {
   };
   const carriersRepo = {
     count: jest.fn(),
-    find: jest.fn(),
-    save: jest.fn(),
+    find: jest.fn().mockResolvedValue([]),
+    save: jest.fn(async (value) => value),
   };
   const routeStepsRepo = {
     create: jest.fn((value) => value),
     save: jest.fn(async (value) => value),
     delete: jest.fn(),
   };
-  const machinesRepo = {
-    findOne: jest.fn(),
-    find: jest.fn(),
-  };
-  const productsRepo = { findOne: jest.fn() };
-  const productRouteStepsRepo = { find: jest.fn() };
-  const productionLogs = {
-    finalize: jest.fn(),
-    remove: jest.fn(),
-  };
-  const profiles = {
-    getProfile: jest.fn(() => ({
-      stations: [
-        {
-          stationId: 'cell-seven',
-          resourceId: 1,
-          displayName: 'Station 1',
-          enabled: true,
-          routing: {
-            sequence: 1,
-            operationNo: 25,
-            operation: 'Assemble',
-          },
-        },
-      ],
-    })),
-  };
 
   beforeEach(async () => {
     jest.clearAllMocks();
-    carriersRepo.find.mockResolvedValue(
-      Array.from({ length: 10 }, (_, index) => ({
-        id: `carrier-${index + 1}`,
-        carrier_number: index + 1,
-        status: 'available',
-      })),
-    );
-    carriersRepo.save.mockImplementation(async (value) => value);
-    carriersRepo.count.mockResolvedValue(0);
-    machinesRepo.findOne.mockResolvedValue({
-      id: 'm1',
-      name: 'Station 1',
-      location: 'line-1',
-      resource_id: 1,
-      opcua_enabled: true,
-    });
-    machinesRepo.find.mockResolvedValue([
-      {
-        id: 'm1',
-        name: 'Station 1',
-        location: 'line-1',
-        resource_id: 1,
-        opcua_enabled: true,
-      },
-    ]);
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -92,14 +35,6 @@ describe('OrdersService', () => {
         { provide: getRepositoryToken(OrderEntity), useValue: ordersRepo },
         { provide: getRepositoryToken(CarrierEntity), useValue: carriersRepo },
         { provide: getRepositoryToken(OrderRouteStepEntity), useValue: routeStepsRepo },
-        { provide: getRepositoryToken(MachineEntity), useValue: machinesRepo },
-        { provide: getRepositoryToken(ProductEntity), useValue: productsRepo },
-        {
-          provide: getRepositoryToken(ProductRouteStepEntity),
-          useValue: productRouteStepsRepo,
-        },
-        { provide: OrderProductionLogService, useValue: productionLogs },
-        { provide: MachineProfileService, useValue: profiles },
       ],
     }).compile();
 
@@ -108,102 +43,10 @@ describe('OrdersService', () => {
 
   it('creates an order', async () => {
     const dto: any = { name: 'Order 1', priority: 2, machine_id: 'm1', operation: 'assemble', quantity: 5 };
+    carriersRepo.find.mockResolvedValueOnce(Array.from({ length: dto.quantity }, (_, i) => ({ id: `carrier-${i}` })));
 
-    await expect(service.create(dto)).resolves.toMatchObject({
-      ...dto,
-      status: 'pending',
-      start_time: undefined,
-    });
-    expect(ordersRepo.create).toHaveBeenCalledWith(
-      expect.objectContaining({
-        ...dto,
-        status: 'pending',
-        start_time: undefined,
-      }),
-    );
-  });
-
-  it('assigns only physically available machine-managed carriers', async () => {
-    carriersRepo.find.mockResolvedValue([
-      {
-        id: 'managed-ready',
-        carrier_number: 1,
-        status: 'available',
-        inventory_managed: true,
-        physical_state: 'stored',
-        rfid_read_valid: true,
-        inventory_stale: false,
-      },
-      {
-        id: 'managed-invalid-tag',
-        carrier_number: 2,
-        status: 'available',
-        inventory_managed: true,
-        physical_state: 'stored',
-        rfid_read_valid: false,
-        inventory_stale: false,
-      },
-      {
-        id: 'managed-missing',
-        carrier_number: 3,
-        status: 'available',
-        inventory_managed: true,
-        physical_state: 'missing',
-        rfid_read_valid: true,
-        inventory_stale: false,
-      },
-      {
-        id: 'legacy-ready',
-        carrier_number: 4,
-        status: 'available',
-        inventory_managed: false,
-      },
-    ]);
-
-    const result = await service.create({
-      name: 'RFID order',
-      priority: 1,
-      machine_id: 'm1',
-      operation: 'assemble',
-      quantity: 2,
-    } as any);
-
-    expect(result.carriers.map((carrier) => carrier.id)).toEqual([
-      'managed-ready',
-      'legacy-ready',
-    ]);
-  });
-
-  it('rejects an order for an observe-only machine before persisting or assigning it', async () => {
-    profiles.getProfile.mockReturnValueOnce({
-      stations: [
-        {
-          stationId: 'nx9000-press-cell',
-          resourceId: 71,
-          displayName: 'NX-9000 Press Cell',
-          enabled: true,
-        },
-      ],
-    });
-    machinesRepo.findOne.mockResolvedValueOnce({
-      id: 'nova-machine',
-      resource_id: 71,
-    });
-
-    await expect(
-      service.create({
-        name: 'NovaPress order',
-        priority: 1,
-        machine_id: 'nova-machine',
-        operation: 'press',
-        quantity: 1,
-      } as any),
-    ).rejects.toThrow(
-      'Selected start station is not part of the configured profile route',
-    );
-
-    expect(ordersRepo.save).not.toHaveBeenCalled();
-    expect(carriersRepo.save).not.toHaveBeenCalled();
+    await expect(service.create(dto)).resolves.toMatchObject(dto);
+    expect(ordersRepo.create).toHaveBeenCalledWith(expect.objectContaining(dto));
   });
 
   it('returns all orders sorted by creation date', async () => {
@@ -233,7 +76,6 @@ describe('OrdersService', () => {
 
     expect(result.status).toBe('completed');
     expect(result.end_time).toBeInstanceOf(Date);
-    expect(productionLogs.finalize).toHaveBeenCalledWith('o1');
   });
 
   it('prevents deleting orders with assigned carriers', async () => {
@@ -249,7 +91,6 @@ describe('OrdersService', () => {
     await expect(service.remove('o1')).resolves.toBeUndefined();
     expect(routeStepsRepo.delete).toHaveBeenCalledWith({ order_id: 'o1' });
     expect(ordersRepo.delete).toHaveBeenCalledWith('o1');
-    expect(productionLogs.remove).toHaveBeenCalledWith('o1');
   });
 
   it('updates progress and completes an order at target quantity', async () => {
@@ -260,7 +101,6 @@ describe('OrdersService', () => {
     expect(result.completed_quantity).toBe(10);
     expect(result.status).toBe('completed');
     expect(result.end_time).toBeInstanceOf(Date);
-    expect(productionLogs.finalize).toHaveBeenCalledWith('o1');
   });
 
   it('queries pending and active orders', async () => {

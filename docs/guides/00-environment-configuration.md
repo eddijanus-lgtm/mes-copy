@@ -19,8 +19,7 @@ Geheimnisse und lokale Einstellungen dürfen nicht in Git gespeichert werden. Da
 | `DB_*` | PostgreSQL-Verbindung |
 | `JWT_SECRET` | Signatur und Prüfung der JWTs |
 | `MQTT_BROKER_URL` | Adresse des MQTT-Brokers |
-| `MACHINE_PROFILE_PATH` | Pfad zum aktiven Maschinenprofil; Endpoint, Stationen, Rollen, Routing und Security stehen ausschließlich dort |
-| `OPCUA_*` | Geheimnisse beziehungsweise Zertifikatspfade, deren Variablennamen vom Maschinenprofil referenziert werden |
+| `OPC_UA_SERVER_ADDRESS` | Adresse des OPC-UA-Servers |
 
 ## Sicherheitsregeln
 

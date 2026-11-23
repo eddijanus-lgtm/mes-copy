@@ -1,19 +1,18 @@
-import {
-  BadRequestException,
-  ConflictException,
-  Injectable,
-  NotFoundException,
-} from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 const dayjs = require('dayjs');
 import { ShiftEntity, ShiftReportEntity, ProductionBatchEntity } from './entities';
 import { OrderEntity } from '../orders/order.entity';
 import { MachineEntity, MachineStatusEnum } from '../machines/machine.entity';
-import { DashboardService } from '../dashboard/dashboard.service';
+import { DowntimeLogEntity } from '../machines/downtime.entity';
+import { DataPointEntity } from '../data-collection/data-point.entity';
+import { AlarmEntity } from '../alarms/alarm.entity';
 
 @Injectable()
 export class ShiftsService {
+  private readonly logger = new Logger(ShiftsService.name);
+
   constructor(
     @InjectRepository(ShiftEntity)
     private readonly shiftRepo: Repository<ShiftEntity>,
@@ -22,10 +21,15 @@ export class ShiftsService {
     @InjectRepository(ProductionBatchEntity)
     private readonly batchRepo: Repository<ProductionBatchEntity>,
     @InjectRepository(OrderEntity)
-    private readonly orderRepo: Repository<OrderEntity>,
+    private readonly ordersRepo: Repository<OrderEntity>,
     @InjectRepository(MachineEntity)
-    private readonly machineRepo: Repository<MachineEntity>,
-    private readonly dashboard: DashboardService,
+    private readonly machinesRepo: Repository<MachineEntity>,
+    @InjectRepository(DowntimeLogEntity)
+    private readonly downtimeRepo: Repository<DowntimeLogEntity>,
+    @InjectRepository(DataPointEntity)
+    private readonly dataPointsRepo: Repository<DataPointEntity>,
+    @InjectRepository(AlarmEntity)
+    private readonly alarmsRepo: Repository<AlarmEntity>,
   ) {}
 
   // --- Shifts ---
@@ -41,7 +45,7 @@ export class ShiftsService {
     const existing = await this.shiftRepo.findOne({
       where: { date: dto.date as string, type: dto.type },
     });
-    if (existing) throw new ConflictException('Schicht existiert bereits am ' + dto.date);
+    if (existing) throw new Error('Schicht existiert bereits am ' + dto.date);
 
     const shift = this.shiftRepo.create(dto);
     return this.shiftRepo.save(shift);
@@ -58,42 +62,17 @@ export class ShiftsService {
   async generateReport(shiftId: string, dateForApi?: string): Promise<ShiftReportEntity> {
     const shift = await this.getShift(shiftId);
     const dateStr = dayjs(dateForApi || shift.date).format('YYYY-MM-DD');
-    const { start, end } = this.resolveShiftWindow(dateStr, shift.start_time, shift.end_time);
-    const [kpis, orderStats, machines] = await Promise.all([
-      this.dashboard.getKpis(start.toISOString(), end.toISOString()),
-      this.getOrderStats(start, end),
-      this.machineRepo.find({ order: { name: 'ASC' } }),
-    ]);
-    const activeStatuses = new Set([
-      MachineStatusEnum.ONLINE,
-      MachineStatusEnum.IDLE,
-    ]);
+    const metrics = await this.getProductionMetrics(dateStr, shift.start_time, shift.end_time);
 
-    const report = this.reportRepo.create({
+    return this.reportRepo.save(this.reportRepo.create({
       shift_id: shiftId,
       shift_name: shift.name,
-      manager_name: shift.manager_name || 'N/A',
+      manager_name: shift.manager_name,
       shift_start: shift.start_time,
       shift_end: shift.end_time,
       date: dateStr,
-      total_orders: orderStats.totalOrders,
-      completed_orders: orderStats.completedOrders,
-      cancelled_orders: orderStats.cancelledOrders,
-      oee_availability: kpis.oee.availability,
-      oee_performance: kpis.oee.performance,
-      oee_quality: kpis.oee.quality,
-      oee_total: kpis.oee.total,
-      throughput_units: kpis.throughput.completedQuantity,
-      active_machines: machines
-        .filter((machine) => activeStatuses.has(machine.status))
-        .map((machine) => machine.name),
-      offline_machines: machines
-        .filter((machine) => !activeStatuses.has(machine.status))
-        .map((machine) => machine.name),
-      total_downtime_minutes: kpis.machines.downtimeMinutes,
-    });
-
-    return this.reportRepo.save(report);
+      ...metrics,
+    }));
   }
 
   async getAllReports(filters?: { date?: string }): Promise<ShiftReportEntity[]> {
@@ -105,7 +84,7 @@ export class ShiftsService {
 
   async getReport(id: string): Promise<ShiftReportEntity> {
     const report = await this.reportRepo.findOne({ where: { id } });
-    if (!report) throw new NotFoundException(`Shift report ${id} not found`);
+    if (!report) throw new Error(`Shift report ${id} not found`);
     return report;
   }
 
@@ -123,42 +102,30 @@ export class ShiftsService {
     return this.batchRepo.save(batch);
   }
 
-  async completeBatch(batchId: string, completedQty: number): Promise<ProductionBatchEntity> {
-    if (!Number.isInteger(completedQty) || completedQty < 0) {
-      throw new BadRequestException(
-        'completed_quantity must be provided as a non-negative integer',
-      );
-    }
+  async completeBatch(batchId: string, completedQty?: number): Promise<ProductionBatchEntity> {
     const batch = await this.getBatch(batchId);
-    batch.completed_quantity = completedQty;
+    batch.completed_quantity = completedQty || batch.target_quantity;
     batch.finished_at = new Date();
     return this.batchRepo.save(batch);
   }
 
   async getShiftSummary(date: string, shiftType?: 'day' | 'night' | 'swing'): Promise<ShiftReportEntity> {
-    const shifts = await this.shiftRepo.find({
-      where: {
-        date,
-        ...(shiftType ? { type: shiftType } : {}),
-      },
-      order: { start_time: 'ASC' },
-    });
-    if (!shifts.length) {
-      throw new NotFoundException(`No shift found for ${date}`);
-    }
-    return this.generateReport(shifts[0].id, date);
-  }
+    const shift = await this.shiftRepo.findOne({ where: { date, ...(shiftType ? { type: shiftType } : {}) } });
+    if (shift) return this.generateReport(shift.id, date);
 
-  async getBatches(shiftId?: string): Promise<ProductionBatchEntity[]> {
-    return this.batchRepo.find({
-      where: shiftId ? { id: shiftId } : {},
-      order: { created_at: 'DESC' },
+    const metrics = await this.getProductionMetrics(date, '00:00', '23:59:59');
+    return this.reportRepo.create({
+      shift_id: '',
+      date,
+      shift_start: '00:00',
+      shift_end: '23:59:59',
+      ...metrics,
     });
   }
 
   async getBatch(id: string): Promise<ProductionBatchEntity> {
     const batch = await this.batchRepo.findOne({ where: { id } });
-    if (!batch) throw new NotFoundException(`Batch ${id} not found`);
+    if (!batch) throw new Error(`Batch ${id} not found`);
     return batch;
   }
 
@@ -166,7 +133,7 @@ export class ShiftsService {
 
   private async getShift(id: string): Promise<ShiftEntity> {
     const shift = await this.shiftRepo.findOne({ where: { id } });
-    if (!shift) throw new NotFoundException(`Shift ${id} not found`);
+    if (!shift) throw new Error(`Shift ${id} not found`);
     return shift;
   }
 
@@ -175,43 +142,69 @@ export class ShiftsService {
     return this.reportRepo.save(report);
   }
 
-  private resolveShiftWindow(date: string, startTime: string, endTime: string) {
-    const start = dayjs(`${date}T${startTime}`);
-    let end = dayjs(`${date}T${endTime}`);
-    if (!end.isAfter(start)) end = end.add(1, 'day');
-    return { start: start.toDate(), end: end.toDate() };
-  }
+  private async getProductionMetrics(date: string, startTime: string, endTime: string) {
+    const start = dayjs(`${date}T${startTime}`).toDate();
+    let end = dayjs(`${date}T${endTime}`).toDate();
+    if (end <= start) end = dayjs(end).add(1, 'day').toDate();
 
-  private async getOrderStats(start: Date, end: Date): Promise<{
-    totalOrders: number;
-    completedOrders: number;
-    cancelledOrders: number;
-  }> {
-    const row = await this.orderRepo
-      .createQueryBuilder('orders')
-      .select('COUNT(*)', 'total_orders')
-      .addSelect(
-        "COUNT(CASE WHEN orders.status = 'completed' THEN 1 END)",
-        'completed_orders',
-      )
-      .addSelect(
-        "COUNT(CASE WHEN orders.status = 'cancelled' THEN 1 END)",
-        'cancelled_orders',
-      )
-      .where('orders.created_at < :end', { end })
-      .andWhere('(orders.end_time IS NULL OR orders.end_time >= :start)', {
-        start,
-      })
-      .getRawOne<{
-        total_orders: string;
-        completed_orders: string;
-        cancelled_orders: string;
-      }>();
+    const [orderStats, downtimeStats, qualityStats, machines, alarms] = await Promise.all([
+      this.ordersRepo.createQueryBuilder('order')
+        .select('COUNT(*)', 'total_orders')
+        .addSelect("COUNT(CASE WHEN order.status = 'completed' THEN 1 END)", 'completed_orders')
+        .addSelect("COUNT(CASE WHEN order.status = 'cancelled' THEN 1 END)", 'cancelled_orders')
+        .addSelect('COALESCE(SUM(order.quantity), 0)', 'target_quantity')
+        .addSelect('COALESCE(SUM(order.completed_quantity), 0)', 'completed_quantity')
+        .where('order.created_at <= :end', { end })
+        .andWhere('(order.end_time IS NULL OR order.end_time >= :start)', { start })
+        .getRawOne(),
+      this.downtimeRepo.createQueryBuilder('downtime')
+        .select('COALESCE(SUM(downtime.duration_minutes), 0)', 'minutes')
+        .where('downtime.start_time < :end', { end })
+        .andWhere('(downtime.end_time IS NULL OR downtime.end_time > :start)', { start })
+        .getRawOne(),
+      this.dataPointsRepo.createQueryBuilder('point')
+        .select("COUNT(CASE WHEN point.quality = 'good' THEN 1 END)", 'good')
+        .addSelect("COUNT(CASE WHEN point.quality = 'bad' THEN 1 END)", 'bad')
+        .where('point.timestamp BETWEEN :start AND :end', { start, end })
+        .getRawOne(),
+      this.machinesRepo.find(),
+      this.alarmsRepo.find({ where: { acknowledged: false } }),
+    ]);
+
+    const totalOrders = Number(orderStats.total_orders) || 0;
+    const completedOrders = Number(orderStats.completed_orders) || 0;
+    const cancelledOrders = Number(orderStats.cancelled_orders) || 0;
+    const targetQuantity = Number(orderStats.target_quantity) || 0;
+    const completedQuantity = Number(orderStats.completed_quantity) || 0;
+    const downtimeMinutes = Number(downtimeStats.minutes) || 0;
+    const machineCount = machines.length;
+    const plannedMinutes = Math.max(0, (end.getTime() - start.getTime()) / 60000) * machineCount;
+    const availability = plannedMinutes ? Math.max(0, 100 * (plannedMinutes - downtimeMinutes) / plannedMinutes) : 0;
+    const performance = targetQuantity ? Math.min(100, 100 * completedQuantity / targetQuantity) : 0;
+    const good = Number(qualityStats.good) || 0;
+    const bad = Number(qualityStats.bad) || 0;
+    const quality = good + bad ? 100 * good / (good + bad) : 0;
+    const activeMachines = machines.filter((machine) => machine.status !== MachineStatusEnum.OFFLINE).map((machine) => machine.name);
+    const offlineMachines = machines.filter((machine) => machine.status === MachineStatusEnum.OFFLINE).map((machine) => machine.name);
 
     return {
-      totalOrders: Number(row?.total_orders) || 0,
-      completedOrders: Number(row?.completed_orders) || 0,
-      cancelledOrders: Number(row?.cancelled_orders) || 0,
+      total_orders: totalOrders,
+      completed_orders: completedOrders,
+      cancelled_orders: cancelledOrders,
+      oee_availability: this.round(availability),
+      oee_performance: this.round(performance),
+      oee_quality: this.round(quality),
+      oee_total: this.round(availability * performance * quality / 10000),
+      throughput_units: completedQuantity,
+      active_machines: activeMachines,
+      offline_machines: offlineMachines,
+      total_downtime_minutes: this.round(downtimeMinutes),
+      critical_alarms: alarms.filter((alarm) => alarm.severity === 'critical').map((alarm) => alarm.message),
+      warnings: alarms.filter((alarm) => alarm.severity === 'warning' || alarm.severity === 'error').map((alarm) => alarm.message),
     };
+  }
+
+  private round(value: number) {
+    return Math.round(value * 10) / 10;
   }
 }

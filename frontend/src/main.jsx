@@ -6,19 +6,17 @@ import { AuthProvider } from "./providers/AuthProvider.jsx";
 import { ToastProvider } from "./providers/ToastProvider.jsx";
 import { ThemeProvider } from "./providers/ThemeProvider.jsx";
 import "./tailwind.css";
-import "./app.css";
-import "./design-system/styles/index.css";
 
 ReactDOM.createRoot(document.getElementById("root")).render(
   <React.StrictMode>
     <BrowserRouter>
-      <AuthProvider>
-        <ThemeProvider>
+      <ThemeProvider>
+        <AuthProvider>
           <ToastProvider>
             <App />
           </ToastProvider>
-        </ThemeProvider>
-      </AuthProvider>
+        </AuthProvider>
+      </ThemeProvider>
     </BrowserRouter>
   </React.StrictMode>
 );

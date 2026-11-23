@@ -2,10 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { DashboardService } from '../dashboard.service';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { OrderEntity } from '../../orders/order.entity';
-import {
-  MachineEntity,
-  MachineStatusEnum,
-} from '../../machines/machine.entity';
+import { MachineEntity } from '../../machines/machine.entity';
 import { DowntimeLogEntity } from '../../machines/downtime.entity';
 import { DataPointEntity } from '../../data-collection/data-point.entity';
 import { TimescaleAggregateService } from '../timescale-aggregate.service';
@@ -14,8 +11,6 @@ import { TimescaleAggregateService } from '../timescale-aggregate.service';
 const createMockRepo = () => ({
   createQueryBuilder: jest.fn(),
   count: jest.fn().mockResolvedValue(0),
-  find: jest.fn().mockResolvedValue([]),
-  query: jest.fn().mockResolvedValue([]),
 });
 
 describe('DashboardService', () => {
@@ -50,11 +45,9 @@ describe('DashboardService', () => {
 
   describe('getKpis', () => {
     beforeEach(() => {
-      mockMachineRepo.find.mockResolvedValue([]);
       mockMachineRepo.createQueryBuilder.mockReturnValue({
         select: jest.fn().mockReturnThis(),
         addSelect: jest.fn().mockReturnThis(),
-        where: jest.fn().mockReturnThis(),
         groupBy: jest.fn().mockReturnThis(),
         getRawMany: jest.fn().mockResolvedValue([]),
       });
@@ -106,19 +99,17 @@ describe('DashboardService', () => {
       expect(result).toHaveProperty('orders');
     });
 
-    it('does not invent unavailable OEE components', async () => {
+    it('should calculate OEE values between 0 and 100', async () => {
       const result = await service.getKpis();
-
-      expect(result.oee.availability).toBeNull();
-      expect(result.oee.performance).toBeNull();
-      expect(result.oee.quality).toBeNull();
-      expect(result.oee.total).toBeNull();
-      expect(result.oee.available).toBe(false);
-      expect(result.oee.missingInputs).toEqual([
-        'idealCycleTime',
-        'goodCount',
-        'rejectCount',
-      ]);
+      
+      expect(result.oee.availability).toBeGreaterThanOrEqual(0);
+      expect(result.oee.availability).toBeLessThanOrEqual(100);
+      expect(result.oee.performance).toBeGreaterThanOrEqual(0);
+      expect(result.oee.performance).toBeLessThanOrEqual(100);
+      expect(result.oee.quality).toBeGreaterThanOrEqual(0);
+      expect(result.oee.quality).toBeLessThanOrEqual(100);
+      expect(result.oee.total).toBeGreaterThanOrEqual(0);
+      expect(result.oee.total).toBeLessThanOrEqual(100);
     });
 
     it('should return throughput data', async () => {
@@ -145,210 +136,13 @@ describe('DashboardService', () => {
       expect(result.range.to).toBeDefined();
     });
 
-    it('reports OPC UA sample quality separately from product quality', async () => {
+    it('should use aggregate quality counts when available', async () => {
       mockAggregateService.getQualityCountsFromAggregate.mockResolvedValueOnce({ good_count: 45, bad_count: 5, uncertain_count: 0 });
 
       const result = await service.getKpis();
 
-      expect(result.yield).toBeNull();
-      expect(result.telemetrySignalQuality.percent).toBe(90);
-      expect(result.oee.quality).toBeNull();
+      expect(result.yield).toBe(90);
       expect(mockAggregateService.getQualityCountsFromAggregate).toHaveBeenCalled();
     });
-
-    it('calculates OEE from machine counters received through telemetry', async () => {
-      const from = '2026-07-27T00:00:00.000Z';
-      const firstSample = '2026-07-27T08:00:00.000Z';
-      const to = '2026-07-27T08:00:10.000Z';
-      mockMachineRepo.find.mockResolvedValue([
-        {
-          id: 'machine-1',
-          resource_id: 71,
-          parent_resource_id: null,
-          status: MachineStatusEnum.ONLINE,
-          opcua_enabled: true,
-          routing_enabled: true,
-          last_heartbeat: new Date(to),
-        },
-      ]);
-      mockDowntimeRepo.createQueryBuilder.mockReturnValue({
-        select: jest.fn().mockReturnThis(),
-        addSelect: jest.fn().mockReturnThis(),
-        where: jest.fn().mockReturnThis(),
-        andWhere: jest.fn().mockReturnThis(),
-        getRawOne: jest.fn().mockResolvedValue({
-          total_minutes: 0,
-          event_count: 0,
-        }),
-      });
-      mockDataPointRepo.query.mockResolvedValueOnce([
-        {
-          machine_id: 'machine-1',
-          node_id: 'production.idealCycleTimeMs',
-          value: 1000,
-          quality: 'good',
-          timestamp: firstSample,
-        },
-        {
-          machine_id: 'machine-1',
-          node_id: 'production.goodCount',
-          value: 20,
-          quality: 'good',
-          timestamp: firstSample,
-        },
-        {
-          machine_id: 'machine-1',
-          node_id: 'production.goodCount',
-          value: 29,
-          quality: 'good',
-          timestamp: to,
-        },
-        {
-          machine_id: 'machine-1',
-          node_id: 'production.rejectCount',
-          value: 2,
-          quality: 'good',
-          timestamp: firstSample,
-        },
-        {
-          machine_id: 'machine-1',
-          node_id: 'production.rejectCount',
-          value: 3,
-          quality: 'good',
-          timestamp: to,
-        },
-      ]);
-
-      const result = await service.getKpis(from, to);
-
-      expect(result.oee).toMatchObject({
-        availability: 100,
-        performance: 100,
-        quality: 90,
-        total: 90,
-        available: true,
-        missingInputs: [],
-        productionCounts: { good: 9, reject: 1 },
-      });
-      expect(result.yield).toBe(90);
-    });
-
-    it('treats an old online heartbeat as offline and leaves availability unknown', async () => {
-      const to = '2026-07-27T08:00:00.000Z';
-      mockMachineRepo.find.mockResolvedValue([
-        {
-          id: 'machine-1',
-          resource_id: 70,
-          parent_resource_id: null,
-          status: MachineStatusEnum.ONLINE,
-          opcua_enabled: true,
-          routing_enabled: false,
-          last_heartbeat: new Date('2026-07-27T07:59:00.000Z'),
-        },
-        {
-          id: 'station-1',
-          resource_id: 71,
-          parent_resource_id: 70,
-          status: MachineStatusEnum.ONLINE,
-          opcua_enabled: true,
-          routing_enabled: true,
-          last_heartbeat: new Date('2026-07-27T07:59:00.000Z'),
-        },
-      ]);
-      mockDowntimeRepo.createQueryBuilder.mockReturnValue({
-        select: jest.fn().mockReturnThis(),
-        addSelect: jest.fn().mockReturnThis(),
-        where: jest.fn().mockReturnThis(),
-        andWhere: jest.fn().mockReturnThis(),
-        getRawOne: jest.fn().mockResolvedValue({
-          total_minutes: 0,
-          event_count: 0,
-        }),
-      });
-
-      const result = await service.getKpis(
-        '2026-07-27T00:00:00.000Z',
-        to,
-      );
-
-      expect(result.machines).toMatchObject({
-        total: 1,
-        connected: 0,
-        connectedResourceIds: [],
-        status: {
-          online: 0,
-          idle: 0,
-          error: 0,
-          maintenance: 0,
-          offline: 1,
-        },
-      });
-      expect(result.oee.availability).toBeNull();
-    });
-
-    it('uses a decreased cumulative counter as a new baseline after a reset', () => {
-      const counterDelta = (
-        service as unknown as {
-          counterDelta: (
-            samples: Array<{
-              machine_id: string;
-              node_id: string;
-              value: number;
-              timestamp: string;
-            }>,
-          ) => number;
-        }
-      ).counterDelta.bind(service);
-
-      expect(
-        counterDelta([
-          {
-            machine_id: 'machine-1',
-            node_id: 'production.goodCount',
-            value: 100,
-            timestamp: '2026-07-27T08:00:00.000Z',
-          },
-          {
-            machine_id: 'machine-1',
-            node_id: 'production.goodCount',
-            value: 104,
-            timestamp: '2026-07-27T08:01:00.000Z',
-          },
-          {
-            machine_id: 'machine-1',
-            node_id: 'production.goodCount',
-            value: 2,
-            timestamp: '2026-07-27T08:02:00.000Z',
-          },
-          {
-            machine_id: 'machine-1',
-            node_id: 'production.goodCount',
-            value: 5,
-            timestamp: '2026-07-27T08:03:00.000Z',
-          },
-        ]),
-      ).toBe(7);
-    });
-  });
-
-  it('preserves a measured downtime availability of zero percent', async () => {
-    jest
-      .spyOn(service as any, 'downtimeParetoByMachine')
-      .mockResolvedValue([
-        {
-          machine_id: 'machine-1',
-          machine_name: 'Press',
-          downtime_minutes: '60',
-          event_count: '1',
-          availability_pct: '0',
-        },
-      ]);
-
-    const result = await service.getDowntimePareto(
-      '2026-07-27T08:00:00.000Z',
-      '2026-07-27T09:00:00.000Z',
-    );
-
-    expect(result.data[0].availability_pct).toBe(0);
   });
 });

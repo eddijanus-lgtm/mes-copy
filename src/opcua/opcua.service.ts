@@ -1,298 +1,128 @@
-import {
-  BadGatewayException,
-  ForbiddenException,
-  Injectable,
-  Logger,
-  OnModuleDestroy,
-  OnModuleInit,
-  ServiceUnavailableException,
-} from '@nestjs/common';
+import { BadGatewayException, ForbiddenException, Injectable, Logger, OnModuleDestroy, OnModuleInit, ServiceUnavailableException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { readFileSync } from 'node:fs';
-import { MachineProfileService } from '../machines/profiles/machine-profile.service';
-import type {
-  MachineConnectionProfile,
-  MachineProfile,
-  MachineSignalProfile,
-  MachineStationProfile,
-} from '../machines/profiles/machine-profile.types';
 import { ShopfloorTelemetryEvent } from './shopfloor-telemetry';
-import { OpcUaDataQuality, opcUaDataQuality } from './opcua-data-quality';
 
 const nodeOpcua = require('node-opcua');
-
-export interface OpcUaConfiguredSignal {
-  readonly resourceId: number;
-  readonly key: string;
-  readonly role: MachineSignalProfile['role'];
-  readonly nodeId: string;
-  readonly dataType: MachineSignalProfile['dataType'];
-  readonly access: MachineSignalProfile['access'];
-  readonly direction: MachineSignalProfile['direction'];
-  readonly required: boolean;
-  readonly scaling?: MachineSignalProfile['scaling'];
-  readonly event?: MachineSignalProfile['event'];
-  readonly metadata?: MachineSignalProfile['metadata'];
-}
-
-interface OpcUaConfiguredStation {
-  readonly resourceId: number;
-  readonly stationId: string;
-  readonly displayName: string;
-  readonly runtimeKey: string;
-  readonly signals: ReadonlyMap<string, OpcUaConfiguredSignal>;
-}
-
-interface OpcUaRuntime {
-  readonly key: string;
-  readonly connection: MachineConnectionProfile;
-  readonly resourceIds: Set<number>;
-  client?: any;
-  session?: any;
-  connected: boolean;
-  connecting: boolean;
-  reconnectAttempts: number;
-  reconnectTimer?: NodeJS.Timeout;
-  pollingTimer?: NodeJS.Timeout;
-  polling: boolean;
-  subscription?: any;
-  monitoredItems: any[];
-}
 
 @Injectable()
 export class OpcUaService implements OnModuleInit, OnModuleDestroy {
   private client: any;
   private session: any;
+  private readonly stationConnections = new Map<number, { client: any; session: any; subscription?: any }>();
   private readonly logger = new Logger(OpcUaService.name);
   private connected = false;
+  private connecting = false;
   private shuttingDown = false;
+  private reconnectTimer?: NodeJS.Timeout;
+  private pollingTimer?: NodeJS.Timeout;
+  private polling = false;
+  private subscription: any;
+  private monitoredItems: any[] = [];
   private address = '';
-  private profile?: MachineProfile;
-  private stations: readonly OpcUaConfiguredStation[] = [];
-  private readonly telemetryCallbacks = new Set<
-    (event: ShopfloorTelemetryEvent) => void
-  >();
-  private readonly stMesCallbacks = new Set<
-    (resourceId: number, active: boolean) => void
-  >();
-  private readonly processCompletedCallbacks = new Set<
-    (resourceId: number, timestamp: Date) => void
-  >();
-  private readonly carrierInventoryChangedCallbacks = new Set<
-    (resourceId: number) => void
-  >();
+  private readonly telemetryCallbacks = new Set<(event: ShopfloorTelemetryEvent) => void>();
+  private readonly stMesCallbacks = new Set<(resourceId: number, active: boolean) => void>();
+  private readonly processCompletedCallbacks = new Set<(resourceId: number, timestamp: Date) => void>();
   private readonly connectedCallbacks = new Set<() => void>();
   private readonly disconnectedCallbacks = new Set<(reason: string) => void>();
-  private readonly lastCompletionTimestamp = new Map<number, number>();
-  private readonly lastMonitoredValues = new Map<string, unknown>();
-  private readonly runtimes = new Map<string, OpcUaRuntime>();
+  private readonly lastStMesStartState = new Map<number, boolean>();
 
-  constructor(
-    private readonly configService: ConfigService,
-    private readonly machineProfileService: MachineProfileService,
-  ) {}
+  constructor(private readonly configService: ConfigService) {}
 
   async onModuleInit() {
-    this.profile = this.machineProfileService.getProfile();
-    this.address = this.profile.connection.endpointUrl.trim();
-    this.stations = this.buildConfiguredStations(this.profile);
-    this.buildRuntimes(this.profile);
-    await Promise.all(
-      [...this.runtimes.values()].map((runtime) => this.connect(runtime)),
-    );
+    this.address = this.configService.get('OPC_UA_SERVER_ADDRESS', 'opc.tcp://localhost:4840/UA/WaraMesTest');
+    await this.connect();
+  }
+
+  private async connect() {
+    if (this.connecting || this.connected || this.shuttingDown) return;
+    this.connecting = true;
+
+    try {
+      for (const resourceId of this.resourceIds()) {
+        const client = nodeOpcua.OPCUAClient.create({
+          endpointMustExist: false,
+          connectionStrategy: { initialDelay: 500, maxDelay: 5000, maxRetry: 0 },
+        });
+        client.on('connection_lost', () => this.handleDisconnect(`station ${resourceId} connection lost`));
+        const address = this.configService.get(`OPC_UA_STATION_${resourceId}_ADDRESS`,
+          this.address.replace(/:(\d+)(\/|$)/, (_, port, suffix) => `:${Number(port) + resourceId - 1}${suffix}`));
+        await client.connect(address);
+        const session = await client.createSession();
+        this.stationConnections.set(resourceId, { client, session });
+      }
+      this.client = this.stationConnections.get(1)?.client;
+      this.session = this.stationConnections.get(1)?.session;
+      this.connected = true;
+      this.logger.log('Connected to OPC UA server at ' + this.address);
+      await this.startStMesSubscriptions();
+      this.startPolling();
+      for (const cb of this.connectedCallbacks) try { cb(); } catch (e) { this.logger.error('connected callback failed', e); }
+    } catch (error) {
+      this.connected = false;
+      this.logger.warn('OPC UA connection failed: ' + (error as Error).message);
+      await this.closeConnection();
+      this.scheduleReconnect();
+    } finally {
+      this.connecting = false;
+    }
   }
 
   async onModuleDestroy() {
     this.shuttingDown = true;
-    for (const runtime of this.runtimes.values()) {
-      if (runtime.reconnectTimer) clearTimeout(runtime.reconnectTimer);
-      if (runtime.pollingTimer) clearInterval(runtime.pollingTimer);
-    }
-    await Promise.all(
-      [...this.runtimes.values()].map((runtime) =>
-        this.closeConnection(runtime),
-      ),
-    );
+    if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
+    if (this.pollingTimer) clearInterval(this.pollingTimer);
+    await this.closeConnection();
   }
 
-  getConfiguredSignal(
-    resourceId: number,
-    signalKey: string,
-  ): OpcUaConfiguredSignal {
-    const station = this.stations.find(
-      (candidate) => candidate.resourceId === resourceId,
-    );
-    if (!station) {
-      throw new ServiceUnavailableException(
-        `No enabled profile station for resource ${resourceId}`,
-      );
-    }
-
-    const signal = station.signals.get(signalKey);
-    if (!signal) {
-      throw new ServiceUnavailableException(
-        `Signal ${signalKey} is not configured for resource ${resourceId}`,
-      );
-    }
-    if (!signal.nodeId) {
-      throw new ServiceUnavailableException(
-        `Signal ${signalKey} for resource ${resourceId} has not been resolved`,
-      );
-    }
-    return signal;
-  }
-
-  getConfiguredSignalByRole(
-    resourceId: number,
-    role: MachineSignalProfile['role'],
-  ): OpcUaConfiguredSignal {
-    const station = this.station(resourceId);
-    const matches = [...station.signals.values()].filter(
-      (signal) => signal.role === role,
-    );
-    if (matches.length !== 1) {
-      throw new ServiceUnavailableException(
-        `Expected exactly one ${role} signal for resource ${resourceId}, found ${matches.length}`,
-      );
-    }
-    return matches[0];
-  }
-
-  getConfiguredSignalsByRole(
-    resourceId: number,
-    role: MachineSignalProfile['role'],
-  ): readonly OpcUaConfiguredSignal[] {
-    return [...this.station(resourceId).signals.values()].filter(
-      (signal) => signal.role === role,
-    );
-  }
-
-  async readNode(resourceId: number, nodeId: string): Promise<any>;
-  async readNode(nodeId: string): Promise<any>;
-  async readNode(
-    resourceIdOrNodeId: number | string,
-    scopedNodeId?: string,
-  ): Promise<any> {
-    const resourceId =
-      typeof resourceIdOrNodeId === 'number'
-        ? resourceIdOrNodeId
-        : this.resourceForNode(resourceIdOrNodeId);
-    const nodeId =
-      typeof resourceIdOrNodeId === 'number'
-        ? scopedNodeId!
-        : resourceIdOrNodeId;
-    const dataValue = await this.readNodeDataValue(resourceId, nodeId);
-    return dataValue?.value?.value;
-  }
-
-  private async readNodeDataValue(
-    resourceId: number,
-    nodeId: string,
-  ): Promise<any> {
-    if (!this.isNodeAllowed(resourceId, nodeId)) {
+  async readNode(nodeId: string): Promise<any> {
+    const allowedPrefixes = this.configService.get('OPC_UA_ALLOWED_NODE_PREFIXES', 'ns=1;s=Station').split(',');
+    if (!allowedPrefixes.some((prefix) => nodeId.startsWith(prefix))) {
       throw new ForbiddenException('OPC UA node is not allowed');
     }
-    const runtime = this.runtimeForResource(resourceId);
-    const session = runtime?.session ?? this.session;
-    const connected = runtime ? runtime.connected : this.connected;
-    if (!session || !connected) {
-      throw new ServiceUnavailableException('OPC UA server is not connected');
-    }
+    if (!this.session || !this.connected) throw new ServiceUnavailableException('OPC UA server is not connected');
     try {
-      const dataValue = await session.readVariableValue(
-        nodeOpcua.resolveNodeId(nodeId),
-      );
-      return dataValue;
+      const dataValue = await this.sessionFor(nodeId).readVariableValue(nodeOpcua.resolveNodeId(nodeId));
+      return dataValue?.value?.value;
     } catch (error) {
-      throw new BadGatewayException(
-        'OPC UA read failed: ' + (error as Error).message,
-      );
+      throw new BadGatewayException('OPC UA read failed: ' + (error as Error).message);
     }
   }
 
-  async writeNodes(
-    nodes: Array<{
-      resourceId?: number;
-      nodeId: string;
-      dataType: string;
-      value: unknown;
-    }>,
-  ): Promise<void> {
-    if (this.profile?.operatingMode !== 'control') {
-      throw new ForbiddenException(
-        `OPC UA writes are disabled in ${this.profile?.operatingMode || 'unknown'} mode`,
-      );
-    }
-    const scopedNodes = nodes.map((node) => ({
-      ...node,
-      resourceId: node.resourceId ?? this.resourceForNode(node.nodeId),
-    }));
-    if (
-      scopedNodes.some(
-        (node) => !this.isNodeAllowed(node.resourceId, node.nodeId),
-      )
-    ) {
+  async writeNodes(nodes: Array<{ nodeId: string; dataType: string; value: unknown }>): Promise<void> {
+    if (!this.session || !this.connected) throw new ServiceUnavailableException('OPC UA server is not connected');
+    const allowedPrefixes = this.configService.get('OPC_UA_ALLOWED_NODE_PREFIXES', 'ns=1;s=Station').split(',');
+    if (nodes.some((node) => !allowedPrefixes.some((prefix) => node.nodeId.startsWith(prefix)))) {
       throw new ForbiddenException('OPC UA node is not allowed');
     }
-    const groups = new Map<any, typeof scopedNodes>();
-    for (const node of scopedNodes) {
-      const runtime = this.runtimeForResource(node.resourceId);
-      const session = runtime?.session ?? this.session;
-      const connected = runtime ? runtime.connected : this.connected;
-      if (!session || !connected) {
-        throw new ServiceUnavailableException('OPC UA server is not connected');
-      }
-      groups.set(session, [...(groups.get(session) || []), node]);
-    }
-    for (const [session, group] of groups) {
-      const writes = group.map((node) => ({
-        nodeId: node.nodeId,
-        attributeId: nodeOpcua.AttributeIds.Value,
-        value: {
-          value: new nodeOpcua.Variant({
-            dataType: nodeOpcua.DataType[node.dataType],
-            value: node.value,
-          }),
-        },
-      }));
-      const results = await session.write(writes);
+    nodes.forEach((node) => this.sessionFor(node.nodeId));
+    const writes = nodes.map((node) => ({
+      nodeId: node.nodeId,
+      attributeId: nodeOpcua.AttributeIds.Value,
+      value: { value: new nodeOpcua.Variant({ dataType: nodeOpcua.DataType[node.dataType], value: node.value }) },
+    }));
+    for (const [resourceId, connection] of this.stationConnections) {
+      const stationWrites = writes.filter((write) => write.nodeId.startsWith(`ns=1;s=Station${resourceId}.`));
+      if (!stationWrites.length) continue;
+      const results = await connection.session.write(stationWrites);
       const failed = results.find((statusCode) => !statusCode.isGood());
-      if (failed) {
-        throw new BadGatewayException(
-          'OPC UA write failed: ' + failed.toString(),
-        );
-      }
+      if (failed) throw new BadGatewayException('OPC UA write failed: ' + failed.toString());
     }
+  }
+
+  private sessionFor(nodeId: string): any {
+    const match = /^ns=1;s=Station(\d+)\./.exec(nodeId);
+    if (!match) throw new ForbiddenException('Unknown station node');
+    const session = this.stationConnections.get(Number(match[1]))?.session;
+    if (!session) throw new ServiceUnavailableException(`Station ${match[1]} is not connected`);
+    return session;
   }
 
   isConnected(): boolean {
-    return this.runtimes.size
-      ? [...this.runtimes.values()].some((runtime) => runtime.connected)
-      : this.connected;
+    return this.connected;
   }
 
-  async getServerStatus() {
-    return {
-      connected: this.isConnected(),
-      endpoint:
-        this.address || this.profile?.connection.endpointUrl.trim() || '',
-      machineId: this.profile?.machineId,
-      displayName: this.profile?.displayName,
-      operatingMode: this.profile?.operatingMode,
-      resultCodes: this.profile?.resultCodes || {},
-      stations: this.stations.map((station) => ({
-        resourceId: station.resourceId,
-        stationId: station.stationId,
-        displayName: station.displayName,
-        endpoint:
-          this.runtimeForResource(
-            station.resourceId,
-          )?.connection.endpointUrl.trim() || this.address,
-        connected:
-          this.runtimeForResource(station.resourceId)?.connected ??
-          this.connected,
-      })),
-    };
+  async getServerStatus(): Promise<any> {
+    return { connected: this.connected, endpoint: this.address };
   }
 
   onTelemetry(callback: (event: ShopfloorTelemetryEvent) => void): () => void {
@@ -300,25 +130,14 @@ export class OpcUaService implements OnModuleInit, OnModuleDestroy {
     return () => this.telemetryCallbacks.delete(callback);
   }
 
-  onStMesRequest(
-    callback: (resourceId: number, active: boolean) => void,
-  ): () => void {
+  onStMesRequest(callback: (resourceId: number, active: boolean) => void): () => void {
     this.stMesCallbacks.add(callback);
     return () => this.stMesCallbacks.delete(callback);
   }
 
-  onProcessCompleted(
-    callback: (resourceId: number, timestamp: Date) => void,
-  ): () => void {
+  onProcessCompleted(callback: (resourceId: number, timestamp: Date) => void): () => void {
     this.processCompletedCallbacks.add(callback);
     return () => this.processCompletedCallbacks.delete(callback);
-  }
-
-  onCarrierInventoryChanged(
-    callback: (resourceId: number) => void,
-  ): () => void {
-    this.carrierInventoryChangedCallbacks.add(callback);
-    return () => this.carrierInventoryChangedCallbacks.delete(callback);
   }
 
   onConnected(callback: () => void): () => void {
@@ -335,477 +154,67 @@ export class OpcUaService implements OnModuleInit, OnModuleDestroy {
     this.emitTelemetry({ kind: 'stmes.handshake', ...payload });
   }
 
-  private async connect(runtime: OpcUaRuntime) {
-    if (
-      runtime.connecting ||
-      runtime.connected ||
-      this.shuttingDown ||
-      !this.profile
-    ) {
-      return;
-    }
-    runtime.connecting = true;
+  private startPolling() {
+    if (this.pollingTimer) clearInterval(this.pollingTimer);
+    void this.pollTelemetry();
+    this.pollingTimer = setInterval(() => void this.pollTelemetry(), 1000);
+  }
 
+  private async pollTelemetry() {
+    if (this.polling || !this.connected || !this.session) return;
+    this.polling = true;
     try {
-      const reconnect = runtime.connection.reconnect;
-      const security = runtime.connection.security;
-      runtime.client = nodeOpcua.OPCUAClient.create({
-        applicationName: runtime.connection.applicationName,
-        endpointMustExist: false,
-        securityMode: nodeOpcua.MessageSecurityMode[security.mode],
-        securityPolicy: nodeOpcua.SecurityPolicy[security.policy],
-        ...(security.certificatePathEnv
-          ? {
-              certificateFile: this.requiredEnvironmentValue(
-                security.certificatePathEnv,
-              ),
-            }
-          : {}),
-        ...(security.privateKeyPathEnv
-          ? {
-              privateKeyFile: this.requiredEnvironmentValue(
-                security.privateKeyPathEnv,
-              ),
-            }
-          : {}),
-        connectionStrategy: {
-          initialDelay: reconnect.initialDelayMs,
-          maxDelay: reconnect.maximumDelayMs,
-          maxRetry: 0,
-        },
-        connectionTimeout: runtime.connection.connectionTimeoutMs,
-        requestedSessionTimeout: runtime.connection.sessionTimeoutMs,
-      });
-      runtime.client.on('connection_lost', () =>
-        this.handleDisconnect(runtime, 'connection lost'),
-      );
-
-      await runtime.client.connect(runtime.connection.endpointUrl.trim());
-      runtime.session = await runtime.client.createSession(
-        this.userIdentity(runtime.connection),
-      );
-      const resolved = await this.resolveConfiguredStations(
-        this.profile,
-        runtime,
-      );
-      this.stations = this.stations.map(
-        (station) =>
-          resolved.find(
-            (candidate) => candidate.resourceId === station.resourceId,
-          ) || station,
-      );
-      const wasConnected = this.isConnected();
-      runtime.connected = true;
-      runtime.reconnectAttempts = 0;
-      this.syncLegacyState();
-      this.logger.log(
-        `Connected to ${this.profile.machineId} at ${runtime.connection.endpointUrl.trim()} with ${runtime.resourceIds.size} station(s)`,
-      );
-      await this.startProfileSubscriptions(runtime);
-      this.startPolling(runtime);
-      if (!wasConnected) {
-        for (const callback of this.connectedCallbacks) {
-          try {
-            callback();
-          } catch (error) {
-            this.logger.error('connected callback failed', error);
-          }
-        }
-      }
-    } catch (error) {
-      runtime.connected = false;
-      this.syncLegacyState();
-      this.logger.warn(
-        `OPC UA connection to ${runtime.connection.endpointUrl.trim()} failed: ${(error as Error).message}`,
-      );
-      await this.closeConnection(runtime);
-      this.scheduleReconnect(runtime);
-    } finally {
-      runtime.connecting = false;
-    }
-  }
-
-  private buildRuntimes(profile: MachineProfile) {
-    this.runtimes.clear();
-    for (const station of profile.stations.filter(
-      (candidate) => candidate.enabled,
-    )) {
-      const resourceId = this.resourceId(station);
-      const connection = this.stationConnection(station) || profile.connection;
-      const key = this.stationConnection(station)
-        ? `station:${resourceId}`
-        : 'legacy';
-      let runtime = this.runtimes.get(key);
-      if (!runtime) {
-        runtime = {
-          key,
-          connection,
-          resourceIds: new Set(),
-          connected: false,
-          connecting: false,
-          reconnectAttempts: 0,
-          polling: false,
-          monitoredItems: [],
-        };
-        this.runtimes.set(key, runtime);
-      }
-      runtime.resourceIds.add(resourceId);
-    }
-  }
-
-  private buildConfiguredStations(
-    profile: MachineProfile,
-    namespaceIndexes?: ReadonlyMap<string, number>,
-  ): readonly OpcUaConfiguredStation[] {
-    return profile.stations
-      .filter((station) => station.enabled)
-      .map((station) => {
-        const resourceId = this.resourceId(station);
-        const signals = new Map<string, OpcUaConfiguredSignal>();
-        for (const signal of station.signals) {
-          if (signals.has(signal.key)) {
-            throw new Error(
-              `Duplicate signal key ${signal.key} in station ${station.stationId}`,
-            );
-          }
-          signals.set(signal.key, {
-            resourceId,
-            key: signal.key,
-            role: signal.role,
-            nodeId: this.resolveSignalNodeId(profile, signal, namespaceIndexes),
-            dataType: signal.dataType,
-            access: signal.access,
-            direction: signal.direction,
-            required: signal.required,
-            scaling: signal.scaling,
-            event: signal.event,
-            metadata: signal.metadata,
-          });
-        }
-        return {
-          resourceId,
-          stationId: station.stationId,
-          displayName: station.displayName,
-          runtimeKey: this.stationConnection(station)
-            ? `station:${resourceId}`
-            : 'legacy',
-          signals,
-        };
-      });
-  }
-
-  private async resolveConfiguredStations(
-    profile: MachineProfile,
-    runtime: OpcUaRuntime,
-  ): Promise<readonly OpcUaConfiguredStation[]> {
-    const runtimeStations = profile.stations.filter((station) =>
-      runtime.resourceIds.has(station.resourceId),
-    );
-    const requiresNamespaceResolution = runtimeStations.some((station) =>
-      station.signals.some(
-        (signal) => !signal.identifier.trim().startsWith('ns='),
-      ),
-    );
-    if (!requiresNamespaceResolution) {
-      return this.buildConfiguredStations({
-        ...profile,
-        stations: runtimeStations,
-      });
-    }
-
-    const namespaceValue = await runtime.session.readVariableValue('i=2255');
-    const namespaceArray = namespaceValue?.value?.value;
-    if (!Array.isArray(namespaceArray)) {
-      throw new Error('OPC UA NamespaceArray could not be read');
-    }
-    const namespaceIndexes = new Map<string, number>();
-    namespaceArray.forEach((uri: unknown, index: number) => {
-      if (typeof uri === 'string') namespaceIndexes.set(uri, index);
-    });
-    return this.buildConfiguredStations(
-      { ...profile, stations: runtimeStations },
-      namespaceIndexes,
-    );
-  }
-
-  private resolveSignalNodeId(
-    profile: MachineProfile,
-    signal: MachineSignalProfile,
-    namespaceIndexes?: ReadonlyMap<string, number>,
-  ): string {
-    const identifier = signal.identifier.trim();
-    if (identifier.startsWith('ns=')) return identifier;
-    if (!namespaceIndexes) return '';
-
-    const namespace = profile.namespaces.find(
-      (candidate) => candidate.key === signal.namespace,
-    );
-    if (!namespace) {
-      throw new Error(
-        `Unknown namespace key ${signal.namespace} for signal ${signal.key}`,
-      );
-    }
-    const namespaceIndex = namespaceIndexes.get(namespace.uri);
-    if (namespaceIndex === undefined) {
-      throw new Error(
-        `Namespace URI ${namespace.uri} is not exposed by the OPC UA server`,
-      );
-    }
-
-    const normalizedIdentifier = /^(s|i|g|b)=/.test(identifier)
-      ? identifier
-      : `s=${identifier}`;
-    return `ns=${namespaceIndex};${normalizedIdentifier}`;
-  }
-
-  private resourceId(station: MachineStationProfile): number {
-    const resourceId = station.resourceId;
-    if (!Number.isInteger(resourceId) || resourceId <= 0) {
-      throw new Error(
-        `Station ${station.stationId} requires a positive integer resourceId`,
-      );
-    }
-    return resourceId;
-  }
-
-  private isNodeAllowed(resourceId: number, nodeId: string): boolean {
-    return [...this.station(resourceId).signals.values()].some(
-      (signal) => signal.nodeId === nodeId,
-    );
-  }
-
-  private startPolling(runtime: OpcUaRuntime) {
-    if (runtime.pollingTimer) clearInterval(runtime.pollingTimer);
-    void this.pollTelemetry(runtime);
-    runtime.pollingTimer = setInterval(
-      () => void this.pollTelemetry(runtime),
-      1000,
-    );
-  }
-
-  private async pollTelemetry(runtime: OpcUaRuntime) {
-    if (runtime.polling || !runtime.connected || !runtime.session) return;
-    runtime.polling = true;
-    try {
-      for (const station of this.stations.filter(
-        (candidate) => candidate.runtimeKey === runtime.key,
-      )) {
-        const readableSignals = [...station.signals.values()].filter(
-          (signal) =>
-            signal.direction === 'machineToMes' &&
-            (signal.access === 'read' || signal.access === 'readWrite'),
-        );
-        const values: Array<[string, unknown]> = [];
-        const qualities: Array<[string, OpcUaDataQuality]> = [];
-        const signalErrors: Record<string, string> = {};
-        for (const signal of readableSignals) {
-          try {
-            const dataValue = await this.readNodeDataValue(
-              station.resourceId,
-              signal.nodeId,
-            );
-            const rawValue = dataValue?.value?.value;
-            values.push([signal.key, this.fromMachineValue(signal, rawValue)]);
-            qualities.push([
-              signal.key,
-              opcUaDataQuality(dataValue?.statusCode),
-            ]);
-          } catch (error) {
-            if (signal.required) throw error;
-            signalErrors[signal.key] = (error as Error).message;
-          }
-        }
+      for (const resourceId of this.resourceIds()) {
+        const prefix = `ns=1;s=Station${resourceId}.dbProcessData.`;
+        const queryPrefix = `ns=1;s=Station${resourceId}.stMES.Query.`;
+        const statePrefix = `ns=1;s=Station${resourceId}.stMES.State.`;
+        const qualityCounters = resourceId === 3
+          ? Promise.all([
+            this.readNode(`ns=1;s=Station${resourceId}.LineInfo.uiProducedCount`),
+            this.readNode(`ns=1;s=Station${resourceId}.LineInfo.uiFailedCount`),
+          ]).catch(() => [])
+          : Promise.resolve([]);
+        const [
+          iCarrierID, iStepNo, iResourceID, iPar1, iPar2, iPar3, iPar4, ldtTimeStamp,
+          xStart, xQryBusy, xDone, xError, uiCarrierId, uiResultCode, sOrderNo, uiOperationNo,
+          xAuto, xManual, xBusy, xReset, xErrL0, xErrL1, xErrL2,
+        ] = await Promise.all([
+          this.readNode(prefix + 'iCarrierID'), this.readNode(prefix + 'iStepNo'),
+          this.readNode(prefix + 'iResourceID'), this.readNode(prefix + 'iPar1'),
+          this.readNode(prefix + 'iPar2'), this.readNode(prefix + 'iPar3'),
+          this.readNode(prefix + 'iPar4'), this.readNode(prefix + 'ldtTimeStamp'),
+          this.readNode(queryPrefix + 'xStart'), this.readNode(queryPrefix + 'xQryBusy'),
+          this.readNode(queryPrefix + 'xDone'), this.readNode(queryPrefix + 'xError'),
+          this.readNode(queryPrefix + 'uiCarrierId'), this.readNode(queryPrefix + 'uiResultCode'),
+          this.readNode(queryPrefix + 'sOrderNo'), this.readNode(queryPrefix + 'uiOperationNo'),
+          this.readNode(statePrefix + 'xAuto'), this.readNode(statePrefix + 'xManual'),
+          this.readNode(statePrefix + 'xBusy'), this.readNode(statePrefix + 'xReset'),
+          this.readNode(statePrefix + 'xErrL0'), this.readNode(statePrefix + 'xErrL1'),
+          this.readNode(statePrefix + 'xErrL2'),
+        ]);
+        const [good, bad] = await qualityCounters;
         this.emitTelemetry({
-          kind: 'station.snapshot',
-          resourceId: station.resourceId,
-          stationId: station.stationId,
-          displayName: station.displayName,
-          signals: Object.fromEntries(values),
-          signalQualities: Object.fromEntries(qualities),
-          roles: Object.fromEntries(
-            readableSignals
-              .filter(
-                (signal) =>
-                  signal.role !== 'custom' &&
-                  signal.role !== 'routingParameter',
-              )
-              .map((signal) => [
-                signal.role,
-                values.find(([key]) => key === signal.key)?.[1],
-              ]),
-          ),
-          roleQualities: Object.fromEntries(
-            readableSignals
-              .filter(
-                (signal) =>
-                  signal.role !== 'custom' &&
-                  signal.role !== 'routingParameter',
-              )
-              .map((signal) => [
-                signal.role,
-                qualities.find(([key]) => key === signal.key)?.[1] ??
-                  'uncertain',
-              ]),
-          ),
-          ...(Object.keys(signalErrors).length ? { signalErrors } : {}),
+          kind: 'station.snapshot', resourceId, dbNumber: 151,
+          iCarrierID, iStepNo, iResourceID, iPar1, iPar2, iPar3, iPar4, ldtTimeStamp,
+          ...(Number.isSafeInteger(good) && Number.isSafeInteger(bad) ? { qualityCounts: { good, bad } } : {}),
+          state: { xAuto, xManual, xBusy, xReset, xErrL0, xErrL1, xErrL2 },
+          handshake: { xStart, xQryBusy, xDone, xError, uiCarrierId, uiResultCode, sOrderNo, uiOperationNo },
         });
+
+        const active = Boolean(xStart);
+        const wasActive = this.lastStMesStartState.get(resourceId);
+        if (active && !wasActive) {
+          for (const callback of this.stMesCallbacks) callback(resourceId, true);
+        } else if (!active && wasActive) {
+          for (const callback of this.stMesCallbacks) callback(resourceId, false);
+        }
+        this.lastStMesStartState.set(resourceId, active);
       }
     } catch (error) {
-      this.logger.warn(
-        'OPC UA telemetry read failed: ' + (error as Error).message,
-      );
-      this.handleDisconnect(runtime, 'telemetry read failed');
+      this.logger.warn('OPC UA telemetry read failed: ' + (error as Error).message);
+      this.handleDisconnect('telemetry read failed');
     } finally {
-      runtime.polling = false;
-    }
-  }
-
-  private async startProfileSubscriptions(runtime: OpcUaRuntime) {
-    const subscriptions = this.stations
-      .filter((station) => station.runtimeKey === runtime.key)
-      .flatMap((station) => {
-        const workRequest = [...station.signals.values()].find(
-          (signal) => signal.role === 'workRequest',
-        );
-        const processCompleted = [...station.signals.values()].find(
-          (signal) => signal.role === 'processCompleted',
-        );
-        const inventoryRevision = [...station.signals.values()].find(
-          (signal) => signal.role === 'inventoryRevision',
-        );
-        return [
-          ...(workRequest
-            ? [{ station, signal: workRequest, type: 'workRequest' as const }]
-            : []),
-          ...(processCompleted
-            ? [
-                {
-                  station,
-                  signal: processCompleted,
-                  type: 'processCompleted' as const,
-                },
-              ]
-            : []),
-          ...(inventoryRevision
-            ? [
-                {
-                  station,
-                  signal: inventoryRevision,
-                  type: 'inventoryRevision' as const,
-                },
-              ]
-            : []),
-        ];
-      });
-    if (subscriptions.length === 0) return;
-
-    runtime.subscription = await runtime.session.createSubscription2({
-      requestedPublishingInterval: 250,
-      requestedLifetimeCount: 120,
-      requestedMaxKeepAliveCount: 10,
-      maxNotificationsPerPublish: Math.max(20, subscriptions.length * 2),
-      publishingEnabled: true,
-      priority: 10,
-    });
-
-    for (const entry of subscriptions) {
-      const item = nodeOpcua.ClientMonitoredItem.create(
-        runtime.subscription,
-        {
-          nodeId: entry.signal.nodeId,
-          attributeId: nodeOpcua.AttributeIds.Value,
-        },
-        { samplingInterval: 100, discardOldest: true, queueSize: 10 },
-        nodeOpcua.TimestampsToReturn.Both,
-      );
-      item.on('changed', (dataValue) => {
-        const monitorKey = `${entry.station.resourceId}:${entry.signal.key}`;
-        const rawValue = dataValue?.value?.value;
-        const previousValue = this.lastMonitoredValues.get(monitorKey);
-        this.lastMonitoredValues.set(monitorKey, rawValue);
-        if (entry.type === 'workRequest') {
-          const active = Boolean(rawValue);
-          if (
-            previousValue === undefined
-              ? !active
-              : !this.triggerMatches(
-                  entry.signal.event?.trigger || 'change',
-                  Boolean(previousValue),
-                  active,
-                )
-          ) {
-            return;
-          }
-          for (const callback of this.stMesCallbacks) {
-            callback(entry.station.resourceId, active);
-          }
-          return;
-        }
-
-        if (entry.type === 'inventoryRevision') {
-          if (
-            previousValue !== undefined &&
-            Object.is(previousValue, rawValue)
-          ) {
-            return;
-          }
-          for (const callback of this.carrierInventoryChangedCallbacks) {
-            callback(entry.station.resourceId);
-          }
-          return;
-        }
-
-        if (entry.signal.dataType === 'Boolean') {
-          if (
-            !this.triggerMatches(
-              entry.signal.event?.trigger || 'rising',
-              Boolean(previousValue),
-              Boolean(rawValue),
-            )
-          ) {
-            return;
-          }
-          const eventTimestamp =
-            dataValue?.sourceTimestamp ||
-            dataValue?.serverTimestamp ||
-            new Date();
-          for (const callback of this.processCompletedCallbacks) {
-            callback(entry.station.resourceId, new Date(eventTimestamp));
-          }
-          return;
-        }
-
-        const timestamp = new Date(rawValue);
-        const timestampMs = timestamp.getTime();
-        if (
-          !Number.isFinite(timestampMs) ||
-          timestamp.getUTCFullYear() <= 1970 ||
-          this.lastCompletionTimestamp.get(entry.station.resourceId) ===
-            timestampMs
-        ) {
-          return;
-        }
-        this.lastCompletionTimestamp.set(entry.station.resourceId, timestampMs);
-        for (const callback of this.processCompletedCallbacks) {
-          callback(entry.station.resourceId, timestamp);
-        }
-      });
-      item.on('err', (error) =>
-        this.logger.error(
-          `${entry.type} monitor error for resource ${entry.station.resourceId}: ${error.message}`,
-        ),
-      );
-      runtime.monitoredItems.push(item);
-    }
-
-    for (const resourceId of new Set(
-      subscriptions
-        .filter((entry) => entry.type === 'inventoryRevision')
-        .map((entry) => entry.station.resourceId),
-    )) {
-      for (const callback of this.carrierInventoryChangedCallbacks) {
-        callback(resourceId);
-      }
+      this.polling = false;
     }
   }
 
@@ -817,217 +226,84 @@ export class OpcUaService implements OnModuleInit, OnModuleDestroy {
       payload,
     };
     for (const callback of this.telemetryCallbacks) {
-      try {
-        callback(event);
-      } catch (error) {
-        this.logger.error('OPC UA telemetry callback failed', error);
-      }
+      try { callback(event); } catch (error) { this.logger.error('OPC UA telemetry callback failed', error); }
     }
   }
 
-  private handleDisconnect(runtime: OpcUaRuntime, reason: string) {
-    if (!runtime.connected && !runtime.session) return;
-    this.logger.warn(
-      `OPC UA disconnected from ${runtime.connection.endpointUrl.trim()}: ${reason}`,
-    );
-    runtime.connected = false;
-    if (runtime.pollingTimer) clearInterval(runtime.pollingTimer);
-    runtime.pollingTimer = undefined;
-    this.syncLegacyState();
-    if (!this.isConnected()) {
-      for (const callback of this.disconnectedCallbacks) {
-        try {
-          callback(reason);
-        } catch (error) {
-          this.logger.error('disconnected callback failed', error);
-        }
-      }
-    }
-    void this.closeConnection(runtime).finally(() =>
-      this.scheduleReconnect(runtime),
-    );
+  private handleDisconnect(reason: string) {
+    if (!this.connected && !this.session) return;
+    this.logger.warn('OPC UA disconnected: ' + reason);
+    for (const cb of this.disconnectedCallbacks) try { cb(reason); } catch (e) { this.logger.error('disconnected callback failed', e); }
+    this.connected = false;
+    if (this.pollingTimer) clearInterval(this.pollingTimer);
+    this.pollingTimer = undefined;
+    void this.closeConnection().finally(() => this.scheduleReconnect());
   }
 
-  private scheduleReconnect(runtime: OpcUaRuntime) {
-    if (
-      this.shuttingDown ||
-      runtime.reconnectTimer ||
-      !runtime.connection.reconnect.enabled
-    ) {
-      return;
+  private scheduleReconnect() {
+    if (this.shuttingDown || this.reconnectTimer) return;
+    this.reconnectTimer = setTimeout(() => {
+      this.reconnectTimer = undefined;
+      void this.connect();
+    }, 5000);
+  }
+
+  private async closeConnection() {
+    const connections = [...this.stationConnections.values()];
+    this.stationConnections.clear();
+    this.session = null;
+    this.client = null;
+    this.monitoredItems = [];
+    for (const connection of connections) {
+      try { if (connection.subscription) await connection.subscription.terminate(); } catch (error) { this.logger.warn('OPC UA subscription close failed', error); }
+      try { await connection.session.close(); } catch (error) { this.logger.warn('OPC UA session close failed', error); }
+      try { await connection.client.disconnect(); } catch (error) { this.logger.warn('OPC UA disconnect failed', error); }
     }
-    const reconnect = runtime.connection.reconnect;
-    if (
-      reconnect.maxAttempts !== undefined &&
-      reconnect.maxAttempts > 0 &&
-      runtime.reconnectAttempts >= reconnect.maxAttempts
-    ) {
-      this.logger.error(
-        `Reconnect limit ${reconnect.maxAttempts} reached for ${runtime.connection.endpointUrl.trim()}`,
+    this.subscription = null;
+  }
+
+  private async startStMesSubscriptions() {
+    for (const resourceId of this.resourceIds()) {
+      const subscription = await this.stationConnections.get(resourceId)!.session.createSubscription2({
+        requestedPublishingInterval: 250,
+        requestedLifetimeCount: 120,
+        requestedMaxKeepAliveCount: 10,
+        maxNotificationsPerPublish: 20,
+        publishingEnabled: true,
+        priority: 10,
+      });
+      this.stationConnections.get(resourceId)!.subscription = subscription;
+      const item = nodeOpcua.ClientMonitoredItem.create(
+        subscription,
+        { nodeId: `ns=1;s=Station${resourceId}.stMES.Query.xStart`, attributeId: nodeOpcua.AttributeIds.Value },
+        { samplingInterval: 100, discardOldest: true, queueSize: 10 },
+        nodeOpcua.TimestampsToReturn.Both,
       );
-      return;
-    }
-    const delay = Math.min(
-      reconnect.maximumDelayMs,
-      reconnect.initialDelayMs *
-        reconnect.backoffMultiplier ** runtime.reconnectAttempts,
-    );
-    runtime.reconnectAttempts += 1;
-    runtime.reconnectTimer = setTimeout(() => {
-      runtime.reconnectTimer = undefined;
-      void this.connect(runtime);
-    }, delay);
-  }
+      item.on('changed', (dataValue) => {
+        const active = Boolean(dataValue?.value?.value);
+        this.lastStMesStartState.set(resourceId, active);
+        for (const callback of this.stMesCallbacks) callback(resourceId, active);
+      });
+      item.on('err', (error) => this.logger.error(`stMES monitor error for resource ${resourceId}: ${error.message}`));
+      this.monitoredItems.push(item);
 
-  private station(resourceId: number): OpcUaConfiguredStation {
-    const station = this.stations.find(
-      (candidate) => candidate.resourceId === resourceId,
-    );
-    if (!station) {
-      throw new ServiceUnavailableException(
-        `No enabled profile station for resource ${resourceId}`,
+      const completionItem = nodeOpcua.ClientMonitoredItem.create(
+        subscription,
+        { nodeId: `ns=1;s=Station${resourceId}.dbProcessData.ldtTimeStamp`, attributeId: nodeOpcua.AttributeIds.Value },
+        { samplingInterval: 100, discardOldest: true, queueSize: 10 },
+        nodeOpcua.TimestampsToReturn.Both,
       );
+      completionItem.on('changed', (dataValue) => {
+        const timestamp = new Date(dataValue?.value?.value);
+        if (timestamp.getUTCFullYear() <= 1970) return;
+        for (const callback of this.processCompletedCallbacks) callback(resourceId, timestamp);
+      });
+      completionItem.on('err', (error) => this.logger.error(`DB151 completion monitor error for resource ${resourceId}: ${error.message}`));
+      this.monitoredItems.push(completionItem);
     }
-    return station;
   }
 
-  private stationConnection(
-    station: MachineStationProfile,
-  ): MachineConnectionProfile | undefined {
-    return (
-      station as MachineStationProfile & {
-        readonly connection?: MachineConnectionProfile;
-      }
-    ).connection;
-  }
-
-  private runtimeForResource(resourceId: number): OpcUaRuntime | undefined {
-    const station = this.stations.find(
-      (candidate) => candidate.resourceId === resourceId,
-    );
-    return station ? this.runtimes.get(station.runtimeKey) : undefined;
-  }
-
-  private resourceForNode(nodeId: string): number {
-    const resourceIds = this.stations
-      .filter((station) =>
-        [...station.signals.values()].some(
-          (signal) => signal.nodeId === nodeId,
-        ),
-      )
-      .map((station) => station.resourceId);
-    if (resourceIds.length !== 1) {
-      if (resourceIds.length === 0) {
-        throw new ForbiddenException('OPC UA node is not allowed');
-      }
-      throw new ServiceUnavailableException(
-        'OPC UA node is configured for multiple resources; resourceId is required',
-      );
-    }
-    return resourceIds[0];
-  }
-
-  private syncLegacyState() {
-    const legacy = this.runtimes.get('legacy');
-    this.client = legacy?.client;
-    this.session = legacy?.session;
-    this.connected = this.runtimes.size
-      ? [...this.runtimes.values()].some((runtime) => runtime.connected)
-      : this.connected;
-  }
-
-  private requiredEnvironmentValue(name: string): string {
-    const value = this.configService.get<string>(name)?.trim();
-    if (!value) {
-      throw new Error(
-        `Required OPC UA environment variable ${name} is missing`,
-      );
-    }
-    return value;
-  }
-
-  private userIdentity(connection: MachineConnectionProfile): unknown {
-    const authentication = connection.authentication;
-    if (authentication.type === 'anonymous') return undefined;
-    if (authentication.type === 'username') {
-      if (!authentication.usernameEnv || !authentication.passwordEnv) {
-        throw new Error(
-          'Username authentication requires usernameEnv and passwordEnv',
-        );
-      }
-      return {
-        type: nodeOpcua.UserTokenType.UserName,
-        userName: this.requiredEnvironmentValue(authentication.usernameEnv),
-        password: this.requiredEnvironmentValue(authentication.passwordEnv),
-      };
-    }
-    if (!authentication.certificatePathEnv) {
-      throw new Error('Certificate authentication requires certificatePathEnv');
-    }
-    const certificatePath = this.requiredEnvironmentValue(
-      authentication.certificatePathEnv,
-    );
-    const privateKeyEnv = connection.security.privateKeyPathEnv;
-    if (!privateKeyEnv) {
-      throw new Error(
-        'Certificate authentication requires security.privateKeyPathEnv',
-      );
-    }
-    return {
-      type: nodeOpcua.UserTokenType.Certificate,
-      certificateData: readFileSync(certificatePath),
-      privateKey: readFileSync(
-        this.requiredEnvironmentValue(privateKeyEnv),
-        'utf8',
-      ),
-    };
-  }
-
-  private fromMachineValue(
-    signal: OpcUaConfiguredSignal,
-    value: unknown,
-  ): unknown {
-    if (!signal.scaling || typeof value !== 'number') return value;
-    return value * signal.scaling.factor + signal.scaling.offset;
-  }
-
-  private triggerMatches(
-    trigger: 'change' | 'rising' | 'falling',
-    previous: boolean,
-    current: boolean,
-  ): boolean {
-    if (trigger === 'rising') return !previous && current;
-    if (trigger === 'falling') return previous && !current;
-    return previous !== current;
-  }
-
-  private async closeConnection(runtime: OpcUaRuntime) {
-    const session = runtime.session;
-    const client = runtime.client;
-    runtime.session = undefined;
-    runtime.client = undefined;
-    runtime.connected = false;
-    runtime.monitoredItems = [];
-    try {
-      if (runtime.subscription) await runtime.subscription.terminate();
-    } catch (error) {
-      this.logger.warn(
-        'OPC UA subscription close failed: ' + (error as Error).message,
-      );
-    }
-    runtime.subscription = undefined;
-    try {
-      if (session) await session.close();
-    } catch (error) {
-      this.logger.warn(
-        'OPC UA session close failed: ' + (error as Error).message,
-      );
-    }
-    try {
-      if (client) await client.disconnect();
-    } catch (error) {
-      this.logger.warn('OPC UA disconnect failed: ' + (error as Error).message);
-    }
-    this.syncLegacyState();
+  private resourceIds(): number[] {
+    return this.configService.get('OPC_UA_DEMO_RESOURCE_IDS', '1,2,3').split(',').map(Number).filter(Number.isInteger);
   }
 }

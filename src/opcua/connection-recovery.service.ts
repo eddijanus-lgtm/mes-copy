@@ -1,8 +1,7 @@
-import { Injectable, Logger, OnModuleInit, Inject } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { MACHINE_ADAPTER } from '../machines/adapters/machine-adapter.token';
-import type { MachineAdapter, MachineRecoverySnapshot, MachineStationDescriptor } from '../machines/adapters/machine-adapter.types';
+import { OpcUaService } from './opcua.service';
 import { AlarmsService } from '../alarms/alarms.service';
 import { OrderEntity } from '../orders/order.entity';
 import { OrderRouteStepEntity } from '../orders/order-route-step.entity';
@@ -14,7 +13,7 @@ export class ConnectionRecoveryService implements OnModuleInit {
   private hadActiveOrders = false;
 
   constructor(
-    @Inject(MACHINE_ADAPTER) private readonly machine: MachineAdapter,
+    private readonly opcUa: OpcUaService,
     private readonly alarms: AlarmsService,
     @InjectRepository(OrderEntity) private readonly ordersRepo: Repository<OrderEntity>,
     @InjectRepository(CarrierEntity) private readonly carriersRepo: Repository<CarrierEntity>,
@@ -22,8 +21,8 @@ export class ConnectionRecoveryService implements OnModuleInit {
   ) {}
 
   async onModuleInit() {
-    this.machine.onDisconnected((reason) => void this.handleDisconnect(reason));
-    this.machine.onConnected(() => void this.handleReconnect());
+    this.opcUa.onDisconnected((reason) => void this.handleDisconnect(reason));
+    this.opcUa.onConnected(() => void this.handleReconnect());
 
     await this.recoverFromStartup();
   }
@@ -37,7 +36,7 @@ export class ConnectionRecoveryService implements OnModuleInit {
       this.logger.warn(msg);
       await this.alarms.create({
         severity: 'critical',
-        machine_id: await this.machineId(),
+        machine_id: 'opcua',
         message: msg,
         source: 'ConnectionRecoveryService',
       });
@@ -51,7 +50,7 @@ export class ConnectionRecoveryService implements OnModuleInit {
     this.logger.log('OPC UA wieder verbunden – prüfe Aufträge und Carrier');
     await this.alarms.create({
       severity: 'info',
-      machine_id: await this.machineId(),
+      machine_id: 'opcua',
       message: 'OPC UA Verbindung wiederhergestellt – Recovery läuft',
       source: 'ConnectionRecoveryService',
     });
@@ -60,15 +59,13 @@ export class ConnectionRecoveryService implements OnModuleInit {
   }
 
   private async recoverFromStartup() {
-    await this.releaseCarriersWithoutActiveOrder();
-
     const activeOrders = await this.ordersRepo.count({ where: { status: 'in_progress' } });
     if (activeOrders === 0) return;
 
     this.logger.log(`Startup: ${activeOrders} aktive/r Auftrag/aufträge gefunden – Recovery gestartet`);
     await this.alarms.create({
       severity: 'warning',
-      machine_id: await this.machineId(),
+      machine_id: 'opcua',
       message: `Backend-Neustart bei ${activeOrders} aktivem/n Auftrag/aufträgen – Recovery wird durchgeführt`,
       source: 'ConnectionRecoveryService',
     });
@@ -77,20 +74,22 @@ export class ConnectionRecoveryService implements OnModuleInit {
   }
 
   private async recoverStations() {
-    await this.releaseCarriersWithoutActiveOrder();
-
-    const resourceIds = this.machine
-      .getStations()
-      .filter((station: MachineStationDescriptor) => station.enabled)
-      .map((station: MachineStationDescriptor) => station.resourceId);
+    const resourceIds = [1, 2, 3];
     const stationCarriers: Array<{ resourceId: number; carrierNumber: number }> = [];
 
     for (const resourceId of resourceIds) {
       try {
-        const snapshot: MachineRecoverySnapshot = await this.machine.readRecoverySnapshot(resourceId);
-        const { carrierNumber, requestActive, processBusy } = snapshot;
+        const carrierNumber = Number(await this.opcUa.readNode(
+          `ns=1;s=Station${resourceId}.stMES.Query.uiCarrierId`,
+        ));
+        const xStart = Boolean(await this.opcUa.readNode(
+          `ns=1;s=Station${resourceId}.stMES.Query.xStart`,
+        ));
+        const xBusy = Boolean(await this.opcUa.readNode(
+          `ns=1;s=Station${resourceId}.stMES.State.xBusy`,
+        ));
 
-        if (carrierNumber > 0 && (requestActive || processBusy)) {
+        if (carrierNumber > 0 && (xStart || xBusy)) {
           stationCarriers.push({ resourceId, carrierNumber });
         }
       } catch (err) {
@@ -109,23 +108,11 @@ export class ConnectionRecoveryService implements OnModuleInit {
       const found = stationCarriers.find((sc) => sc.carrierNumber === carrier.carrier_number);
 
       if (found) {
-        const route = carrier.order_id
-          ? await this.routeStepsRepo.find({
-              where: { order_id: carrier.order_id },
-              order: { step_no: 'ASC' },
+        const stepForStation = carrier.order_id
+          ? await this.routeStepsRepo.findOne({
+              where: { order_id: carrier.order_id, resource_id: found.resourceId },
             })
-          : [];
-        const stepForStation =
-          route.find(
-            (step) =>
-              step.step_no === carrier.current_step_no &&
-              step.resource_id === found.resourceId,
-          ) ||
-          route.find(
-            (step) =>
-              step.step_no >= (carrier.current_step_no ?? 0) &&
-              step.resource_id === found.resourceId,
-          );
+          : null;
         if (stepForStation && carrier.current_step_no !== stepForStation.step_no) {
           this.logger.log(
             `Carrier ${carrier.carrier_number} an Station ${found.resourceId}, korrigiere step ${carrier.current_step_no} -> ${stepForStation.step_no}`,
@@ -145,16 +132,11 @@ export class ConnectionRecoveryService implements OnModuleInit {
           : null;
 
         if (orderActive) {
-          const firstStep = await this.routeStepsRepo.findOne({
-            where: { order_id: orderActive.id },
-            order: { step_no: 'ASC' },
-          });
-          if (!firstStep) continue;
           this.logger.log(
-            `Carrier ${carrier.carrier_number} hängt (${carrier.status} step=${carrier.current_step_no}), setze zurück auf assigned step=${firstStep.step_no} für Auftrag ${orderActive.name}`,
+            `Carrier ${carrier.carrier_number} hängt (${carrier.status} step=${carrier.current_step_no}), setze zurück auf assigned step=1 für Auftrag ${orderActive.name}`,
           );
           carrier.status = CarrierStatusEnum.ASSIGNED;
-          carrier.current_step_no = firstStep.step_no;
+          carrier.current_step_no = 1;
           carrier.current_resource_id = null;
           await this.carriersRepo.save(carrier);
         } else {
@@ -163,7 +145,7 @@ export class ConnectionRecoveryService implements OnModuleInit {
           );
           carrier.status = CarrierStatusEnum.AVAILABLE;
           carrier.order_id = null;
-          carrier.current_step_no = null;
+          carrier.current_step_no = 1;
           carrier.current_resource_id = null;
           await this.carriersRepo.save(carrier);
         }
@@ -180,59 +162,9 @@ export class ConnectionRecoveryService implements OnModuleInit {
 
     await this.alarms.create({
       severity: 'info',
-      machine_id: await this.machineId(),
+      machine_id: 'opcua',
       message: `Recovery abgeschlossen: ${stuckCarriers.length} Carrier geprüft, ${stationCarriers.length} aktiv an Stationen`,
       source: 'ConnectionRecoveryService',
     });
-  }
-
-  private async releaseCarriersWithoutActiveOrder() {
-    const availableCarriers = await this.carriersRepo.find({
-      where: { status: CarrierStatusEnum.AVAILABLE },
-    });
-    for (const carrier of availableCarriers) {
-      if (
-        carrier.order_id == null &&
-        carrier.current_step_no == null &&
-        carrier.current_resource_id == null
-      ) {
-        continue;
-      }
-      carrier.order_id = null;
-      carrier.current_step_no = null;
-      carrier.current_resource_id = null;
-      await this.carriersRepo.save(carrier);
-    }
-
-    const assignedCarriers = await this.carriersRepo.find({
-      where: [
-        { status: CarrierStatusEnum.IN_PROCESS },
-        { status: CarrierStatusEnum.ASSIGNED },
-        { status: CarrierStatusEnum.COMPLETED },
-      ],
-    });
-
-    for (const carrier of assignedCarriers) {
-      if (!carrier.order_id) continue;
-
-      const activeOrder = await this.ordersRepo.findOne({
-        where: { id: carrier.order_id, status: 'in_progress' },
-      });
-      if (activeOrder) continue;
-
-      this.logger.log(
-        `Carrier ${carrier.carrier_number} gehört zu keinem aktiven Auftrag mehr, setze auf available`,
-      );
-      carrier.status = CarrierStatusEnum.AVAILABLE;
-      carrier.order_id = null;
-      carrier.current_step_no = null;
-      carrier.current_resource_id = null;
-      await this.carriersRepo.save(carrier);
-    }
-  }
-
-  private async machineId(): Promise<string> {
-    const status = await this.machine.getConnectionStatus();
-    return status.machineId || 'machine-adapter';
   }
 }

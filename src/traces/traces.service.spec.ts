@@ -1,7 +1,8 @@
 import { NotFoundException } from '@nestjs/common';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { Test, TestingModule } from '@nestjs/testing';
-import { Repository } from 'typeorm';
+import { Between } from 'typeorm';
+import { DataPointEntity } from '../data-collection/data-point.entity';
 import { TraceEntity } from './trace.entity';
 import { TracesService } from './traces.service';
 
@@ -17,6 +18,7 @@ describe('TracesService', () => {
     count: jest.fn(),
     createQueryBuilder: jest.fn(),
   };
+  const dataPointsRepo = { find: jest.fn() };
 
   beforeEach(async () => {
     jest.clearAllMocks();
@@ -24,6 +26,7 @@ describe('TracesService', () => {
       providers: [
         TracesService,
         { provide: getRepositoryToken(TraceEntity), useValue: tracesRepo },
+        { provide: getRepositoryToken(DataPointEntity), useValue: dataPointsRepo },
       ],
     }).compile();
     service = module.get(TracesService);
@@ -53,13 +56,47 @@ describe('TracesService', () => {
   describe('findAllWithFilters', () => {
     it('filters by all criteria', async () => {
       const mockQb: any = { where: jest.fn().mockReturnThis(), andWhere: jest.fn().mockReturnThis() };
-      let chainCallCount = 0;
       mockQb.orderBy = jest.fn().mockImplementation(() => ({
         limit: jest.fn().mockImplementation(() => ({ getMany: jest.fn().mockResolvedValue([]) })),
       }));
       tracesRepo.createQueryBuilder.mockReturnValue(mockQb);
       await service.findAllWithFilters({ machine_id: 'm1' as any, category: 'process_data' as any, key_data_point: 'temp', min_value: 0, max_value: 100 } as any);
       expect(mockQb.where).toHaveBeenCalled();
+    });
+
+    it('merges filtered measurement history with stored traces by timestamp', async () => {
+      const storedTrace = { ...trace1, collected_at: new Date('2026-11-19T11:00:00Z') };
+      const timestamp = new Date('2026-11-19T12:00:00Z');
+      tracesRepo.createQueryBuilder.mockReturnValue({
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        orderBy: jest.fn().mockReturnThis(),
+        limit: jest.fn().mockReturnThis(),
+        getMany: jest.fn().mockResolvedValue([storedTrace]),
+      });
+      dataPointsRepo.find.mockResolvedValue([
+        { id: 'dp1', machine_id: 'm1', node_id: 'temperature', value: 85.25, quality: 'good', timestamp },
+      ]);
+
+      const result = await service.findAllWithFilters({
+        include_data_points: 'true',
+        machine_id: 'm1',
+        category: 'process_data',
+        key_data_point: 'temperature',
+        min_value: 70.5,
+        max_value: 90.5,
+      });
+
+      expect(dataPointsRepo.find).toHaveBeenCalledWith({
+        where: { machine_id: 'm1', node_id: 'temperature', value: Between(70.5, 90.5) },
+        order: { timestamp: 'DESC' },
+        take: 500,
+      });
+      expect(result).toEqual([
+        { id: 'dp1', machine_id: 'm1', key_data_point: 'temperature', category: 'process_data',
+          value: 85.25, tags: { quality: 'good' }, collected_at: timestamp },
+        storedTrace,
+      ]);
     });
   });
 

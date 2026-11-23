@@ -56,9 +56,3 @@ export class ResumeMachineDto {
   @IsString()
   notes?: string;
 }
-
-export class ResumeMachineBodyDto {
-  @IsOptional()
-  @IsString()
-  notes?: string;
-}

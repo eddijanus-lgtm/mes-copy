@@ -44,7 +44,18 @@ $ npm run start:dev
 $ npm run start:prod
 ```
 
-## Run tests
+## MES mit simulierter Maschine betreiben
+
+Der Simulator läuft als eigener OPC-UA-Server. Das MES verwendet seinen regulären OPC-UA-Client für Stationszustände, Auftragsparameter, Steuerbefehle und Fertigmeldungen. Die Linie besteht aus Deckelzuführung, Kugeldosierung und Endkontrolle.
+
+1. In der lokalen `.env` `OPC_UA_DEMO_RESOURCE_IDS=1,2,3` setzen. Die drei Stationen haben eigene OPC-UA-Endpunkte auf Port 4840, 4841 und 4842. Das MES verwendet standardmäßig `OPC_UA_SERVER_ADDRESS=opc.tcp://localhost:4840/UA/WaraMesTest` als Basis und leitet die weiteren Ports daraus ab. Für echte Maschinen können `OPC_UA_STATION_1_ADDRESS`, `OPC_UA_STATION_2_ADDRESS` und `OPC_UA_STATION_3_ADDRESS` einzeln gesetzt werden. Für die automatische Carrier-Zuführung `DEMO_ADMIN_USERNAME` und `DEMO_ADMIN_PASSWORD` auf einen bestehenden lokalen MES-Admin setzen.
+2. PostgreSQL starten und das MES mit `npm run start:dev` starten.
+3. Mit `npm run seed:stmes-demo` die drei Stationen, den Testauftrag und die beiden Carrier anlegen. Der Seed setzt den Fortschritt dieses Testauftrags zurück.
+4. In einem zweiten Terminal `npm run start:machine-simulator` ausführen. Die Carrier durchlaufen die drei Stationen. Im MES lassen sich die laufenden Schritte im Shopfloor und die Fertigmenge im Testauftrag verfolgen.
+
+Für einen simulierten Wareneingang ohne REST-Abfrage kann der Simulator mit `DEMO_CARRIER_IDS=128,129` gestartet werden. Die Carrier werden an Station 1 eingespeist. Das MES löst ihre Aufträge und Routen über den regulären OPC-UA-Handshake auf. Der simulierte Schnittstellenvertrag ist im [stMES-Demo-Vertrag](docs/guides/07-stmes-demo-contract.md) dokumentiert.
+
+## Tests
 
 ```bash
 # unit tests

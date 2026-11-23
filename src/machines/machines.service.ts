@@ -1,16 +1,8 @@
-import {
-  ConflictException,
-  Injectable,
-  NotFoundException,
-} from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { MachineEntity, MachineStatusEnum } from './machine.entity';
 import type { CreateMachineDto, UpdateMachineDto } from './machine.dto';
-
-export type MachineHierarchyNode = MachineEntity & {
-  children: MachineHierarchyNode[];
-};
 
 @Injectable()
 export class MachinesService {
@@ -27,11 +19,12 @@ export class MachinesService {
       location: dto.location,
       model: dto.model,
       serial_number: dto.serial_number,
+      is_machine: dto.is_machine || false,
+      parent_machine_id: dto.parent_machine_id,
+      ip_address: dto.ip_address,
+      connection_port: dto.connection_port,
+      connection_protocol: dto.connection_protocol,
       resource_id: dto.resource_id,
-      parent_resource_id: dto.parent_resource_id,
-      equipment_level: dto.equipment_level,
-      execution_model: dto.execution_model,
-      job_interface: dto.job_interface,
       opcua_endpoint_url: dto.opcua_endpoint_url,
       opcua_node_prefix: dto.opcua_node_prefix,
       opcua_enabled: dto.opcua_enabled || false,
@@ -41,34 +34,7 @@ export class MachinesService {
   }
 
   async findAll(): Promise<MachineEntity[]> {
-    return this.machinesRepo.find({ order: { name: 'ASC' } });
-  }
-
-  async findHierarchy(): Promise<MachineHierarchyNode[]> {
-    const machines = await this.machinesRepo.find({
-      order: { resource_id: 'ASC', name: 'ASC' },
-    });
-    const nodes = new Map<number, MachineHierarchyNode>();
-    for (const machine of machines) {
-      if (machine.resource_id !== undefined) {
-        nodes.set(machine.resource_id, { ...machine, children: [] });
-      }
-    }
-
-    const roots: MachineHierarchyNode[] = [];
-    for (const machine of machines) {
-      const node =
-        machine.resource_id === undefined
-          ? { ...machine, children: [] }
-          : nodes.get(machine.resource_id)!;
-      const parent =
-        machine.parent_resource_id == null
-          ? undefined
-          : nodes.get(machine.parent_resource_id);
-      if (parent) parent.children.push(node);
-      else roots.push(node);
-    }
-    return roots;
+    return this.machinesRepo.find({ order: { is_machine: 'DESC', name: 'ASC' } });
   }
 
   async findOne(id: string): Promise<MachineEntity> {
@@ -79,11 +45,6 @@ export class MachinesService {
 
   async update(id: string, dto: UpdateMachineDto): Promise<MachineEntity> {
     const machine = await this.findOne(id);
-    if (machine.profile_managed) {
-      throw new ConflictException(
-        'Profilverwaltete Stationen müssen in der Maschinenkonfiguration geändert werden',
-      );
-    }
     Object.assign(machine, dto);
     if (dto.type) machine.type = dto.type;
     return this.machinesRepo.save(machine);
@@ -91,13 +52,30 @@ export class MachinesService {
 
   async remove(id: string): Promise<void> {
     const machine = await this.findOne(id);
-    if (machine.profile_managed) {
-      throw new ConflictException(
-        'Profilverwaltete Stationen werden über eine neue Profilversion deaktiviert und nicht direkt gelöscht',
-      );
+    if (machine.is_machine) {
+      const stationCount = await this.machinesRepo.count({ where: { parent_machine_id: id } });
+      if (stationCount > 0) {
+        throw new BadRequestException('Die Maschine kann erst gelöscht werden, wenn alle zugeordneten Stationen entfernt oder verschoben wurden.');
+      }
     }
     const result = await this.machinesRepo.delete(id);
     if (result.affected === 0) throw new NotFoundException('Machine not found');
+  }
+
+  /** Creates the default root once and assigns legacy station records to it. */
+  async createBaseMachine(): Promise<MachineEntity> {
+    let base = await this.machinesRepo.findOne({ where: { is_machine: true, name: 'Basismaschine' } });
+    if (!base) {
+      base = await this.machinesRepo.save(this.machinesRepo.create({
+        name: 'Basismaschine', type: 'Produktionsmaschine', status: MachineStatusEnum.ONLINE,
+        location: 'Produktionslinie', is_machine: true, opcua_enabled: false, telemetry: {},
+      }));
+    }
+    await this.machinesRepo.createQueryBuilder().update(MachineEntity)
+      .set({ parent_machine_id: base.id })
+      .where('is_machine = false AND parent_machine_id IS NULL')
+      .execute();
+    return base;
   }
 
   async updateHeartbeat(id: string): Promise<MachineEntity> {
@@ -119,29 +97,26 @@ export class MachinesService {
 
   generateCsvTemplate(): string {
     return [
-      'name,type,status,location,model,serial_number,resource_id,parent_resource_id,equipment_level,execution_model,job_interface,opcua_endpoint_url,opcua_node_prefix,opcua_enabled',
-      '# Maschine als Root ohne OPC-UA-Endpoint; Stationen referenzieren deren resource_id über parent_resource_id.',
-      '# Beispielmaschine,Maschine,offline,Halle 1,,,100,,machine,machine_job,telemetry_only,,,false',
-      '# Station 1,Produktion,offline,Halle 1,,,101,100,work_unit,machine_job,telemetry_only,opc.tcp://192.168.0.1:4840,,true',
+      'name,type,status,location,model,serial_number,resource_id,opcua_endpoint_url,opcua_node_prefix,opcua_enabled',
+      '',
+      '# Beispiele (Zeilen mit # werden ignoriert):',
+      'Station-1,CNC,online,Halle A,M800,SN001,1,opc.tcp://localhost:26598,,true',
+      'Station-2,PLC,offline,Halle B,P300,SN002,2,,,false',
+      'Roboter-A,Roboter,maintenance,Halle C,RB2000,SN003,3,,,true',
     ].join('\n');
   }
 
   async importFromCsv(csv: string): Promise<{ imported: number; errors: Array<{ row: number; message: string }> }> {
-    const lines = csv
-      .replace(/^\uFEFF/, '')
-      .split(/\r?\n/)
-      .map((line, index) => ({ line, row: index + 1 }))
-      .filter(({ line }) => line.trim() && !line.trimStart().startsWith('#'));
+    const lines = csv.trim().split('\n').map((l) => l.trim()).filter(Boolean);
     if (lines.length === 0) return { imported: 0, errors: [] };
 
-    const headers = parseCsvRow(lines[0].line).map((header) =>
-      header.toLowerCase().replace(/\s/g, '_'),
-    );
+    const headerLine = lines[0];
+    const headers = headerLine.split(',').map((h) => h.toLowerCase().replace(/\s/g, '_'));
     const errors: Array<{ row: number; message: string }> = [];
     let imported = 0;
 
     for (let i = 1; i < lines.length; i++) {
-      const cols = parseCsvRow(lines[i].line);
+      const cols = lines[i].split(',');
       if (cols.length === 0) continue;
 
       try {
@@ -161,13 +136,6 @@ export class MachinesService {
           if (isNaN(resource_id)) resource_id = undefined;
         }
 
-        let parent_resource_id: number | undefined;
-        const parentId = get('parent_resource_id');
-        if (parentId !== undefined) {
-          parent_resource_id = parseInt(parentId, 10);
-          if (isNaN(parent_resource_id)) parent_resource_id = undefined;
-        }
-
         const opcua_enabled = get('opcua_enabled');
 
         const rawStatus = get('status') || 'offline';
@@ -176,15 +144,11 @@ export class MachinesService {
         const dto: CreateMachineDto & { type?: string; opcua_enabled?: boolean } = {
           name,
           status: validStatus as any,
-          type: get('type'),
+          type: get('type') || 'CNC',
           location,
           model: get('model'),
           serial_number: get('serial_number'),
           resource_id,
-          parent_resource_id,
-          equipment_level: get('equipment_level') as any,
-          execution_model: get('execution_model') as any,
-          job_interface: get('job_interface') as any,
           opcua_endpoint_url: get('opcua_endpoint_url'),
           opcua_node_prefix: get('opcua_node_prefix'),
         };
@@ -196,39 +160,10 @@ export class MachinesService {
         await this.machinesRepo.save(this.machinesRepo.create(dto as any));
         imported++;
       } catch (err: any) {
-        errors.push({
-          row: lines[i].row,
-          message: err.message || 'Unknown error',
-        });
+        errors.push({ row: i + 1, message: err.message || 'Unknown error' });
       }
     }
 
     return { imported, errors };
   }
-}
-
-function parseCsvRow(line: string): string[] {
-  const values: string[] = [];
-  let value = '';
-  let quoted = false;
-
-  for (let index = 0; index < line.length; index += 1) {
-    const character = line[index];
-    if (character === '"') {
-      if (quoted && line[index + 1] === '"') {
-        value += '"';
-        index += 1;
-      } else {
-        quoted = !quoted;
-      }
-    } else if (character === ',' && !quoted) {
-      values.push(value);
-      value = '';
-    } else {
-      value += character;
-    }
-  }
-  if (quoted) throw new Error('Unclosed quoted CSV value');
-  values.push(value);
-  return values;
 }

@@ -1,26 +1,5 @@
 import { Type } from 'class-transformer';
-import { IsArray, IsDate, IsEnum, IsInt, IsNotEmpty, IsObject, IsOptional, IsString, IsUUID, Min, ValidateNested } from 'class-validator';
-
-export class CreateOrderRouteStepDto {
-  @IsInt()
-  @Min(1)
-  step_no: number;
-
-  @IsInt()
-  @Min(1)
-  resource_id: number;
-
-  @IsInt()
-  @Min(1)
-  operation_no: number;
-
-  @IsString()
-  operation: string;
-
-  @IsOptional()
-  @IsObject()
-  parameters?: Record<string, number>;
-}
+import { IsDate, IsEnum, IsInt, IsNotEmpty, IsOptional, IsString, IsUUID, Min } from 'class-validator';
 
 export class CreateOrderDto {
   @IsNotEmpty()
@@ -34,10 +13,6 @@ export class CreateOrderDto {
   @IsUUID()
   machine_id: string;
 
-  @IsOptional()
-  @IsUUID()
-  product_id?: string;
-
   @IsNotEmpty()
   @IsString()
   operation: string;
@@ -45,6 +20,21 @@ export class CreateOrderDto {
   @Min(1)
   @IsInt()
   quantity: number;
+
+  @IsOptional()
+  @Min(0)
+  @IsInt()
+  red_balls?: number;
+
+  @IsOptional()
+  @Min(0)
+  @IsInt()
+  green_balls?: number;
+
+  @IsOptional()
+  @Min(0)
+  @IsInt()
+  blue_balls?: number;
 
   @IsOptional()
   @Type(() => Date)
@@ -55,16 +45,6 @@ export class CreateOrderDto {
   @Type(() => Date)
   @IsDate()
   target_complete_time?: Date;
-
-  @IsOptional()
-  @IsArray()
-  @ValidateNested({ each: true })
-  @Type(() => CreateOrderRouteStepDto)
-  route_steps?: CreateOrderRouteStepDto[];
-
-  @IsOptional()
-  @IsObject()
-  production_parameters?: Record<string, number>;
 }
 
 export class UpdateOrderDto {
@@ -83,10 +63,6 @@ export class UpdateOrderDto {
   machine_id?: string;
 
   @IsOptional()
-  @IsUUID()
-  product_id?: string;
-
-  @IsOptional()
   @IsNotEmpty()
   @IsString()
   operation?: string;
@@ -95,6 +71,21 @@ export class UpdateOrderDto {
   @Min(1)
   @IsInt()
   quantity?: number;
+
+  @IsOptional()
+  @Min(0)
+  @IsInt()
+  red_balls?: number;
+
+  @IsOptional()
+  @Min(0)
+  @IsInt()
+  green_balls?: number;
+
+  @IsOptional()
+  @Min(0)
+  @IsInt()
+  blue_balls?: number;
 
   @IsOptional()
   @IsEnum(['pending', 'in_progress', 'completed', 'cancelled', 'on_hold'])

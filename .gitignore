@@ -6,12 +6,11 @@ frontend/node_modules/
 dist/
 build/
 frontend/dist/
-frontend/storybook-static/
 
 # Environment files
 .env
-.env.bak
 .env.local
+.env.bak
 .env.*.local
 !.env.example
 
@@ -27,9 +26,6 @@ Thumbs.db
 
 # Logs
 *.log
-
-# Local OPC-UA commissioning reports may expose machine topology
-artifacts/opcua-scans/
 
 # Windows batch scripts - not needed in repo
 *.bat

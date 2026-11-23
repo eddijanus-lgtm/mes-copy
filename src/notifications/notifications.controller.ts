@@ -1,18 +1,11 @@
-import { Controller, Get, Post, Patch, Delete, Body, HttpCode, HttpStatus, Param, ParseIntPipe, ParseUUIDPipe, Query } from '@nestjs/common';
-import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
+import { Controller, Get, Post, Patch, Delete, Body, Param, Query } from '@nestjs/common';
+import { ApiTags, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
 import { NotificationsService } from './notifications.service';
 import { Roles } from '../auth/roles.decorator';
 import { UserRoleEnum } from '../users/user.entity';
-import {
-  CreateAlertRuleDto,
-  CreateNotificationChannelDto,
-  TriggerAlertRuleDto,
-  UpdateAlertRuleDto,
-} from './notifications.dto';
 
 @Controller('notifications')
 @ApiTags('Notifications')
-@ApiBearerAuth('JWT-auth')
 export class NotificationsController {
   constructor(private readonly notificationsService: NotificationsService) {}
 
@@ -24,7 +17,19 @@ export class NotificationsController {
 
   @Post('channels')
   @Roles(UserRoleEnum.ADMIN)
-  createChannel(@Body() dto: CreateNotificationChannelDto) { return this.notificationsService.createChannel(dto); }
+  createChannel(@Body() dto: any) { return this.notificationsService.createChannel(dto); }
+
+  @Patch('channels/:id')
+  @Roles(UserRoleEnum.ADMIN)
+  updateChannel(@Param('id') id: string, @Body() dto: any) { return this.notificationsService.updateChannel(id, dto); }
+
+  @Delete('channels/:id')
+  @Roles(UserRoleEnum.ADMIN)
+  deleteChannel(@Param('id') id: string) { return this.notificationsService.deleteChannel(id); }
+
+  @Post('channels/:id/test')
+  @Roles(UserRoleEnum.ADMIN)
+  testChannel(@Param('id') id: string) { return this.notificationsService.testChannel(id); }
 
   // --- Alert Rules ---
 
@@ -34,26 +39,31 @@ export class NotificationsController {
 
   @Post('rules')
   @Roles(UserRoleEnum.ADMIN)
-  createRule(@Body() dto: CreateAlertRuleDto) { return this.notificationsService.createRule(dto); }
+  createRule(@Body() dto: any) { return this.notificationsService.createRule(dto); }
 
   @Get('rules/:id')
   @Roles(UserRoleEnum.ADMIN, UserRoleEnum.OPERATOR, UserRoleEnum.VIEWER)
-  getRule(@Param('id', ParseUUIDPipe) id: string) { return this.notificationsService.getRule(id); }
+  getRule(@Param('id') id: string) { return this.notificationsService.getRule(id); }
 
   @Patch('rules/:id')
   @Roles(UserRoleEnum.ADMIN)
-  updateRule(@Param('id', ParseUUIDPipe) id: string, @Body() dto: UpdateAlertRuleDto) { return this.notificationsService.updateRule(id, dto); }
+  updateRule(@Param('id') id: string, @Body() dto: any) { return this.notificationsService.updateRule(id, dto); }
 
   @Post('rules/:id/toggle')
   @Roles(UserRoleEnum.ADMIN, UserRoleEnum.OPERATOR)
-  toggleRule(@Param('id', ParseUUIDPipe) id: string) { return this.notificationsService.toggleRule(id); }
+  toggleRule(@Param('id') id: string) { return this.notificationsService.toggleRule(id); }
 
   @Delete('rules/:id')
   @Roles(UserRoleEnum.ADMIN)
-  @HttpCode(HttpStatus.NO_CONTENT)
-  deleteRule(@Param('id', ParseUUIDPipe) id: string) { return this.notificationsService.deleteRule(id); }
+  deleteRule(@Param('id') id: string) { return this.notificationsService.deleteRule(id); }
 
   // --- Alert History ---
+
+  @Get('orders')
+  @Roles(UserRoleEnum.ADMIN, UserRoleEnum.OPERATOR, UserRoleEnum.VIEWER)
+  getOrderNotifications() {
+    return this.notificationsService.getOrderNotifications();
+  }
 
   @Get('history')
   @Roles(UserRoleEnum.ADMIN, UserRoleEnum.OPERATOR, UserRoleEnum.VIEWER)
@@ -61,7 +71,7 @@ export class NotificationsController {
     @Query('rule_id') ruleId?: string,
     @Query('severity') severity?: string,
     @Query('machine_id') machineId?: string,
-    @Query('limit', new ParseIntPipe({ optional: true })) limit?: number,
+    @Query('limit') limit?: number,
   ) {
     return this.notificationsService.getHistory({ rule_id: ruleId, severity, machine_id: machineId, limit });
   }
@@ -78,7 +88,7 @@ export class NotificationsController {
 
   @Get('delivery-rate')
   @Roles(UserRoleEnum.ADMIN, UserRoleEnum.OPERATOR, UserRoleEnum.VIEWER)
-  getDeliveryRate() {
+  getDeliveryRate() { 
     return this.notificationsService.getDeliveryRate();
   }
 
@@ -86,10 +96,7 @@ export class NotificationsController {
 
   @Post('rules/:id/trigger')
   @Roles(UserRoleEnum.ADMIN, UserRoleEnum.OPERATOR)
-  async triggerRule(
-    @Param('id', ParseUUIDPipe) id: string,
-    @Body() payload: TriggerAlertRuleDto,
-  ) {
+  async triggerRule(@Param('id') id: string, @Body() payload?: any) {
     const rule = await this.notificationsService.getRule(id);
     return this.notificationsService.sendToChannels(rule, payload?.message || 'Manual trigger', payload?.machine_id);
   }

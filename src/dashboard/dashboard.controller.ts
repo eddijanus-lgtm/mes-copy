@@ -1,12 +1,10 @@
-import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
+import { ApiTags, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
 import { Controller, Get, Post, Query } from '@nestjs/common';
 import { Roles } from '../auth/roles.decorator';
 import { UserRoleEnum } from '../users/user.entity';
 import { DashboardService } from './dashboard.service';
 
 @Controller('dashboard')
-@ApiTags('Dashboard')
-@ApiBearerAuth('JWT-auth')
 export class DashboardController {
   constructor(private readonly dashboardService: DashboardService) {}
 
@@ -18,8 +16,8 @@ export class DashboardController {
 
   @Get('trends/all')
   @Roles(UserRoleEnum.ADMIN, UserRoleEnum.OPERATOR, UserRoleEnum.VIEWER)
-  getAllTrends(@Query('from') from?: string, @Query('to') to?: string, @Query('interval') interval?: string) {
-    return this.dashboardService.getDashboardTrends(from, to, interval);
+  getAllTrends(@Query('from') from?: string, @Query('to') to?: string, @Query('interval') interval?: string, @Query('machine_id') machineId?: string) {
+    return this.dashboardService.getDashboardTrends(from, to, interval, machineId);
   }
 
   @Get('trends/pareto')

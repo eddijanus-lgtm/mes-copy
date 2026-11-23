@@ -12,9 +12,3 @@ Das MES Shopfloor Gateway ist die OT/IT-Vermittlungsschicht der Demo. Es verbind
 | Frontend | React 19, Vite 7, Tailwind CSS 4 |
 | Protokolle | OPC UA (`node-opcua`), MQTT (`mqtt` v5) |
 | Infrastruktur | Docker Compose, pm2 |
-
-## Qualität und Normen
-
-- [Normen-Gap-Analyse und Nachweismatrix](standards-gap-analysis.md)
-- [API-Versionierung und Deprecation Policy](guides/11-api-lifecycle.md)
-- [Wizard „Maschine konfigurieren“: Funktionen und Vollständigkeitsprüfung](guides/14-machine-configuration-wizard.md)

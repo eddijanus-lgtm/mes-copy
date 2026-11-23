@@ -8,23 +8,6 @@ export enum MachineStatusEnum {
   IDLE = 'idle',
 }
 
-export enum EquipmentLevelEnum {
-  MACHINE = 'machine',
-  WORK_UNIT = 'work_unit',
-  COMPONENT = 'component',
-}
-
-export enum ExecutionModelEnum {
-  MACHINE_JOB = 'machine_job',
-  WORK_UNIT_JOBS = 'work_unit_jobs',
-}
-
-export enum JobInterfaceEnum {
-  SIGNAL_HANDSHAKE = 'signal_handshake',
-  JOB_CONTROL = 'job_control',
-  TELEMETRY_ONLY = 'telemetry_only',
-}
-
 @Entity('machines')
 export class MachineEntity {
   @PrimaryGeneratedColumn('uuid')
@@ -48,59 +31,33 @@ export class MachineEntity {
   @Column({ nullable: true })
   serial_number?: string;
 
+  /** True for a production machine; false for a station belonging to a machine. */
+  @Column({ default: false })
+  is_machine: boolean;
+
+  @Column({ type: 'uuid', nullable: true })
+  parent_machine_id?: string;
+
+  @Column({ nullable: true })
+  ip_address?: string;
+
+  @Column({ type: 'int', nullable: true })
+  connection_port?: number;
+
+  @Column({ nullable: true })
+  connection_protocol?: string;
+
   @Column({ type: 'int', nullable: true, unique: true })
   resource_id?: number;
 
-  @Column({ type: 'int', nullable: true })
-  parent_resource_id?: number | null;
+  @Column({ nullable: true })
+  opcua_endpoint_url?: string;
 
-  @Column({
-    type: 'enum',
-    enum: EquipmentLevelEnum,
-    default: EquipmentLevelEnum.WORK_UNIT,
-  })
-  equipment_level: EquipmentLevelEnum;
-
-  @Column({
-    type: 'enum',
-    enum: ExecutionModelEnum,
-    default: ExecutionModelEnum.WORK_UNIT_JOBS,
-  })
-  execution_model: ExecutionModelEnum;
-
-  @Column({
-    type: 'enum',
-    enum: JobInterfaceEnum,
-    default: JobInterfaceEnum.SIGNAL_HANDSHAKE,
-  })
-  job_interface: JobInterfaceEnum;
-
-  @Column({ type: 'jsonb', default: [] })
-  capabilities: string[];
-
-  @Column({ type: 'varchar', nullable: true })
-  opcua_endpoint_url?: string | null;
-
-  @Column({ type: 'varchar', nullable: true })
-  opcua_node_prefix?: string | null;
+  @Column({ nullable: true })
+  opcua_node_prefix?: string;
 
   @Column({ default: false })
   opcua_enabled: boolean;
-
-  @Column({ default: false })
-  profile_managed: boolean;
-
-  @Column({ default: false })
-  routing_enabled: boolean;
-
-  @Column({ type: 'int', nullable: true })
-  route_sequence: number | null;
-
-  @Column({ type: 'int', nullable: true })
-  operation_no: number | null;
-
-  @Column({ type: 'varchar', nullable: true })
-  dashboard_image: string | null;
 
   @Column({ type: 'jsonb', nullable: true })
   telemetry: Record<string, any>;

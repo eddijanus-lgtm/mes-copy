@@ -1,4 +1,4 @@
-import { ConflictException, NotFoundException } from '@nestjs/common';
+import { NotFoundException } from '@nestjs/common';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { Test, TestingModule } from '@nestjs/testing';
 import { MachineEntity, MachineStatusEnum } from './machine.entity';
@@ -38,49 +38,7 @@ describe('MachinesService', () => {
     machinesRepo.find.mockResolvedValue([]);
 
     await service.findAll();
-    expect(machinesRepo.find).toHaveBeenCalledWith({ order: { name: 'ASC' } });
-  });
-
-  it('builds a machine, work-unit and component hierarchy', async () => {
-    machinesRepo.find.mockResolvedValue([
-      {
-        id: 'machine',
-        name: 'Machine',
-        resource_id: 70,
-        parent_resource_id: null,
-      },
-      {
-        id: 'work-unit',
-        name: 'Work unit',
-        resource_id: 71,
-        parent_resource_id: 70,
-      },
-      {
-        id: 'component',
-        name: 'Component',
-        resource_id: 711,
-        parent_resource_id: 71,
-      },
-    ]);
-
-    const result = await service.findHierarchy();
-
-    expect(result).toEqual([
-      expect.objectContaining({
-        resource_id: 70,
-        children: [
-          expect.objectContaining({
-            resource_id: 71,
-            children: [
-              expect.objectContaining({
-                resource_id: 711,
-                children: [],
-              }),
-            ],
-          }),
-        ],
-      }),
-    ]);
+    expect(machinesRepo.find).toHaveBeenCalledWith({ order: { is_machine: 'DESC', name: 'ASC' } });
   });
 
   it('throws when machine is missing', async () => {
@@ -95,22 +53,7 @@ describe('MachinesService', () => {
     await expect(service.update('m1', { name: 'New', type: 'PLC' } as any)).resolves.toMatchObject({ name: 'New', type: 'PLC' });
   });
 
-  it('keeps profile-managed stations read-only in the database API', async () => {
-    machinesRepo.findOne.mockResolvedValue({
-      id: 'profile-station',
-      profile_managed: true,
-    });
-
-    await expect(
-      service.update('profile-station', { name: 'Changed' } as any),
-    ).rejects.toBeInstanceOf(ConflictException);
-    await expect(service.remove('profile-station')).rejects.toBeInstanceOf(
-      ConflictException,
-    );
-  });
-
   it('throws when deleting a missing machine', async () => {
-    machinesRepo.findOne.mockResolvedValue(null);
     machinesRepo.delete.mockResolvedValue({ affected: 0 });
 
     await expect(service.remove('missing')).rejects.toBeInstanceOf(NotFoundException);
@@ -139,14 +82,6 @@ describe('MachinesService', () => {
 
   it('generates a CSV template', () => {
     expect(service.generateCsvTemplate()).toContain('name,type,status,location');
-    expect(service.generateCsvTemplate()).not.toContain('Station-1');
-  });
-
-  it('does not import data from the generated CSV template', async () => {
-    const result = await service.importFromCsv(service.generateCsvTemplate());
-
-    expect(result).toEqual({ imported: 0, errors: [] });
-    expect(machinesRepo.save).not.toHaveBeenCalled();
   });
 
   it('imports CSV rows and reports validation errors', async () => {
@@ -160,41 +95,5 @@ describe('MachinesService', () => {
 
     expect(result.imported).toBe(1);
     expect(result.errors).toHaveLength(1);
-  });
-
-  it('supports quoted comma values and ignores comments', async () => {
-    const csv = [
-      'name,type,status,location',
-      '# This row is documentation only',
-      '"Station, North",PLC,online,"Hall, A"',
-    ].join('\n');
-
-    const result = await service.importFromCsv(csv);
-
-    expect(result).toEqual({ imported: 1, errors: [] });
-    expect(machinesRepo.create).toHaveBeenCalledWith(
-      expect.objectContaining({
-        name: 'Station, North',
-        location: 'Hall, A',
-      }),
-    );
-  });
-
-  it('does not invent a machine type when CSV data omits it', async () => {
-    const csv = [
-      'name,type,status,location',
-      'NovaPress,,offline,Hall B',
-    ].join('\n');
-
-    await expect(service.importFromCsv(csv)).resolves.toEqual({
-      imported: 1,
-      errors: [],
-    });
-    expect(machinesRepo.create).toHaveBeenCalledWith(
-      expect.objectContaining({
-        name: 'NovaPress',
-        type: undefined,
-      }),
-    );
   });
 });

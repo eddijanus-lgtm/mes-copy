@@ -1,4 +1,5 @@
 import { createContext, useContext, useEffect, useState } from "react";
+import { useTranslation } from "../i18n/I18nProvider.jsx";
 
 const TOKEN_KEY = "jwt_token";
 const AuthContext = createContext(null);
@@ -10,15 +11,12 @@ function parseToken(token) {
     const user = JSON.parse(atob(payload));
     const validRole = ["admin", "operator", "viewer"].includes(user.role);
     return user.sub && user.username && validRole && user.exp * 1000 > Date.now() ? user : null;
-  } catch {
-    return null;
-  }
+  } catch { return null; }
 }
 
 function readSession() {
   const token = localStorage.getItem(TOKEN_KEY);
   const user = token ? parseToken(token) : null;
-
   if (!user) localStorage.removeItem(TOKEN_KEY);
   return { token: user ? token : null, user };
 }
@@ -28,15 +26,10 @@ export function AuthProvider({ children }) {
 
   useEffect(() => {
     const clearExpiredSession = () => setSession({ token: null, user: null });
-    const syncSession = (event) => {
-      if (event.key === TOKEN_KEY) setSession(readSession());
-    };
+    const syncSession = (event) => { if (event.key === TOKEN_KEY) setSession(readSession()); };
     window.addEventListener("auth:unauthorized", clearExpiredSession);
     window.addEventListener("storage", syncSession);
-    return () => {
-      window.removeEventListener("auth:unauthorized", clearExpiredSession);
-      window.removeEventListener("storage", syncSession);
-    };
+    return () => { window.removeEventListener("auth:unauthorized", clearExpiredSession); window.removeEventListener("storage", syncSession); };
   }, []);
 
   useEffect(() => {
@@ -45,21 +38,19 @@ export function AuthProvider({ children }) {
     return () => clearTimeout(timeout);
   }, [session.user?.exp]);
 
+  function getErrorMessage(status) {
+    if (status === 401) return "login.errorInvalid";
+    return "login.errorFailed";
+  }
+
   async function login(username, password) {
-    const response = await fetch("/api/v1/auth/login", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ username, password }),
+    const response = await fetch("/api/auth/login", {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ username, password }),
     });
 
     if (!response.ok) {
-      throw new Error(
-        response.status === 401
-          ? "Benutzername oder Passwort ist falsch."
-          : response.status === 429
-            ? "Zu viele Anmeldeversuche. Bitte 60 Sekunden warten."
-            : "Anmeldung fehlgeschlagen.",
-      );
+      const message = response.status === 401 ? "Benutzername oder Passwort ist falsch." : "Anmeldung fehlgeschlagen.";
+      throw new Error(message);
     }
 
     const { access_token: token } = await response.json();

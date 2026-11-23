@@ -9,41 +9,31 @@ describe('DowntimeService', () => {
   let machineRepoMock: Partial<any>;
   let downtimeRepoMock: Partial<any>;
 
-  const createLog = (
-    overrides: Partial<DowntimeLogEntity> = {},
-  ): DowntimeLogEntity =>
-    ({
-      id: 'd1',
-      machine_id: 'm1',
-      type: DowntimeTypeEnum.MECHANICAL,
-      reason: 'Test',
-      description: '',
-      start_time: new Date('2026-01-01T10:00:00Z'),
-      end_time: null,
-      duration_minutes: 0,
-      operator: '',
-      ...overrides,
-    }) as DowntimeLogEntity;
+  const createLog = (overrides: Partial<DowntimeLogEntity> = {}): any => ({
+    id: 'd1',
+    machine_id: 'm1',
+    type: DowntimeTypeEnum.MECHANICAL,
+    reason: 'Test',
+    description: '',
+    start_time: new Date('2026-01-01T10:00:00Z'),
+    end_time: null,
+    duration_minutes: 0,
+    operator: '',
+    ...overrides,
+  });
 
-  const createMachine = (
-    overrides: Partial<MachineEntity> = {},
-  ): MachineEntity =>
-    ({
-      id: 'm1',
-      name: 'M1',
-      status: MachineStatusEnum.ONLINE,
-      created_at: new Date(),
-      updated_at: new Date(),
-      ...overrides,
-    }) as MachineEntity;
+  const createMachine = (overrides: Partial<MachineEntity> = {}): any => ({
+    id: 'm1',
+    name: 'M1',
+    status: MachineStatusEnum.ONLINE,
+    created_at: new Date(),
+    updated_at: new Date(),
+    ...overrides,
+  });
 
   beforeEach(async () => {
-    jest.clearAllMocks();
-
     machineRepoMock = {
-      findOne: jest.fn(async (q) =>
-        q.where.id === 'm-no' ? null : createMachine(),
-      ),
+      findOne: jest.fn((q) => q.where.id === 'm-no' ? null : createMachine()),
       update: jest.fn(async () => ({})),
     };
 
@@ -51,24 +41,15 @@ describe('DowntimeService', () => {
       create: jest.fn(createLog),
       save: jest.fn(async (log) => ({ ...log, id: 'saved-id' })),
       find: jest.fn(),
-      findOne: jest.fn(async (q) =>
-        q.where.id ? createLog({ id: q.where.id }) : createLog(),
-      ),
+      findOne: jest.fn(async () => createLog()),
       delete: jest.fn(async () => ({ affected: 1 })),
-      createQueryBuilder: jest.fn(),
     };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         DowntimeService,
-        {
-          provide: getRepositoryToken(DowntimeLogEntity),
-          useValue: downtimeRepoMock,
-        },
-        {
-          provide: getRepositoryToken(MachineEntity),
-          useValue: machineRepoMock,
-        },
+        { provide: getRepositoryToken(DowntimeLogEntity), useValue: downtimeRepoMock },
+        { provide: getRepositoryToken(MachineEntity), useValue: machineRepoMock },
       ],
     }).compile();
 
@@ -98,7 +79,7 @@ describe('DowntimeService', () => {
 
   describe('stopMachine', () => {
     it('throws when machine is not found', async () => {
-      expect(service.stopMachine({ machine_id: 'm-no', type: 'MECHANICAL', reason: 'x' })).rejects.toThrow();
+      await expect(service.stopMachine({ machine_id: 'm-no', type: DowntimeTypeEnum.MECHANICAL, reason: 'x' })).rejects.toThrow('Machine not found');
     });
 
     it('throws when open downtime already exists', async () => {
@@ -117,7 +98,7 @@ describe('DowntimeService', () => {
         description: 'needs repair',
       });
 
-      expect(result.id).toBeTruthy();
+      expect(result).toBeTruthy();
       expect(machineRepoMock.update).toHaveBeenCalledWith('m1', { status: MachineStatusEnum.ERROR });
     });
   });
@@ -131,7 +112,6 @@ describe('DowntimeService', () => {
     it('resumes and sets duration_minutes from actual time', async () => {
       const openLog = createLog({ end_time: null, start_time: new Date(Date.now() - 3_600_000) });
       (downtimeRepoMock.findOne as jest.Mock).mockResolvedValueOnce(openLog);
-
       const result = await service.resumeMachine({ machine_id: 'm1' });
 
       expect(result.machine.status).toBe(MachineStatusEnum.ONLINE);
@@ -209,7 +189,7 @@ describe('DowntimeService', () => {
 
   describe('getPeriodStats', () => {
     it('maps raw results correctly', async () => {
-      (downtimeRepoMock.createQueryBuilder as jest.Mock).mockReturnValue({
+      downtimeRepoMock.createQueryBuilder = jest.fn().mockReturnValue({
         leftJoin: jest.fn().mockReturnThis(),
         select: jest.fn().mockReturnThis(),
         where: jest.fn().mockReturnThis(),

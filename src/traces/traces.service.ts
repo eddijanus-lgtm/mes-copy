@@ -1,14 +1,19 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Between, LessThanOrEqual, MoreThanOrEqual, Repository } from 'typeorm';
 import { TraceEntity } from './trace.entity';
 import type { CreateTraceDto, TraceQueryDto } from './trace.dto';
+import { DataPointEntity } from '../data-collection/data-point.entity';
+
+const TRACE_LIMIT = 500;
 
 @Injectable()
 export class TracesService {
   constructor(
     @InjectRepository(TraceEntity)
     private readonly tracesRepo: Repository<TraceEntity>,
+    @InjectRepository(DataPointEntity)
+    private readonly dataPointsRepo: Repository<DataPointEntity>,
   ) {}
 
   async create(dto: CreateTraceDto): Promise<TraceEntity> {
@@ -28,21 +33,66 @@ export class TracesService {
   }
 
   async findAllWithFilters(query: TraceQueryDto): Promise<TraceEntity[]> {
-    const where: Record<string, any> = {};
+    const where: Partial<TraceEntity> = {};
     if (query.machine_id) where.machine_id = query.machine_id;
     if (query.category) where.category = query.category;
     if (query.key_data_point) where.key_data_point = query.key_data_point;
 
-    let qb = this.tracesRepo.createQueryBuilder('trace').where(where);
+    const qb = this.tracesRepo.createQueryBuilder('trace').where(where);
+    const numericValue = `CASE
+      WHEN jsonb_typeof(trace.value) = 'number' THEN CAST(trace.value AS numeric)
+      WHEN jsonb_typeof(trace.value->'numeric_value') = 'number'
+        THEN CAST(trace.value->>'numeric_value' AS numeric)
+    END`;
 
     if (query.min_value !== undefined) {
-      qb = qb.andWhere('trace.value->>\'numeric_value\' >= :minVal', { minVal: query.min_value });
+      qb.andWhere(`(${numericValue}) >= :minVal`, { minVal: query.min_value });
     }
     if (query.max_value !== undefined) {
-      qb = qb.andWhere('trace.value->>\'numeric_value\' <= :maxVal', { maxVal: query.max_value });
+      qb.andWhere(`(${numericValue}) <= :maxVal`, { maxVal: query.max_value });
     }
 
-    return qb.orderBy('trace.collected_at', 'DESC').limit(500).getMany();
+    const traces = qb.orderBy('trace.collected_at', 'DESC');
+    if (query.include_data_points !== 'true') {
+      return traces.limit(query.machine_id || query.category ? 100 : TRACE_LIMIT).getMany();
+    }
+
+    const [storedTraces, dataPoints] = await Promise.all([
+      traces.limit(TRACE_LIMIT).getMany(),
+      this.findProcessDataPoints(query),
+    ]);
+    return [...storedTraces, ...dataPoints]
+      .sort((a, b) => b.collected_at.getTime() - a.collected_at.getTime())
+      .slice(0, TRACE_LIMIT);
+  }
+
+  private async findProcessDataPoints(query: TraceQueryDto): Promise<TraceEntity[]> {
+    if (query.category && query.category !== 'process_data') return [];
+
+    const { min_value: min, max_value: max } = query;
+    const value = min !== undefined && max !== undefined ? Between(min, max)
+      : min !== undefined ? MoreThanOrEqual(min)
+      : max !== undefined ? LessThanOrEqual(max)
+      : undefined;
+    const points = await this.dataPointsRepo.find({
+      where: {
+        ...(query.machine_id && { machine_id: query.machine_id }),
+        ...(query.key_data_point && { node_id: query.key_data_point }),
+        ...(value && { value }),
+      },
+      order: { timestamp: 'DESC' },
+      take: TRACE_LIMIT,
+    });
+
+    return points.map((point) => ({
+      id: point.id,
+      machine_id: point.machine_id,
+      category: 'process_data',
+      key_data_point: point.node_id,
+      value: point.value,
+      tags: { quality: point.quality },
+      collected_at: point.timestamp,
+    }));
   }
 
   async findOne(id: string): Promise<TraceEntity> {

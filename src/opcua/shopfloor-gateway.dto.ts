@@ -1,5 +1,24 @@
-import { ArrayMinSize, IsArray, IsDefined, IsNotEmpty, IsString, ValidateNested } from 'class-validator';
-import { Type } from 'class-transformer';
+import { IsDefined, IsIn, IsInt, IsNotEmpty, IsString, Max, Min } from 'class-validator';
+
+export class WebshopCheckoutDto {
+  @IsIn([1, 2, 4])
+  bDeckelfarbe: number;
+
+  @IsInt()
+  @Min(0)
+  @Max(99)
+  uiKugelRot: number;
+
+  @IsInt()
+  @Min(0)
+  @Max(99)
+  uiKugelGruen: number;
+
+  @IsInt()
+  @Min(0)
+  @Max(99)
+  uiKugelBlau: number;
+}
 
 export class OpcUaReadDto {
   @IsString()
@@ -35,25 +54,4 @@ export class MachineControlDto {
 
   @IsNotEmpty()
   command: 'start' | 'stop' | 'reset' | 'pause';
-}
-
-export class OpcUaWriteItemDto {
-  @IsString()
-  @IsNotEmpty()
-  address: string;
-
-  @IsString()
-  @IsNotEmpty()
-  dataType: string;
-
-  @IsDefined()
-  value: unknown;
-}
-
-export class OpcUaWriteDto {
-  @IsArray()
-  @ValidateNested({ each: true })
-  @Type(() => OpcUaWriteItemDto)
-  @ArrayMinSize(1)
-  writes: OpcUaWriteItemDto[];
 }

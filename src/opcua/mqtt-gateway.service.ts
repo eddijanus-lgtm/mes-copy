@@ -3,11 +3,12 @@ import { ConfigService } from '@nestjs/config';
 import { ShopfloorTelemetryEvent } from './shopfloor-telemetry';
 const mqtt = require('mqtt');
 
-const BASE_SUBSCRIPTION_TOPICS = [
+const SUBSCRIPTION_TOPICS = [
   'mes/production/+/#',
   'mes/machines/+/telemetry',
   'mes/alarms/+/+',
   'mes/orders/+/+',
+  'i4.0/production/orders',
 ];
 
 @Injectable()
@@ -17,11 +18,15 @@ export class MqttGatewayService implements OnModuleInit, OnModuleDestroy {
   private reconnectAttempts = 0;
   private readonly logger = new Logger(MqttGatewayService.name);
   private startupTimer?: NodeJS.Timeout;
+  private subscriptionWatchdog?: NodeJS.Timeout;
   private readonly telemetryCallbacks = new Set<(event: ShopfloorTelemetryEvent) => void>();
   private readonly recentTelemetry: Array<{ topic: string; payload: Record<string, unknown>; timestamp: string }> = [];
-  private readonly dynamicSubscriptionTopics = new Set<string>();
 
   constructor(private readonly configService: ConfigService) {}
+
+  get webshopOrderTopic(): string {
+    return this.configService.get('WEBSHOP_MQTT_TOPIC', 'i4.0/production/orders');
+  }
 
   async onModuleInit() {
     const brokerUrl = this.configService.get('MQTT_BROKER_URL', 'mqtt://localhost:1883');
@@ -29,7 +34,10 @@ export class MqttGatewayService implements OnModuleInit, OnModuleDestroy {
       this.client = mqtt.connect(brokerUrl, {
         clientId: 'mes-shopfloor-' + Date.now(),
         clean: true,
+        protocolVersion: 5,
         reconnectPeriod: 30000,
+        ...(this.configService.get<string>('MQTT_USERNAME') ? { username: this.configService.get<string>('MQTT_USERNAME') } : {}),
+        ...(this.configService.get<string>('MQTT_PASSWORD') ? { password: this.configService.get<string>('MQTT_PASSWORD') } : {}),
       });
 
       this.startupTimer = setTimeout(() => {
@@ -41,7 +49,7 @@ export class MqttGatewayService implements OnModuleInit, OnModuleDestroy {
       this.client.on('connect', () => {
         this.reconnectAttempts = 0;
         this.logger.log('Connected to MQTT broker at ' + brokerUrl);
-        for (const topic of this.subscriptionTopics()) this.subscribeClient(topic);
+        this.subscribeToTopics();
       });
       this.client.on('error', (error: Error) => this.logger.error('MQTT client error: ' + error.message));
       this.client.on('offline', () => this.logger.warn('MQTT client is offline'));
@@ -51,18 +59,18 @@ export class MqttGatewayService implements OnModuleInit, OnModuleDestroy {
       });
       this.client.on('close', () => this.logger.warn('MQTT connection closed'));
 
+      // Some brokers can keep a TCP session alive while losing a subscription.
+      // MQTT v5 retain-handling=1 prevents this recovery check from replaying
+      // retained webshop orders for an unchanged subscription.
+      this.subscriptionWatchdog = setInterval(() => {
+        if (this.client?.connected) this.subscribeToTopics(true);
+      }, 60_000);
+      this.subscriptionWatchdog.unref();
+
       this.client.on('message', (topic: string, payload: Buffer) => {
         try {
           const data = JSON.parse(payload.toString());
-          const callbacks = [
-            ...new Set(
-              [...this.subscriptionCallbacks.entries()]
-                .filter(([subscription]) =>
-                  mqttTopicMatches(subscription, topic),
-                )
-                .flatMap(([, registered]) => registered),
-            ),
-          ];
+          const callbacks = this.subscriptionCallbacks.get(topic) || [];
           if (callbacks.length) {
             for (const callback of callbacks) {
               try { callback(data); } catch (error) { this.logger.error('MQTT subscriber failed', error); }
@@ -85,39 +93,20 @@ export class MqttGatewayService implements OnModuleInit, OnModuleDestroy {
 
   async onModuleDestroy() {
     if (this.startupTimer) clearTimeout(this.startupTimer);
+    if (this.subscriptionWatchdog) clearInterval(this.subscriptionWatchdog);
     if (!this.client) return;
     await new Promise<void>((resolve) => this.client.end(false, {}, () => resolve()));
   }
 
   onMessage(topic: string, callback: (data: any) => void): () => void {
-    const normalizedTopic = topic.trim();
-    if (!normalizedTopic) throw new Error('MQTT subscription topic must not be empty');
-    if (!this.subscriptionCallbacks.has(normalizedTopic)) {
-      this.subscriptionCallbacks.set(normalizedTopic, []);
-      this.dynamicSubscriptionTopics.add(normalizedTopic);
-      if (this.client?.connected) this.subscribeClient(normalizedTopic);
+    if (!this.subscriptionCallbacks.has(topic)) {
+      this.subscriptionCallbacks.set(topic, []);
     }
-    const cbs = this.subscriptionCallbacks.get(normalizedTopic)!;
+    const cbs = this.subscriptionCallbacks.get(topic)!;
     cbs.push(callback);
     return () => {
-      const found = this.subscriptionCallbacks.get(normalizedTopic);
-      if (!found) return;
-      const remaining = found.filter((cb) => cb !== callback);
-      if (remaining.length > 0) {
-        this.subscriptionCallbacks.set(normalizedTopic, remaining);
-        return;
-      }
-      this.subscriptionCallbacks.delete(normalizedTopic);
-      this.dynamicSubscriptionTopics.delete(normalizedTopic);
-      if (this.client?.connected) {
-        this.client.unsubscribe(normalizedTopic, (error: Error | null) => {
-          if (error) {
-            this.logger.error(
-              `MQTT unsubscribe failed for ${normalizedTopic}: ${error.message}`,
-            );
-          }
-        });
-      }
+      const found = this.subscriptionCallbacks.get(topic);
+      if (found) this.subscriptionCallbacks.set(topic, found.filter((cb) => cb !== callback));
     };
   }
 
@@ -126,9 +115,17 @@ export class MqttGatewayService implements OnModuleInit, OnModuleDestroy {
     if (!allowedPrefixes.some((prefix) => topic.startsWith(prefix))) {
       throw new ForbiddenException('MQTT topic is not allowed');
     }
+    await this.publishJson(topic, data);
+  }
+
+  publishWebshopOrder(data: Record<string, unknown>): Promise<void> {
+    return this.publishJson(this.webshopOrderTopic, data, 2);
+  }
+
+  private publishJson(topic: string, data: unknown, qos = 1): Promise<void> {
     if (!this.client?.connected) throw new ServiceUnavailableException('MQTT broker is not connected');
     return new Promise<void>((resolve, reject) => {
-      this.client.publish(topic, JSON.stringify(data), { qos: 1 }, (error: Error | null) => error ? reject(error) : resolve());
+      this.client.publish(topic, JSON.stringify(data), { qos }, (error: Error | null) => error ? reject(error) : resolve());
     });
   }
 
@@ -145,23 +142,6 @@ export class MqttGatewayService implements OnModuleInit, OnModuleDestroy {
     return [...this.recentTelemetry];
   }
 
-  private subscriptionTopics(): Set<string> {
-    return new Set([
-      ...BASE_SUBSCRIPTION_TOPICS,
-      ...this.dynamicSubscriptionTopics,
-    ]);
-  }
-
-  private subscribeClient(topic: string): void {
-    this.client.subscribe(topic, (error: Error | null) => {
-      if (error) {
-        this.logger.error(
-          `MQTT subscription failed for ${topic}: ${error.message}`,
-        );
-      }
-    });
-  }
-
   private emitTelemetry(topic: string, payload: Record<string, unknown>, timestamp = new Date().toISOString()) {
     const event: ShopfloorTelemetryEvent = {
       type: 'shopfloor.telemetry',
@@ -174,17 +154,13 @@ export class MqttGatewayService implements OnModuleInit, OnModuleDestroy {
       try { callback(event); } catch (error) { this.logger.error('MQTT telemetry callback failed', error); }
     }
   }
-}
 
-function mqttTopicMatches(subscription: string, topic: string): boolean {
-  const subscriptionLevels = subscription.split('/');
-  const topicLevels = topic.split('/');
-
-  for (let index = 0; index < subscriptionLevels.length; index += 1) {
-    const expected = subscriptionLevels[index];
-    if (expected === '#') return index === subscriptionLevels.length - 1;
-    if (topicLevels[index] === undefined) return false;
-    if (expected !== '+' && expected !== topicLevels[index]) return false;
+  private subscribeToTopics(isRecovery = false) {
+    const topics = new Set([...SUBSCRIPTION_TOPICS, this.webshopOrderTopic]);
+    for (const topic of topics) {
+      this.client.subscribe(topic, { qos: 2, rh: isRecovery ? 1 : 0 }, (error: Error | null) => {
+        if (error) this.logger.error(`MQTT subscription failed for ${topic}: ${error.message}`);
+      });
+    }
   }
-  return subscriptionLevels.length === topicLevels.length;
 }

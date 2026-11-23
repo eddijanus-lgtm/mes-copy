@@ -1,23 +1,17 @@
-const API_BASE = '/api/v1';
+const API_BASE = '/api';
 
 function dispatchToast(type, message) {
-  window.dispatchEvent(new CustomEvent('mes-toast', {
-    detail: { type, message },
-  }));
+  window.dispatchEvent(new CustomEvent('mes-toast', { detail: { type, message } }));
 }
 
 async function request(endpoint, options = {}) {
   const url = `${API_BASE}${endpoint}`;
   const token = localStorage.getItem('jwt_token');
   const headers = { ...options.headers };
-
   if (token) headers.Authorization = `Bearer ${token}`;
   if (options.body && !(options.body instanceof FormData)) headers['Content-Type'] = 'application/json';
 
-  const config = {
-    ...options,
-    headers,
-  };
+  const config = { ...options, headers };
   if (config.body && typeof config.body === 'object' && !(config.body instanceof FormData)) {
     config.body = JSON.stringify(config.body);
   }
@@ -50,12 +44,10 @@ async function request(endpoint, options = {}) {
     }
 
     const text = await res.text();
+    if (options.responseType === "text") return text;
     if (!text) return null;
-    try {
-      return JSON.parse(text);
-    } catch {
-      throw new Error('Der Server hat keine gueltige API-Antwort geliefert. Bitte Backend/Proxy pruefen.');
-    }
+    try { return JSON.parse(text); }
+    catch { throw new Error('Der Server hat keine gueltige API-Antwort geliefert. Bitte Backend/Proxy pruefen.'); }
   } catch (error) {
     if (!error.message) {
       if (!options.silent) dispatchToast('error', 'Netzwerkfehler — bitte Verbindung pruefen.');
@@ -64,42 +56,11 @@ async function request(endpoint, options = {}) {
   }
 }
 
-async function download(endpoint) {
-  const token = localStorage.getItem('jwt_token');
-  const headers = token ? { Authorization: `Bearer ${token}` } : {};
-  const res = await fetch(`${API_BASE}${endpoint}`, { method: 'GET', headers });
-
-  if (res.status === 401) {
-    localStorage.removeItem('jwt_token');
-    window.dispatchEvent(new Event('auth:unauthorized'));
-  }
-  if (!res.ok) {
-    const responseText = await res.text();
-    let detail = responseText;
-    try {
-      const payload = JSON.parse(responseText);
-      detail = Array.isArray(payload.message) ? payload.message.join(' ') : payload.message || payload.error || responseText;
-    } catch {
-      // Text responses can be used directly.
-    }
-    const errorMessage = detail ? `Download fehlgeschlagen (${res.status}): ${detail}` : `Download fehlgeschlagen (${res.status})`;
-    dispatchToast('error', errorMessage);
-    throw new Error(errorMessage);
-  }
-
-  const disposition = res.headers.get('content-disposition') || '';
-  const filenameMatch = disposition.match(/filename="?([^";]+)"?/i);
-  return {
-    blob: await res.blob(),
-    filename: filenameMatch?.[1] || 'production-run.csv',
-  };
-}
-
 export const api = {
   get: (endpoint) => request(endpoint, { method: 'GET' }),
   getSilent: (endpoint) => request(endpoint, { method: 'GET', silent: true }),
   post: (endpoint, body) => request(endpoint, { method: 'POST', body }),
   patch: (endpoint, body) => request(endpoint, { method: 'PATCH', body }),
+  getText: (endpoint) => request(endpoint, { method: 'GET', responseType: 'text' }),
   del: (endpoint, body) => request(endpoint, { method: 'DELETE', body }),
-  download,
 };

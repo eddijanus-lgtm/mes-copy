@@ -8,23 +8,18 @@ import helmet from 'helmet';
 import { WsAdapter } from '@nestjs/platform-ws';
 import * as correlationId from 'crypto';
 import { createDocument } from './swagger';
-import { ApiExceptionFilter } from './common/api-exception.filter';
-import { configureApiVersioning } from './api-versioning';
-import { validateProductionEnvironment } from './config/production-environment';
 
 async function bootstrap() {
-  validateProductionEnvironment();
   const app = await NestFactory.create(AppModule);
   const logger = new Logger('Bootstrap');
 
   app.use(helmet({ contentSecurityPolicy: false }));
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }));
-  app.useGlobalFilters(new ApiExceptionFilter());
   const corsOrigins = (process.env.CORS_ORIGINS || 'http://localhost:3000,http://localhost:5173').split(',');
   app.enableCors({ origin: corsOrigins, credentials: true });
   app.useWebSocketAdapter(new WsAdapter(app));
   app.enableShutdownHooks(['SIGINT', 'SIGTERM']);
-  configureApiVersioning(app);
+  app.setGlobalPrefix('api');
 
   app.use((req, res, next) => {
     const requestId = correlationId.randomUUID();
@@ -61,7 +56,6 @@ async function bootstrap() {
   await app.listen(port);
   logger.log(`MES Shopfloor Gateway running on http://localhost:${port}`);
   logger.log(`Swagger docs available at http://localhost:${port}/api/docs`);
-  logger.log(`OpenAPI JSON available at http://localhost:${port}/api/docs/openapi.json`);
 }
 
 bootstrap();

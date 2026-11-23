@@ -1,20 +1,17 @@
-import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
-import { Controller, Get, Post, Body, Inject } from '@nestjs/common';
+import { ApiTags, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
+import { Controller, Get, Post, Body } from '@nestjs/common';
+import { OpcUaService } from './opcua.service';
 import { MqttGatewayService } from './mqtt-gateway.service';
-import { MqttPublishDto, OpcUaReadDto, MachineControlDto, OpcUaWriteDto } from './shopfloor-gateway.dto';
+import { MqttPublishDto, OpcUaReadDto, MachineControlDto, WebshopCheckoutDto } from './shopfloor-gateway.dto';
 import { Roles } from '../auth/roles.decorator';
 import { UserRoleEnum } from '../users/user.entity';
 import { StMesHandshakeService } from './stmes-handshake.service';
 import { WebshopOrdersService } from './webshop-orders.service';
-import { MACHINE_ADAPTER } from '../machines/adapters/machine-adapter.token';
-import type { MachineAdapter, MachineAddressWrite } from '../machines/adapters/machine-adapter.types';
 
 @Controller('shopfloor')
-@ApiTags('Shopfloor')
-@ApiBearerAuth('JWT-auth')
 export class ShopfloorGatewayController {
   constructor(
-    @Inject(MACHINE_ADAPTER) private readonly machine: MachineAdapter,
+    private readonly opcUaService: OpcUaService,
     private readonly mqttGatewayService: MqttGatewayService,
     private readonly stMesHandshakeService: StMesHandshakeService,
     private readonly webshopOrdersService: WebshopOrdersService,
@@ -22,15 +19,15 @@ export class ShopfloorGatewayController {
 
   @Get('opcua/status')
   @Roles(UserRoleEnum.ADMIN, UserRoleEnum.OPERATOR, UserRoleEnum.VIEWER)
-  async getOpcUaStatus() { return this.machine.getConnectionStatus(); }
+  getOpcUaStatus() { return this.opcUaService.getServerStatus(); }
 
   @Get('opcua/connected')
   @Roles(UserRoleEnum.ADMIN, UserRoleEnum.OPERATOR, UserRoleEnum.VIEWER)
-  opcuaConnected() { return { connected: this.machine.isConnected() }; }
+  opcuaConnected() { return { connected: this.opcUaService.isConnected() }; }
 
   @Post('opcua/read')
   @Roles(UserRoleEnum.ADMIN, UserRoleEnum.OPERATOR)
-  async readOpcUaNode(@Body() dto: OpcUaReadDto) { return this.machine.readDiagnosticAddress(dto.nodeId); }
+  readOpcUaNode(@Body() dto: OpcUaReadDto) { return this.opcUaService.readNode(dto.nodeId); }
 
   @Get('mqtt/connected')
   @Roles(UserRoleEnum.ADMIN, UserRoleEnum.OPERATOR, UserRoleEnum.VIEWER)
@@ -49,38 +46,20 @@ export class ShopfloorGatewayController {
 
   @Get('health')
   @Roles(UserRoleEnum.ADMIN, UserRoleEnum.OPERATOR, UserRoleEnum.VIEWER)
-  async getHealth() {
-    const machineStatus = await this.machine.getConnectionStatus();
+  getHealth() {
     return {
       status: 'ok',
-      ok: this.machine.isConnected() && this.mqttGatewayService.isConnected(),
+      ok: this.opcUaService.isConnected() && this.mqttGatewayService.isConnected(),
       name: 'Shopfloor Gateway',
       role: 'OT/IT gateway for OPC UA station handshakes, MQTT ingress and shopfloor telemetry forwarding. Routing decisions stay in MES routing.',
       timestamp: new Date().toISOString(),
       protocols: {
-        opcua: {
-          connected: this.machine.isConnected(),
-          direction:
-            machineStatus.operatingMode === 'control'
-              ? 'read/write'
-              : 'read-only',
-          purpose: 'Profile-configured machine signals and production events',
-        },
+        opcua: { connected: this.opcUaService.isConnected(), direction: 'read/write', purpose: 'SPS stMES handshake and DB151 process data' },
         mqtt: { connected: this.mqttGatewayService.isConnected(), direction: 'subscribe/publish', purpose: 'Webshop order ingress and broker telemetry' },
       },
-      opcua: this.machine.isConnected(),
+      opcua: this.opcUaService.isConnected(),
       mqtt: this.mqttGatewayService.isConnected(),
-      machine: {
-        ...machineStatus,
-        stations: this.machine.getStations(),
-      },
     };
-  }
-
-  @Get('machine/order-parameters')
-  @Roles(UserRoleEnum.ADMIN, UserRoleEnum.OPERATOR, UserRoleEnum.VIEWER)
-  getOrderParameterDefinitions() {
-    return { source: 'machine-adapter', parameters: this.machine.getOrderParameterDefinitions() };
   }
 
   @Get('stmes/handshakes')
@@ -95,22 +74,69 @@ export class ShopfloorGatewayController {
     return this.webshopOrdersService.getRecentOrders();
   }
 
+  @Post('webshop/orders')
+  @Roles(UserRoleEnum.ADMIN, UserRoleEnum.OPERATOR)
+  async checkoutWebshopOrder(@Body() dto: WebshopCheckoutDto) {
+    await this.webshopOrdersService.publishOrder(dto);
+    return { published: true };
+  }
+
   @Post('machine/control')
   @Roles(UserRoleEnum.ADMIN, UserRoleEnum.OPERATOR)
   async controlMachine(@Body() dto: MachineControlDto) {
-    await this.machine.executeControlCommand(dto.resourceId, dto.command);
+    const prefix = `ns=1;s=Station${dto.resourceId}.stMES.Control.`;
+    const commandNode = {
+      start: 'xCmdStart',
+      stop: 'xCmdStop',
+      reset: 'xCmdReset',
+      pause: 'xCmdPause',
+    }[dto.command];
+    await this.opcUaService.writeNodes([{ nodeId: prefix + commandNode, dataType: 'Boolean', value: true }]);
     return { success: true, command: dto.command, resourceId: dto.resourceId };
+  }
+
+  @Post('machine/control/legacy')
+  @Roles(UserRoleEnum.ADMIN, UserRoleEnum.OPERATOR)
+  async controlMachineLegacy(@Body() dto: MachineControlDto) {
+    const prefix = `ns=1;s=Station${dto.resourceId}.stMES.Query.`;
+    switch (dto.command) {
+      case 'start':
+        await this.opcUaService.writeNodes([
+          { nodeId: prefix + 'xStart', dataType: 'Boolean', value: true },
+        ]);
+        return { success: true, command: 'start', resourceId: dto.resourceId };
+      case 'stop':
+        await this.opcUaService.writeNodes([
+          { nodeId: prefix + 'xQryBusy', dataType: 'Boolean', value: false },
+          { nodeId: prefix + 'xDone', dataType: 'Boolean', value: false },
+          { nodeId: prefix + 'xError', dataType: 'Boolean', value: false },
+        ]);
+        return { success: true, command: 'stop', resourceId: dto.resourceId };
+      case 'reset':
+        await this.opcUaService.writeNodes([
+          { nodeId: prefix + 'xStart', dataType: 'Boolean', value: false },
+          { nodeId: prefix + 'xQryBusy', dataType: 'Boolean', value: false },
+          { nodeId: prefix + 'xDone', dataType: 'Boolean', value: false },
+          { nodeId: prefix + 'xError', dataType: 'Boolean', value: false },
+        ]);
+        return { success: true, command: 'reset', resourceId: dto.resourceId };
+      case 'pause':
+        await this.opcUaService.writeNodes([
+          { nodeId: prefix + 'xQryBusy', dataType: 'Boolean', value: true },
+        ]);
+        return { success: true, command: 'pause', resourceId: dto.resourceId };
+    }
   }
 
   @Post('opcua/write')
   @Roles(UserRoleEnum.ADMIN)
-  async writeOpcUaNode(@Body() dto: OpcUaWriteDto) {
-    const writes: MachineAddressWrite[] = dto.writes.map(item => ({
-      address: item.address,
-      dataType: item.dataType,
-      value: item.value,
+  async writeOpcUaNode(@Body() dto: MachineControlDto) {
+    const prefix = `ns=1;s=Station${dto.resourceId}.stMES.Query.`;
+    const values = Object.entries(dto).map(([k, v]) => ({
+      nodeId: `${prefix}${v}`,
+      dataType: 'String',
+      value: k,
     }));
-    await this.machine.writeDiagnosticAddresses(writes);
-    return { success: true, written: dto.writes.length };
+    return this.opcUaService.writeNodes(values);
   }
 }

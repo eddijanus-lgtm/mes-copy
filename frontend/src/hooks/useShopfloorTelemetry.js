@@ -29,7 +29,7 @@ export function useShopfloorTelemetry() {
     function connect() {
       const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
       setState((current) => ({ ...current, status: "connecting" }));
-      socket = new WebSocket(`${protocol}//${window.location.host}/api/v1/shopfloor/ws`);
+      socket = new WebSocket(`${protocol}//${window.location.host}/api/shopfloor/ws`);
 
       socket.onopen = () => socket.send(JSON.stringify({ type: "auth", token }));
       socket.onmessage = (event) => {
@@ -71,6 +71,8 @@ export function useShopfloorTelemetry() {
   return state;
 }
 
+const TRACKED_FIELDS = ["iCarrierID", "iStepNo", "iResourceID", "iPar1", "iPar2", "iPar3", "iPar4", "ldtTimeStamp"];
+
 function applyTelemetry(current, message) {
   const resourceId = message.source === "opcua" ? message.payload?.resourceId : null;
   const base = {
@@ -101,11 +103,10 @@ function applyTelemetry(current, message) {
     };
   }
 
-  const previousSignals = current.telemetryByResource[resourceId]?.payload?.signals || {};
-  const nextSignals = message.payload?.signals || {};
+  const previous = current.telemetryByResource[resourceId]?.payload;
   const changedAt = { ...(current.changedAtByResource[resourceId] || {}) };
-  for (const field of new Set([...Object.keys(previousSignals), ...Object.keys(nextSignals)])) {
-    if (String(previousSignals[field]) !== String(nextSignals[field])) changedAt[field] = Date.now();
+  for (const field of TRACKED_FIELDS) {
+    if (previous && String(previous[field]) !== String(message.payload[field])) changedAt[field] = Date.now();
   }
   return {
     ...base,

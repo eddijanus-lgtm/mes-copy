@@ -16,11 +16,6 @@ _Dieser Ordner enthält Erklärungen, Konzepte und technische Hintergründe für
 | [05-timescaledb-migration.md](05-timescaledb-migration.md) | PostgreSQL → TimescaleDB Migration für Time-Series | planned |
 | [07-stmes-demo-contract.md](07-stmes-demo-contract.md) | Erfundenes Mehrstations-stMES-Protokoll für lokale Demos | demo only |
 | [08-orders-crud.md](08-orders-crud.md) | Vollständige Auftragsverwaltung im Frontend | verified |
-| [10-real-machine-commissioning.md](10-real-machine-commissioning.md) | Lesende OPC-UA-Erfassung und Profilprüfung für die echte Anlage | prepared |
-| [11-api-lifecycle.md](11-api-lifecycle.md) | API-Versionierung, Breaking Changes und Deprecation Policy | verified |
-| [12-frontend-styleguide.md](12-frontend-styleguide.md) | Verbindliches WARA-Designsystem für Seiten, Komponenten und responsive Bedienung | verified |
-| [13-production-run-csv.md](13-production-run-csv.md) | Standardisierter Produktionslauf-CSV-Export für abgeschlossene Aufträge | verified |
-| [14-machine-configuration-wizard.md](14-machine-configuration-wizard.md) | Frontend-, Backend- und Persistenzreferenz des Wizards „Maschine konfigurieren“ mit Vollständigkeitsprüfung | reviewed |
 
 ---
 

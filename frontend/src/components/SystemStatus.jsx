@@ -1,75 +1,39 @@
 import { useState, useEffect } from 'react';
+import { useTranslation } from "../i18n/I18nProvider.jsx";
+import { useAuth } from "../providers/AuthProvider.jsx";
 
 export default function SystemStatus() {
+  const { t } = useTranslation();
+  const { token } = useAuth();
   const [backendOnline, setBackendOnline] = useState('checking');
   const [dbOnline, setDbOnline] = useState('checking');
-  const [token, setToken] = useState(false);
 
   useEffect(() => {
-    setToken(Boolean(localStorage.getItem('jwt_token')));
-    fetch('/api/v1/health')
-      .then(res => res.json())
-      .then(health => {
+    const check = () => {
+      fetch('/api/health').then(res => res.json()).then(health => {
         setBackendOnline(health.status === 'ok' ? 'online' : 'error');
         setDbOnline(health.info?.database?.status === 'up' ? 'online' : 'error');
-      })
-      .catch(() => {
-        setBackendOnline('offline');
-        setDbOnline('unknown');
-      });
-
-    const interval = setInterval(() => {
-      fetch('/api/v1/health')
-        .then(res => res.json())
-        .then(health => {
-          setBackendOnline(health.status === 'ok' ? 'online' : 'error');
-          setDbOnline(health.info?.database?.status === 'up' ? 'online' : 'error');
-        })
-        .catch(() => {
-          setBackendOnline('offline');
-          setDbOnline('unknown');
-        });
-    }, 5000);
-
+      }).catch(() => { setBackendOnline('offline'); setDbOnline('unknown'); });
+    };
+    check();
+    const interval = setInterval(check, 5000);
     return () => clearInterval(interval);
   }, []);
 
-  const status = backendOnline === 'online' ? 'Online' :
-                  backendOnline === 'error' ? 'Fehler' : 'Offline';
+  const statusIcon = backendOnline === 'online' ? '✅' : backendOnline === 'error' ? '❌' : '⚠️';
+  const dbIcon = dbOnline === 'online' ? '✅' : dbOnline === 'error' ? '❌' : '❓';
+  const tokenIcon = token ? '✅' : '🔒';
 
-  const dbStatus = dbOnline === 'online' ? 'Verbunden' :
-                   dbOnline === 'error' ? 'Fehler' : 'Unbekannt';
-  const tokenStatus = token ? 'Angemeldet' : 'Nicht angemeldet';
-  const backendClass = backendOnline === 'online' ? 'is-online' :
-    backendOnline === 'error' ? 'is-warning' : 'is-offline';
-  const databaseClass = dbOnline === 'online' ? 'is-online' :
-    dbOnline === 'error' ? 'is-warning' : 'is-offline';
-  const sessionClass = token ? 'is-online' : 'is-offline';
+  const statusLabel = backendOnline === 'online' ? t("system.online") : backendOnline === 'error' ? t("system.error") : t("system.offline");
+  const dbLabel = dbOnline === 'online' ? t("system.connected") : dbOnline === 'error' ? t("system.error") : t("system.unknown");
+  const tokenLabel = token ? t("system.authenticated") : t("system.notLoggedIn");
 
   return (
-    <details className="system-status">
-      <summary>
-        Systemstatus
-        <span className="system-status__summary-dots" aria-hidden="true">
-          <span className={backendClass} />
-          <span className={databaseClass} />
-          <span className={sessionClass} />
-        </span>
-      </summary>
-      <div className="system-status__body">
-        <div className="system-status__row">
-          <span>Backend</span>
-          <strong className={`system-status__value ${backendClass}`}>{status}</strong>
-        </div>
-        <div className="system-status__row">
-          <span>Datenbank</span>
-          <strong className={`system-status__value ${databaseClass}`}>{dbStatus}</strong>
-        </div>
-        <div className="system-status__row">
-          <span>Sitzung</span>
-          <strong className={`system-status__value ${sessionClass}`}>{tokenStatus}</strong>
-        </div>
-      </div>
-    </details>
+    <div className="fixed bottom-4 right-4 z-[9999] min-w-[200px] rounded-lg border border-neutral-200 bg-white p-2.5 font-mono text-xs text-neutral-800 shadow-[0_10px_30px_rgba(15,23,42,0.12)]">
+      <div className="mb-1 border-b border-neutral-200 pb-1 font-bold">{t("system.title")}</div>
+      <div>{t("system.backend")}: {statusIcon} {statusLabel}</div>
+      <div>{t("system.database")}: {dbIcon} {dbLabel}</div>
+      <div>{t("system.session")}: {tokenIcon} {tokenLabel}</div>
+    </div>
   );
 }

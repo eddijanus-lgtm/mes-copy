@@ -1,4 +1,4 @@
-import { IsOptional, IsEnum, IsNotEmpty, IsString, IsBoolean, IsArray, IsObject, IsUUID } from 'class-validator';
+import { IsOptional, IsEnum, IsNotEmpty, IsString, IsBoolean, IsArray } from 'class-validator';
 import type { NotificationChannel, AlertRuleStatus } from './entities';
 
 export class CreateNotificationChannelDto {
@@ -40,8 +40,7 @@ export class CreateAlertRuleDto {
   channels?: NotificationChannel[];
 
   @IsOptional()
-  @IsObject()
-  params?: Record<string, any>;
+  config?: Record<string, any>;
 }
 
 export class UpdateAlertRuleDto {
@@ -71,20 +70,8 @@ export class UpdateAlertRuleDto {
   channels?: NotificationChannel[];
 
   @IsOptional()
-  @IsBoolean()
   is_active?: boolean;
 
   @IsOptional()
-  @IsObject()
-  params?: Record<string, any>;
-}
-
-export class TriggerAlertRuleDto {
-  @IsOptional()
-  @IsString()
-  message?: string;
-
-  @IsOptional()
-  @IsUUID()
-  machine_id?: string;
+  config?: Record<string, any>;
 }

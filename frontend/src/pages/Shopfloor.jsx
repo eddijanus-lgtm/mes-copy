@@ -1,617 +1,496 @@
-import { useEffect, useMemo, useState } from "react";
-import { useTranslation } from "../i18n/I18nProvider.jsx";
+import { useEffect, useState } from "react";
 import { api } from "../api/client.js";
-import ExecutionStepCard from "../components/ExecutionStepCard.jsx";
-import PageInfo from "../components/PageInfo.jsx";
-import PageHeader from "../design-system/components/PageHeader.jsx";
 import { useShopfloorTelemetry } from "../hooks/useShopfloorTelemetry.js";
-import {
-  activeExecutionForResource,
-  buildEquipmentTree,
-  equipmentJobInterface,
-  equipmentLevelLabel,
-  isControllableEquipment,
-  isRoutableEquipment,
-  normalizeExecutionSteps,
-} from "../utils/equipmentModel.js";
+import { useTranslation } from "../i18n/I18nProvider.jsx";
+import PageInfo from "../components/PageInfo.jsx";
+import { useAuth } from "../providers/AuthProvider.jsx";
+import { canManageMachines } from "../utils/roles.js";
+import "./shopfloor.css";
+
+const RESULT_TEXT = { 0: "OK", 1: "Carrier unbekannt", 2: "Auftrag oder Schritt fehlt", 3: "Falsche Station", 4: "Bereits abgeschlossen", 9: "Interner Fehler" };
+const STATION_CODES = { 1: "S01", 2: "S02", 3: "Q01" };
+const STATION_TITLES = { 1: "lidStation", 2: "ballStation", 3: "checkStation" };
+const STATION_STALE_SECONDS = 10;
+const FLOW_ENDPOINTS = ["/carriers", "/orders", "/shopfloor/stmes/handshakes", "/shopfloor/mqtt/messages", "/shopfloor/webshop/orders"];
+
+function stationName(resourceId, t) {
+  return STATION_TITLES[resourceId] ? t(`shopfloor.${STATION_TITLES[resourceId]}`) : `${t("shopfloor.stationLabel")} ${resourceId}`;
+}
 
 export default function ShopfloorPage() {
   const { t } = useTranslation();
-  const [health, setHealth] = useState(null);
+  const { user } = useAuth();
+  const canControl = canManageMachines(user);
+  const [health, setHealth] = useState(undefined);
   const [carriers, setCarriers] = useState([]);
   const [orders, setOrders] = useState([]);
   const [handshakeJournal, setHandshakeJournal] = useState([]);
   const [mqttHistory, setMqttHistory] = useState([]);
   const [webshopOrders, setWebshopOrders] = useState([]);
-  const [routesByOrder, setRoutesByOrder] = useState({});
-  const [equipment, setEquipment] = useState([]);
-  const [executionSteps, setExecutionSteps] = useState([]);
   const [now, setNow] = useState(Date.now());
   const [controlLoading, setControlLoading] = useState(null);
+  const [controlFeedback, setControlFeedback] = useState({});
+  const [flowStatus, setFlowStatus] = useState([]);
   const { status, telemetryByResource, handshakeByResource, eventsByResource, changedAtByResource, mqttEvents, lastMessageAt, logs } = useShopfloorTelemetry();
 
   const handleMachineControl = async (resourceId, command) => {
+    setControlLoading(resourceId);
+    setControlFeedback((current) => ({ ...current, [resourceId]: null }));
     try {
-      setControlLoading(resourceId);
       await api.post("/shopfloor/machine/control", { resourceId, command });
+      setControlFeedback((current) => ({ ...current, [resourceId]: "commandSent" }));
     } catch {
-      console.error(`Failed to send ${command} for resource ${resourceId}`);
+      setControlFeedback((current) => ({ ...current, [resourceId]: "commandFailed" }));
     } finally {
       setControlLoading(null);
     }
   };
 
   useEffect(() => {
-    const loadStatus = () => api.getSilent("/shopfloor/health").then(setHealth).catch(() => setHealth(null));
-    const loadFlow = () => Promise.all([
-      api.getSilent("/carriers"),
-      api.getSilent("/orders"),
-      api.getSilent("/shopfloor/stmes/handshakes"),
-      api.getSilent("/shopfloor/mqtt/messages"),
-      api.getSilent("/shopfloor/webshop/orders"),
-      api.getSilent("/machines").catch(() => []),
-      api.getSilent("/shopfloor/execution-steps/current").catch(() => ({ items: [] })),
-    ])
-      .then(([carrierData, orderData, journalData, mqttData, webshopData, equipmentData, executionData]) => {
-        const safeOrders = Array.isArray(orderData) ? orderData : [];
-        setCarriers(Array.isArray(carrierData) ? carrierData : []);
-        setOrders(safeOrders);
-        setHandshakeJournal(Array.isArray(journalData) ? journalData : []);
-        setMqttHistory(Array.isArray(mqttData) ? mqttData : []);
-        setWebshopOrders(Array.isArray(webshopData) ? webshopData : []);
-        setEquipment(Array.isArray(equipmentData) ? equipmentData : []);
-        setExecutionSteps(normalizeExecutionSteps(executionData));
-        const activeOrders = safeOrders.filter((order) => order.status === "in_progress");
-        return Promise.all(
-          activeOrders.map(async (order) => [
-            order.id,
-            await api.getSilent(`/orders/${order.id}/route`),
-          ]),
-        ).then((entries) => setRoutesByOrder(Object.fromEntries(entries)));
-      })
-      .catch(() => {});
-    loadStatus();
-    loadFlow();
-    const healthTimer = setInterval(loadStatus, 10_000);
-    const flowTimer = setInterval(loadFlow, 10_000);
+    let active = true;
+    let checkingHealth = false;
+    let checkingFlow = false;
+    async function loadStatus() {
+      if (checkingHealth) return;
+      checkingHealth = true;
+      try {
+        const data = await api.getSilent("/shopfloor/health");
+        if (active) setHealth(data);
+      } catch {
+        if (active) setHealth(null);
+      } finally {
+        checkingHealth = false;
+      }
+    }
+    async function loadFlow() {
+      if (checkingFlow) return;
+      checkingFlow = true;
+      const results = await Promise.allSettled(FLOW_ENDPOINTS.map((endpoint) => api.getSilent(endpoint)));
+      checkingFlow = false;
+      if (!active) return;
+      const setters = [setCarriers, setOrders, setHandshakeJournal, setMqttHistory, setWebshopOrders];
+      const availability = results.map((result, index) => {
+        if (result.status !== "fulfilled" || !Array.isArray(result.value)) return false;
+        setters[index](result.value);
+        return true;
+      });
+      setFlowStatus(availability);
+    }
+    loadStatus(); loadFlow();
+    const healthTimer = setInterval(loadStatus, 5000);
+    const flowTimer = setInterval(loadFlow, 2000);
     const clockTimer = setInterval(() => setNow(Date.now()), 1000);
-    return () => {
-      clearInterval(healthTimer);
-      clearInterval(flowTimer);
-      clearInterval(clockTimer);
-    };
+    return () => { active = false; clearInterval(healthTimer); clearInterval(flowTimer); clearInterval(clockTimer); };
   }, []);
 
   const connected = status === "connected";
   const stations = Object.values(telemetryByResource).sort((a, b) => a.payload.resourceId - b.payload.resourceId);
-  const profileStations = health?.machine?.stations || [];
-  const equipmentByResource = useMemo(
-    () => new Map(equipment.map((item) => [String(item.resource_id ?? item.resourceId), item])),
-    [equipment],
-  );
-  const profileEquipment = profileStations.map((station) => {
-    const telemetry = telemetryByResource[station.resourceId]?.payload;
-    const persisted = equipmentByResource.get(String(station.resourceId)) || {};
-    return {
-      ...persisted,
-      ...station,
-      displayName: station.displayName || telemetry?.displayName,
-      signals: telemetry?.signals || {},
-      roles: telemetry?.roles || {},
-    };
-  });
-  const profileResourceIds = new Set(profileEquipment.map((item) => String(item.resourceId ?? item.resource_id)));
-  const allEquipment = [
-    ...equipment.filter((item) => !profileResourceIds.has(String(item.resource_id ?? item.resourceId))),
-    ...profileEquipment,
-  ];
-  const equipmentTree = useMemo(() => buildEquipmentTree(allEquipment), [equipment, health, telemetryByResource]);
-  const resourceNames = useMemo(
-    () => Object.fromEntries(allEquipment.map((item) => [item.resource_id ?? item.resourceId, item.name ?? item.displayName])),
-    [equipment, health, telemetryByResource],
-  );
-  const activeShopfloorOrder = orders.find((order) => order.status === "in_progress");
-  const trackedCarriers = activeShopfloorOrder ? carriers.filter((carrier) => carrier.order_id === activeShopfloorOrder.id) : [];
-  const resultCodes = health?.machine?.resultCodes || {};
+  const stationIds = [...new Set([1, 2, 3, ...stations.map(({ payload }) => payload.resourceId)])];
+  const activeOrders = orders.filter((order) => order.status === "in_progress");
+  const mqttMessages = [...mqttEvents].reverse();
 
   return (
-    <div className="mes-page min-h-screen bg-neutral-50">
-      <main className="p-6 space-y-6">
-        <PageHeader
-          title={t("shopfloor.title")}
-          description={t("shopfloor.subtitle")}
-          titleAccessory={<PageInfo page="shopfloor" />}
-          actions={(
-            <div className="flex items-center gap-2 text-xs text-neutral-500">
-              <span className={`h-2.5 w-2.5 rounded-full ${connected ? "bg-status-success animate-pulse" : "bg-status-error"}`} />
-              {lastMessageAt ? `Daten empfangen vor ${ageInSeconds(lastMessageAt, now)} s` : "Noch keine Telemetrie"}
-            </div>
-          )}
-        />
+    <div className="shopfloor">
+      <div className="shopfloor-layout">
+        <header className="shopfloor-header">
+          <div>
+            <h1>{t("shopfloor.title")}<PageInfo page="shopfloor" /></h1>
+            <p>{t("shopfloor.overviewSubtitle")}</p>
+          </div>
+          <p className="shopfloor-freshness">
+            {lastMessageAt ? `${t("shopfloor.dataReceived")} ${ageInSeconds(lastMessageAt, now)} ${t("shopfloor.seconds")}` : t("shopfloor.noTelemetry")}
+          </p>
+        </header>
 
-        <div className="flex flex-wrap gap-2">
-          <StatusBadge label="WebSocket" active={connected} detail={status} />
-          <StatusBadge label="OPC UA" active={Boolean(health?.opcua)} />
-          <StatusBadge label="MQTT" active={Boolean(health?.mqtt)} />
-        </div>
+        <ConnectionOverview health={health} status={status} t={t} />
 
-        <GatewayRolePanel health={health} />
+        <section aria-labelledby="shopfloor-stations">
+          <h2 id="shopfloor-stations" className="shopfloor-section-title">{t("shopfloor.stations")}</h2>
+          <div className="shopfloor-stations">
+            {stationIds.map((resourceId) => {
+              const snapshot = telemetryByResource[resourceId];
+              const fresh = connected && health?.opcua === true && snapshot &&
+                ageInSeconds(snapshot.timestamp, now) < STATION_STALE_SECONDS;
+              return (
+                <MachineControlPanel key={resourceId} resourceId={resourceId}
+                  stationState={snapshot?.payload.state} stale={Boolean(snapshot && !fresh)}
+                  blocked={health?.opcua !== true} canControl={canControl}
+                  loading={controlLoading === resourceId} busy={controlLoading !== null}
+                  feedback={controlFeedback[resourceId]}
+                  onControl={(command) => handleMachineControl(resourceId, command)} t={t} />
+              );
+            })}
+          </div>
+        </section>
 
-        <CarrierFlow order={activeShopfloorOrder} carriers={trackedCarriers} route={routesByOrder[activeShopfloorOrder?.id] || []} />
+        <section className="shopfloor-panel shopfloor-production" aria-labelledby="shopfloor-production">
+          <h2 id="shopfloor-production" className="shopfloor-section-title">{t("shopfloor.productionFlow")}</h2>
+          <DataStatus states={flowStatus.slice(0, 2)} expected={2} t={t} />
+          {activeOrders.map((order) => (
+            <CarrierFlow key={order.id} order={order} carriers={carriers.filter((carrier) => carrier.order_id === order.id)} t={t} />
+          ))}
+          {activeOrders.length === 0 && flowStatus[1] && <p>{t("shopfloor.noActiveOrder")}</p>}
+          <details className="shopfloor-carrier-history">
+            <summary>{t("shopfloor.otherCarriers")}</summary>
+            <CarrierFlow carriers={carriers.filter((carrier) => !activeOrders.some((order) => order.id === carrier.order_id))} t={t} />
+          </details>
+        </section>
 
-        <ExecutionOverview steps={executionSteps} resourceNames={resourceNames} />
+        <Disclosure title={t("shopfloor.webshopOrders")} description={t("shopfloor.webshopDescription")}
+          aside={flowStatus[4] && webshopOrders.length > 0 ? webshopOrders.length : null}>
+          <DataStatus states={flowStatus.slice(4)} expected={1} t={t} />
+          <WebshopOrdersPanel orders={webshopOrders} available={flowStatus[4]} t={t} />
+        </Disclosure>
 
-        <EquipmentControlTree
-          nodes={equipmentTree}
-          executionSteps={executionSteps}
-          loadingResourceId={controlLoading}
-          onControl={handleMachineControl}
-        />
-
-        <WebshopOrdersPanel orders={webshopOrders} />
-
-        <MqttLivePanel messages={mqttEvents.length > 0 ? [...mqttEvents].reverse() : mqttHistory} connected={Boolean(health?.mqtt)} />
-
-        {stations.length === 0 && <p className="rounded-lg border border-neutral-200 bg-white p-6 text-sm text-neutral-500">Warte auf Stationsdaten...</p>}
-        {stations.map((message) => {
+        <Disclosure title={t("shopfloor.technicalDetails")}>
+          <GatewayRolePanel health={health} t={t} />
+          <DataStatus states={flowStatus.slice(2, 4)} expected={2} t={t} />
+          <MqttLivePanel messages={mqttMessages.length > 0 ? mqttMessages : mqttHistory} connected={health?.mqtt} t={t} />
+          {stations.length === 0 && <p>{t("shopfloor.waiting")}</p>}
+          {stations.map((message) => {
           const payload = message.payload;
           const resourceId = payload.resourceId;
-          const signals = payload.signals || {};
-          const roles = payload.roles || {};
           const changedAt = changedAtByResource[resourceId] || {};
           return (
             <section key={resourceId} className="space-y-3 rounded-xl border border-neutral-200 bg-white p-4 shadow-sm">
               <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
                 <div>
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-neutral-400">Resource {resourceId}</p>
-                  <h2 className="font-mono text-sm font-semibold text-neutral-800">{payload.displayName || payload.stationId || `Station ${resourceId}`}</h2>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-neutral-400">{t("shopfloor.resource")} {resourceId}</p>
+                  <h2 className="font-mono text-sm font-semibold text-neutral-800">{stationName(resourceId, t)} · {t("shopfloor.dbProcessData")}</h2>
+                  <p className="text-xs text-neutral-600">{t("shopfloor.snapshotTime")} {formatTimestamp(message.timestamp)}</p>
                 </div>
-                <HandshakeStatus snapshot={handshakeSnapshot(roles)} lastEvent={handshakeByResource[resourceId]} resultCodes={resultCodes} />
+                <HandshakeStatus snapshot={payload.handshake} lastEvent={handshakeByResource[resourceId]} t={t} />
               </div>
-
-              <ExecutionStepCard step={activeExecutionForResource(executionSteps, resourceId)} resourceName={payload.displayName || payload.stationId} compact />
-
               <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
-                {Object.entries(signals).map(([key, value]) => (
-                  <MetricCard
-                    key={key}
-                    label={signalLabel(key)}
-                    value={formatSignalValue(key, value)}
-                    technical={key}
-                    changed={isRecent(changedAt[key], now)}
-                  />
-                ))}
+                <MetricCard label={t("shopfloor.carrier")} value={payload.iCarrierID ?? "–"} technical="iCarrierID" changed={isRecent(changedAt.iCarrierID, now)} />
+                <MetricCard label={t("shopfloor.workplanStep")} value={payload.iStepNo ?? "–"} technical="iStepNo" changed={isRecent(changedAt.iStepNo, now)} />
+                <MetricCard label={t("shopfloor.nextStation")} value={payload.iResourceID ?? "–"} technical="iResourceID" changed={isRecent(changedAt.iResourceID, now)} />
+                <MetricCard label={t("shopfloor.lidColor")} value={formatLidColor(payload.iPar1)} technical="iPar1" changed={isRecent(changedAt.iPar1, now)} />
+                <MetricCard label={t("shopfloor.redBalls")} value={payload.iPar2 ?? "–"} technical="iPar2" changed={isRecent(changedAt.iPar2, now)} />
+                <MetricCard label={t("shopfloor.greenBalls")} value={payload.iPar3 ?? "–"} technical="iPar3" changed={isRecent(changedAt.iPar3, now)} />
+                <MetricCard label={t("shopfloor.blueBalls")} value={payload.iPar4 ?? "–"} technical="iPar4" changed={isRecent(changedAt.iPar4, now)} />
+                <MetricCard label={t("shopfloor.completionTime")} value={formatTimestamp(payload.ldtTimeStamp)} technical="ldtTimeStamp" changed={isRecent(changedAt.ldtTimeStamp, now)} />
               </div>
-
-              <EventTimeline events={(eventsByResource[resourceId] || []).length > 0
-                ? eventsByResource[resourceId]
-                : handshakeJournal.filter((entry) => entry.resource_id === resourceId).reverse().map((entry) => journalEvent(entry, resultCodes))} />
+              <EventTimeline events={(eventsByResource[resourceId] || []).length > 0 ? eventsByResource[resourceId] : handshakeJournal.filter((entry) => entry.resource_id === resourceId).reverse().map(journalEvent)} t={t} />
             </section>
           );
-        })}
+          })}
 
         <details className="bg-white rounded-lg shadow-card border border-neutral-200 p-5">
-          <summary className="cursor-pointer text-sm font-semibold text-neutral-700">Technische Rohtelemetrie</summary>
-          <pre className="mt-3 text-xs bg-neutral-900 rounded-md px-4 py-3 font-mono text-neutral-100 leading-relaxed overflow-auto max-h-56 whitespace-pre-wrap">
-            {logs.join("\n") || "Warte auf Telemetrie..."}
-          </pre>
+          <summary className="cursor-pointer text-sm font-semibold text-neutral-700">{t("shopfloor.rawTelemetry")}</summary>
+          <pre className="mt-3 text-xs bg-neutral-900 rounded-md px-4 py-3 font-mono text-neutral-100 leading-relaxed overflow-auto max-h-56 whitespace-pre-wrap">{logs.join("\n") || t("shopfloor.waitingForTelemetry")}</pre>
         </details>
-      </main>
+        </Disclosure>
+      </div>
     </div>
   );
 }
 
-function ExecutionOverview({ steps, resourceNames }) {
+function ConnectionOverview({ health, status, t }) {
+  const links = [
+    { label: "liveDisplay", state: status === "connected" ? "connected" : status === "connecting" ? "connecting" : "disconnected" },
+    { label: "machineLink", state: adapterStatus(health?.opcua, health) },
+    { label: "webshopLink", state: adapterStatus(health?.mqtt, health) },
+  ];
+  const allConnected = links.every(({ state }) => state === "connected");
+  const waiting = links.every(({ state }) => state === "connected" || state === "connecting");
+  const overview = allConnected ? "linksReady" : waiting ? "linksChecking" : "linksLimited";
   return (
-    <section className="rounded-xl border border-neutral-200 bg-white shadow-sm">
-      <div className="border-b border-neutral-100 px-5 py-4">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-amber-700">Live-Ausführung</p>
-        <h2 className="font-semibold text-neutral-900">Aktuelle Arbeitsschritte</h2>
-      </div>
-      <div className="grid gap-3 p-4 md:grid-cols-2 xl:grid-cols-3">
-        {steps.length === 0 ? <p className="text-sm text-neutral-400">Aktuell wird kein Arbeitsschritt ausgeführt.</p> : null}
-        {steps.map((step, index) => (
-          <ExecutionStepCard
-            key={step.id || `${step.order_id}-${step.resource_id}-${step.started_at || index}`}
-            step={step}
-            resourceName={resourceNames[step.resource_id]}
-          />
-        ))}
-      </div>
-    </section>
-  );
-}
-
-function EquipmentControlTree({ nodes, executionSteps, loadingResourceId, onControl }) {
-  if (nodes.length === 0) return null;
-  return (
-    <section className="space-y-3" aria-label="Maschinenhierarchie">
-      <div>
-        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-brand-primary">Equipment-Hierarchie</p>
-        <h2 className="font-semibold text-neutral-900">Maschinen und Work Units</h2>
-      </div>
-      {nodes.map((node) => (
-        <EquipmentControlNode
-          key={node.id || node.resource_id || node.resourceId}
-          node={node}
-          depth={0}
-          executionSteps={executionSteps}
-          loadingResourceId={loadingResourceId}
-          onControl={onControl}
-        />
-      ))}
-    </section>
-  );
-}
-
-function EquipmentControlNode({ node, depth, executionSteps, loadingResourceId, onControl }) {
-  const resourceId = node.resourceId ?? node.resource_id;
-  const displayName = node.displayName || node.name || (resourceId != null ? `Ressource ${resourceId}` : "Maschine");
-  const commands = node.availableCommands || node.available_commands || [];
-  const step = activeExecutionForResource(executionSteps, resourceId);
-  const showControl = resourceId != null && (commands.length > 0 || isControllableEquipment(node));
-  return (
-    <div className={depth === 0 ? "rounded-xl border border-neutral-200 bg-white p-4 shadow-sm" : "ml-4 border-l border-neutral-200 pl-4"}>
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+    <section className="shopfloor-connections" aria-labelledby="shopfloor-link-title">
+      <div className="shopfloor-connection-intro">
+        <span aria-hidden="true" className="shopfloor-link-icon" data-tone={allConnected ? "good" : waiting ? "neutral" : "warn"}>
+          {allConnected ? "✓" : waiting ? "…" : "!"}
+        </span>
         <div>
-          <p className="text-[10px] font-semibold uppercase tracking-wider text-neutral-400">{equipmentLevelLabel(node)}{resourceId != null ? ` · R${resourceId}` : ""}</p>
-          <h3 className="text-sm font-semibold text-neutral-900">{displayName}</h3>
-        </div>
-        <div className="flex flex-wrap gap-1.5 text-[10px]">
-          {isRoutableEquipment(node) ? <span className="rounded bg-sky-50 px-2 py-1 text-sky-700">routbar</span> : <span className="rounded bg-neutral-100 px-2 py-1 text-neutral-500">nur Telemetrie</span>}
-          {equipmentJobInterface(node) ? <span className="rounded bg-violet-50 px-2 py-1 text-violet-700">{formatJobInterface(equipmentJobInterface(node))}</span> : null}
+          <h2 id="shopfloor-link-title">{t(`shopfloor.${overview}`)}</h2>
+          <p>{t(`shopfloor.${overview}Hint`)}</p>
         </div>
       </div>
-      {step ? <div className="mb-3"><ExecutionStepCard step={step} resourceName={displayName} compact /></div> : null}
-      {showControl ? (
-        <MachineControlPanel
-          resourceId={resourceId}
-          displayName={displayName}
-          signals={node.signals || {}}
-          roles={node.roles || {}}
-          commands={commands}
-          loading={loadingResourceId === resourceId}
-          onControl={(command) => onControl(resourceId, command)}
-        />
-      ) : null}
-      {(node.children || []).length > 0 ? (
-        <div className="mt-3 space-y-3">
-          {node.children.map((child) => (
-            <EquipmentControlNode
-              key={child.id || child.resource_id || child.resourceId}
-              node={child}
-              depth={depth + 1}
-              executionSteps={executionSteps}
-              loadingResourceId={loadingResourceId}
-              onControl={onControl}
-            />
-          ))}
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
-function WebshopOrdersPanel({ orders }) {
-  return (
-    <section className="rounded-xl border border-emerald-200 bg-white shadow-sm">
-      <div className="border-b border-emerald-100 px-5 py-4">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-emerald-700">OpenCart Webshop</p>
-        <h2 className="font-semibold text-neutral-900">Letzte MQTT-Bestellungen</h2>
-      </div>
-      <div className="p-4">
-        {orders.length === 0 && <p className="text-sm text-neutral-400">Noch keine Webshop-Bestellung empfangen.</p>}
-        <div className="grid gap-3 lg:grid-cols-2">
-          {orders.map((order) => (
-            <article key={`${order.orderName}-${order.timestamp}`} className="rounded-lg border border-emerald-100 bg-emerald-50/60 p-4">
-              <div className="flex items-start justify-between gap-3">
-                <strong className="text-sm text-neutral-900">{order.orderName}</strong>
-                <time className="shrink-0 text-[10px] text-neutral-400">{formatTimestamp(order.timestamp)}</time>
-              </div>
-              <div className="mt-3 grid grid-cols-2 gap-2 text-sm">
-                {Object.entries(order.payload?.parameters || {}).map(([key, value]) => (
-                  <MiniPayload key={key} label={signalLabel(key)} value={value} />
-                ))}
-              </div>
-            </article>
-          ))}
-        </div>
-      </div>
+      <ul className="shopfloor-link-list">
+        {links.map(({ label, state }) => (
+          <li key={label} data-tone={connectionTone(state)}>
+            <span>{t(`shopfloor.${label}`)}</span>
+            <span>{t(`shopfloor.${state}`)}</span>
+          </li>
+        ))}
+      </ul>
     </section>
   );
 }
 
-function GatewayRolePanel({ health }) {
+function adapterStatus(active, health) {
+  if (health === undefined) return "connecting";
+  if (typeof active !== "boolean") return "linkUnknown";
+  return active ? "connected" : "disconnected";
+}
+
+function connectionTone(state) {
+  if (state === "connected") return "good";
+  if (state === "disconnected") return "bad";
+  return "neutral";
+}
+
+function Disclosure({ title, description, aside, children }) {
+  return (
+    <details className="shopfloor-panel shopfloor-disclosure">
+      <summary>
+        <span><strong>{title}</strong>{description && <small>{description}</small>}</span>
+        {aside != null && <b className="shopfloor-count">{aside}</b>}
+      </summary>
+      <div className="shopfloor-disclosure-body">{children}</div>
+    </details>
+  );
+}
+
+function DataStatus({ states, expected, t }) {
+  if (states.length < expected) return <p>{t("shopfloor.loadingData")}</p>;
+  if (states.every(Boolean)) return null;
+  return <p className="shopfloor-data-warning">{t("shopfloor.dataUnavailable")}</p>;
+}
+
+function WebshopOrdersPanel({ orders, available, t }) {
+  return (
+    <div>
+        {available && orders.length === 0 && <p>{t("shopfloor.webshopNoOrders")}</p>}
+        <div className="grid gap-3 lg:grid-cols-2">{orders.map((order) => (
+          <article key={`${order.orderName}-${order.timestamp}`} className="rounded-lg border border-emerald-100 bg-emerald-50/60 p-4">
+            <div className="flex items-start justify-between gap-3"><strong className="text-sm text-neutral-900">{order.orderName}</strong><time className="shrink-0 text-[10px] text-neutral-400">{formatTimestamp(order.timestamp)}</time></div>
+            <div className="mt-3 grid grid-cols-2 gap-2 text-sm">
+              <MiniPayload label={t("shopfloor.lidColorLabel")} value={formatLidColor(order.payload?.bDeckelfarbe)} />
+              <MiniPayload label={t("shopfloor.red")} value={order.payload?.uiKugelRot} />
+              <MiniPayload label={t("shopfloor.green")} value={order.payload?.uiKugelGruen} />
+              <MiniPayload label={t("shopfloor.blue")} value={order.payload?.uiKugelBlau} />
+            </div>
+          </article>
+        ))}</div>
+    </div>
+  );
+}
+
+function GatewayRolePanel({ health, t }) {
   const protocols = health?.protocols || {};
   return (
     <section className="grid gap-4 rounded-xl border border-neutral-200 bg-white p-5 shadow-sm lg:grid-cols-[1fr_1.4fr]">
-      <div>
-        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-brand-primary">Gateway-Aufgabe</p>
-        <h2 className="mt-1 font-semibold text-neutral-900">Protokollbruecke zwischen SPS und MES</h2>
-        <p className="mt-2 text-sm leading-6 text-neutral-500">
-          Das Shopfloor Gateway liest und schreibt Maschinensignale, nimmt MQTT-Nachrichten entgegen und leitet Ereignisse ans MES weiter. Die Produktionsroute und die Entscheidung, ob ein Carrier an einer Station arbeiten darf, bleiben im MES-Routing.
-        </p>
-      </div>
+      <div><p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-brand-primary">{t("shopfloor.gatewayTask")}</p><h2 className="mt-1 font-semibold text-neutral-900">{t("shopfloor.gatewayTitle")}</h2><p className="mt-2 text-sm leading-6 text-neutral-500">{t("shopfloor.gatewayDesc")}</p></div>
       <div className="grid gap-3 sm:grid-cols-2">
-        <GatewayAdapter title="OPC UA Adapter" active={protocols.opcua?.connected} detail={protocols.opcua?.purpose || "Profilkonfigurierte Maschinensignale und Produktionsereignisse"} />
-        <GatewayAdapter title="MQTT Adapter" active={protocols.mqtt?.connected} detail={protocols.mqtt?.purpose || "Webshop-Aufträge und Broker-Telemetrie"} />
+        <GatewayAdapter title={t("shopfloor.opcuaAdapter")} state={adapterStatus(protocols.opcua?.connected, health)} detail={t("shopfloor.opcuaPurpose")} t={t} />
+        <GatewayAdapter title={t("shopfloor.mqttAdapter")} state={adapterStatus(protocols.mqtt?.connected, health)} detail={t("shopfloor.mqttPurpose")} t={t} />
       </div>
     </section>
   );
 }
 
-function GatewayAdapter({ title, active, detail }) {
-  const { t } = useTranslation();
+function GatewayAdapter({ title, state, detail, t }) {
   return (
     <article className="rounded-lg border border-neutral-200 bg-neutral-50 p-4">
-      <div className="flex items-center justify-between gap-3">
-        <h3 className="text-sm font-semibold text-neutral-800">{title}</h3>
-        <span className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${active ? "bg-status-success-bg text-status-success" : "bg-status-error-bg text-status-error"}`}>
-          {active ? t("shopfloor.connected") : t("shopfloor.disconnected")}
-        </span>
-      </div>
+      <div className="flex items-center justify-between gap-3"><h3 className="text-sm font-semibold text-neutral-800">{title}</h3><span className="shopfloor-state-pill" data-tone={connectionTone(state)}>{t(`shopfloor.${state}`)}</span></div>
       <p className="mt-2 text-xs leading-5 text-neutral-500">{detail}</p>
     </article>
   );
 }
 
-function MiniPayload({ label, value }) {
-  return <div className="rounded bg-white px-3 py-2"><p className="text-[10px] uppercase tracking-wider text-neutral-400">{label}</p><p className="font-semibold text-neutral-800">{value ?? "-"}</p></div>;
-}
+function MiniPayload({ label, value }) { return <div className="rounded bg-white px-3 py-2"><p className="text-[10px] uppercase tracking-wider text-neutral-400">{label}</p><p className="font-semibold text-neutral-800">{value ?? "-"}</p></div>; }
 
-function MqttLivePanel({ messages, connected }) {
-  const { t } = useTranslation();
+function MqttLivePanel({ messages, connected, t }) {
   const visible = messages.slice(0, 8);
   return (
     <section className="rounded-xl border border-neutral-200 bg-white shadow-sm">
       <div className="flex flex-col gap-2 border-b border-neutral-100 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-sky-600">MQTT Subscribe</p>
-          <h2 className="font-semibold text-neutral-900">Live-Nachrichten vom Broker</h2>
-        </div>
-        <span className={`inline-flex w-fit items-center gap-2 rounded-full px-3 py-1.5 text-xs font-semibold ${connected ? "bg-sky-50 text-sky-700" : "bg-red-50 text-red-700"}`}>
-          <span className={`h-2 w-2 rounded-full ${connected ? "animate-pulse bg-sky-500" : "bg-red-500"}`} />
-          {connected ? "abonniert" : t("shopfloor.disconnected")}
-        </span>
+        <div><p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-sky-600">{t("shopfloor.mqttSubscription")}</p><h2 className="font-semibold text-neutral-900">{t("shopfloor.mqttLive")}</h2></div>
+        <span className="shopfloor-state-pill" data-tone={connected ? "good" : connected === false ? "bad" : "neutral"}>{t(connected ? "shopfloor.subscribed" : connected === false ? "shopfloor.disconnected" : "shopfloor.linkUnknown")}</span>
       </div>
       <div className="p-4">
-        {visible.length === 0 && <p className="text-sm text-neutral-400">Noch keine MQTT-Nachricht empfangen.</p>}
-        <div className="grid gap-3 lg:grid-cols-2">
-          {visible.map((message, index) => (
-            <article key={`${message.timestamp}-${message.topic}-${index}`} className="rounded-lg border border-sky-100 bg-sky-50/50 p-4">
-              <div className="flex items-start justify-between gap-3">
-                <code className="break-all text-xs font-semibold text-sky-800">{message.topic}</code>
-                <time className="shrink-0 text-[10px] text-neutral-400">{formatTimestamp(message.timestamp)}</time>
-              </div>
-              <div className="mt-3 grid grid-cols-2 gap-2">
-                {Object.entries(message.payload || {}).map(([key, value]) => (
-                  <div key={key} className="rounded bg-white px-3 py-2">
-                    <p className="font-mono text-[10px] text-neutral-400">{key}</p>
-                    <p className="mt-0.5 break-all text-sm font-semibold text-neutral-800">{formatMqttValue(value)}</p>
-                  </div>
-                ))}
-              </div>
-            </article>
-          ))}
-        </div>
+        {visible.length === 0 && <p className="text-sm text-neutral-400">{t("shopfloor.mqttNoMessages")}</p>}
+        <div className="grid gap-3 lg:grid-cols-2">{visible.map((message, index) => (
+          <article key={`${message.timestamp}-${message.topic}-${index}`} className="rounded-lg border border-sky-100 bg-sky-50/50 p-4">
+            <div className="flex items-start justify-between gap-3"><code className="break-all text-xs font-semibold text-sky-800">{message.topic}</code><time className="shrink-0 text-[10px] text-neutral-400">{formatTimestamp(message.timestamp)}</time></div>
+            <div className="mt-3 grid grid-cols-2 gap-2">{Object.entries(message.payload || {}).map(([key, value]) => (
+              <div key={key} className="rounded bg-white px-3 py-2"><p className="font-mono text-[10px] text-neutral-400">{key}</p><p className="mt-0.5 break-all text-sm font-semibold text-neutral-800">{formatMqttValue(value)}</p></div>
+            ))}</div>
+          </article>
+        ))}</div>
       </div>
     </section>
   );
 }
 
-function CarrierFlow({ order, carriers, route }) {
-  return (
-    <section className="overflow-hidden rounded-xl border border-neutral-200 bg-white text-neutral-900 shadow-sm">
-      <div className="flex flex-col gap-1 border-b border-neutral-100 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-emerald-700">Produktionsfluss</p>
-          <h2 className="font-semibold text-neutral-900">{order?.name || "Kein aktiver Auftrag"}</h2>
-        </div>
-        {order && <span className="text-sm text-neutral-500">Fortschritt {order.completed_quantity}/{order.quantity}</span>}
-      </div>
-      <div className="grid gap-3 p-4 md:grid-cols-2">
-        {carriers.length === 0 && <p className="text-sm text-neutral-400">Keine aktiven Carrier im Produktionsfluss.</p>}
-        {carriers.map((carrier) => <CarrierRoute key={carrier.id} carrier={carrier} route={route} />)}
-      </div>
-    </section>
-  );
-}
+function CarrierFlow({ order, carriers, t }) {
+  const orderId = order?.id;
+  const [route, setRoute] = useState(undefined);
 
-function CarrierRoute({ carrier, route }) {
-  const { t } = useTranslation();
-  const sortedRoute = [...route].sort((a, b) => a.step_no - b.step_no);
-  const stages = [
-    ...sortedRoute.map((step) => ({
-      key: step.id || step.step_no,
-      label: step.operation || `Schritt ${step.step_no}`,
-      stepNo: step.step_no,
-    })),
-    { key: "complete", label: t("shopfloor.completed_label"), stepNo: null },
-  ];
-  const position = carrier.status === "completed"
-    ? stages.length - 1
-    : Math.max(0, sortedRoute.findIndex((step) => step.step_no === carrier.current_step_no));
+  useEffect(() => {
+    if (!orderId) return;
+    let active = true;
+    let pending = false;
+
+    async function loadRoute() {
+      if (pending) return;
+      pending = true;
+      try {
+        const steps = await api.getSilent(`/orders/${orderId}/route`);
+        if (active) setRoute(Array.isArray(steps) && steps.length ? steps : null);
+      } catch {
+        if (active) setRoute(null);
+      } finally {
+        pending = false;
+      }
+    }
+    loadRoute();
+    const timer = setInterval(loadRoute, 5000);
+    return () => { active = false; clearInterval(timer); };
+  }, [orderId]);
+
   return (
-    <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-4">
-      <div className="mb-4 flex items-center justify-between">
-        <strong className="text-neutral-900">Carrier {carrier.carrier_number}</strong>
-        <span className="rounded-full bg-white px-2.5 py-1 text-[11px] uppercase tracking-wide text-neutral-500 ring-1 ring-neutral-200">{carrierStatus(carrier.status, t)}</span>
-      </div>
-      <div className="relative flex">
-        <div className="absolute left-[16.66%] right-[16.66%] top-2 h-0.5 bg-neutral-200" />
-        {stages.map((stage, index) => (
-          <div key={stage.key} className="relative z-10 flex min-w-0 flex-1 flex-col items-center gap-2 px-1 text-center text-[11px] text-neutral-500">
-            <span className={`h-4 w-4 rounded-full border-2 ${index < position ? "border-emerald-500 bg-emerald-500" : index === position ? "border-amber-400 bg-amber-400 ring-4 ring-amber-200" : "border-neutral-300 bg-white"}`} />
-            <span className={index === position ? "font-semibold text-neutral-900" : ""}>{stage.label}</span>
-          </div>
-        ))}
+    <div className="shopfloor-order">
+      {order && (
+        <header className="shopfloor-order-header">
+          <h3>{t("shopfloor.currentOrder")} <strong>{order.name}</strong></h3>
+          <p><strong>{order.completed_quantity} / {order.quantity}</strong> {t("shopfloor.piecesDone")}</p>
+        </header>
+      )}
+      <div className="shopfloor-carriers">
+        {carriers.length === 0 && <p>{t("shopfloor.noCarriers")}</p>}
+        {orderId && carriers.length > 0 && !route && <p>{t(route === undefined ? "shopfloor.routeLoading" : "shopfloor.routeUnavailable")}</p>}
+        {carriers.map((carrier) => <CarrierRoute key={carrier.id} carrier={carrier} route={route} t={t} />)}
       </div>
     </div>
   );
 }
 
-function HandshakeStatus({ snapshot = {}, lastEvent, resultCodes = {} }) {
-  const phase = snapshot.xQryBusy ? "busy" : snapshot.xDone ? "done" : snapshot.xError ? "error" : snapshot.xStart ? "requested" : "idle";
-  const labels = { idle: "Bereit", requested: "SPS-Anfrage", busy: "MES prüft", done: "Antwort bereit", error: "Fehlerantwort" };
+const STANDARD_OPERATIONS = { "Deckelfarbe bereitstellen": "lidStep", "Kugeln dosieren": "ballStep", "Deckel und Kugeln pruefen": "checkStation" };
+const CARRIER_STATES = { available: "carrierAvailable", assigned: "carrierAssigned", in_process: "carrierInProcess", completed: "routeDone", error: "carrierError" };
+
+function CarrierRoute({ carrier, route, t }) {
+  const finished = carrier.status === "completed";
+  const assigned = Boolean(carrier.order_id) && carrier.status !== "available";
+  const stepNumber = carrier.current_step_no;
+  const stages = route && [...route, { step_no: "finished" }];
+  const position = finished ? route?.length : route?.findIndex(({ step_no }) => step_no === stepNumber);
+  return (
+    <article className="shopfloor-carrier">
+      <header>
+        <h4>{t("shopfloor.carrier")} {carrier.carrier_number}</h4>
+        <span className="shopfloor-state-pill" data-tone={carrier.status === "error" ? "bad" : finished ? "good" : "neutral"}>
+          {t(`shopfloor.${CARRIER_STATES[carrier.status] || "unknown"}`)}
+        </span>
+      </header>
+      {stages && position >= 0 ? (
+        <ol className="shopfloor-stage-list">
+          {stages.map((stage, index) => {
+            const done = index < position || finished;
+            const current = index === position && !finished;
+            const failed = current && carrier.status === "error";
+            const stageState = done ? "stepDone" : failed ? "carrierError" : current ? "currentStep" : "stepPending";
+            return (
+              <li key={stage.step_no} data-stage={done ? "done" : failed ? "error" : current ? "current" : "pending"}
+                aria-current={current ? "step" : undefined}>
+                <span aria-hidden="true">{done ? "✓" : failed ? "!" : index + 1}</span>
+                <div><strong>{routeStepLabel(stage, t)}</strong><small>{t(`shopfloor.${stageState}`)}</small></div>
+              </li>
+            );
+          })}
+        </ol>
+      ) : !finished && assigned && (
+        <p>{route || !Number.isInteger(stepNumber) || stepNumber < 1 ? t("shopfloor.stepUnknown") : `${t("shopfloor.stepNumber")} ${stepNumber}`}</p>
+      )}
+    </article>
+  );
+}
+
+function routeStepLabel(step, t) {
+  if (step.step_no === "finished") return t("shopfloor.routeDone");
+  const standardLabel = STANDARD_OPERATIONS[step.operation];
+  return standardLabel ? t(`shopfloor.${standardLabel}`) : step.operation || stationName(step.resource_id, t);
+}
+
+function HandshakeStatus({ snapshot = {}, lastEvent, t }) {
+  const phase = snapshot.xError ? "error" : snapshot.xQryBusy ? "busy" : snapshot.xDone ? "done" : snapshot.xStart ? "requested" : "idle";
+  const labels = { idle: t("shopfloor.idle"), requested: t("shopfloor.requested"), busy: t("shopfloor.busy"), done: t("shopfloor.done"), error: t("shopfloor.errorResult") };
   const active = phase !== "idle";
   const resultCode = lastEvent?.resultCode;
   return (
     <div className="flex flex-wrap items-center gap-2">
       <span className={`inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-semibold ${phase === "error" ? "bg-red-100 text-red-700" : active ? "bg-amber-100 text-amber-800" : "bg-emerald-100 text-emerald-700"}`}>
-        <span className={`h-2 w-2 rounded-full ${active ? "animate-pulse bg-current" : "bg-current"}`} />
-        {labels[phase]}
+        <span className={`h-2 w-2 rounded-full ${active ? "animate-pulse bg-current" : "bg-current"}`} />{labels[phase] || phase}
       </span>
-      <Signal label="START" active={snapshot.xStart} />
-      <Signal label="BUSY" active={snapshot.xQryBusy} />
-      <Signal label="DONE" active={snapshot.xDone} />
-      <Signal label="ERROR" active={snapshot.xError} error />
-      {resultCode !== undefined && <span className="text-xs text-neutral-500">Letztes Ergebnis: {resultCode} · {resultCodes[resultCode] || "Unbekannt"}</span>}
+      <Signal label="START" active={snapshot.xStart} /><Signal label="BUSY" active={snapshot.xQryBusy} /><Signal label="DONE" active={snapshot.xDone} /><Signal label="ERROR" active={snapshot.xError} error />
+      {resultCode !== undefined && <span className="text-xs text-neutral-500">{t("shopfloor.lastResult")}: {resultCode} · {RESULT_TEXT[resultCode] || t("shopfloor.unknown")}</span>}
     </div>
   );
 }
 
-function Signal({ label, active, error = false }) {
-  return <span className={`rounded px-2 py-1 font-mono text-[10px] ${active ? (error ? "bg-red-600 text-white" : "bg-neutral-900 text-white") : "bg-neutral-100 text-neutral-400"}`}>{label}</span>;
-}
+function Signal({ label, active, error = false }) { return <span className={`rounded px-2 py-1 font-mono text-[10px] ${active ? (error ? "bg-red-600 text-white" : "bg-neutral-900 text-white") : "bg-neutral-100 text-neutral-400"}`}>{label}</span>; }
 
-function EventTimeline({ events }) {
+function EventTimeline({ events, t }) {
   const visible = [...events].reverse().slice(0, 6);
   return (
     <div className="border-t border-neutral-100 pt-3">
-      <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-neutral-500">Stationsereignisse</h3>
-      {visible.length === 0 && <p className="text-xs text-neutral-400">Warte auf den nächsten SPS-Zyklus.</p>}
-      <div className="grid gap-2 lg:grid-cols-2">
-        {visible.map((event, index) => (
-          <div key={`${event.timestamp}-${event.phase}-${index}`} className="flex items-start gap-3 rounded-lg bg-neutral-50 px-3 py-2">
-            <span className={`mt-1 h-2 w-2 shrink-0 rounded-full ${event.phase === "error" ? "bg-red-500" : event.phase === "process_completed" ? "bg-emerald-500" : "bg-amber-400"}`} />
-            <div className="min-w-0">
-              <p className="text-xs font-medium text-neutral-700">{event.message}</p>
-              <p className="mt-0.5 text-[10px] text-neutral-400">{formatTimestamp(event.timestamp)} · {event.phase}{event.resultCode !== undefined ? ` · Code ${event.resultCode}` : ""}</p>
-            </div>
-          </div>
-        ))}
-      </div>
+      <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-neutral-500">{t("shopfloor.stationEvents")}</h3>
+      {visible.length === 0 && <p className="text-xs text-neutral-400">{t("shopfloor.waitingForCycle")}</p>}
+      <div className="grid gap-2 lg:grid-cols-2">{visible.map((event, index) => (
+        <div key={`${event.timestamp}-${event.phase}-${index}`} className="flex items-start gap-3 rounded-lg bg-neutral-50 px-3 py-2">
+          <span className={`mt-1 h-2 w-2 shrink-0 rounded-full ${event.phase === "error" ? "bg-red-500" : event.phase === "process_completed" ? "bg-emerald-500" : "bg-amber-400"}`} />
+          <div className="min-w-0"><p className="text-xs font-medium text-neutral-700">{event.message}</p><p className="mt-0.5 text-[10px] text-neutral-400">{formatTimestamp(event.timestamp)} · {event.phase}{event.resultCode !== undefined ? ` · Code ${event.resultCode}` : ""}</p></div>
+        </div>
+      ))}</div>
     </div>
   );
 }
 
-function journalEvent(entry, resultCodes = {}) {
-  const resultCode = entry.result_code;
-  return {
-    timestamp: entry.responded_at || entry.created_at,
-    phase: entry.status === "error" ? "error" : "acknowledged",
-    resultCode,
-    message: `Carrier ${entry.carrier_number}: ${resultCodes[resultCode] || entry.status}`,
-  };
-}
+function journalEvent(entry) { const resultCode = entry.result_code; return { timestamp: entry.responded_at || entry.created_at, phase: entry.status === "error" ? "error" : "acknowledged", resultCode, message: `Carrier ${entry.carrier_number}: ${RESULT_TEXT[resultCode] || entry.status}` }; }
+function MetricCard({ label, value, technical, changed }) { return <div className={`rounded-lg border p-4 transition-all duration-500 ${changed ? "border-amber-300 bg-amber-50 shadow-md" : "border-neutral-200 bg-neutral-50"}`}><p className="text-xs font-medium uppercase tracking-wider text-neutral-500">{label}</p><p className="mt-2 text-2xl font-bold text-neutral-900">{value}</p><p className="mt-1 font-mono text-[11px] text-neutral-400">{technical}</p></div>; }
 
-function StatusBadge({ label, active, detail }) {
-  const { t } = useTranslation();
-  return (
-    <span className={`inline-flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-medium ${active ? "bg-status-success-bg text-status-success" : "bg-status-error-bg text-status-error"}`}>
-      <span className={`h-2 w-2 rounded-full ${active ? "bg-status-success" : "bg-status-error"}`} />
-      {label}: {detail || (active ? t("shopfloor.connected") : t("shopfloor.disconnected"))}
-    </span>
-  );
-}
-
-function MetricCard({ label, value, technical, changed }) {
-  return (
-    <div className={`rounded-lg border p-4 transition-all duration-500 ${changed ? "border-amber-300 bg-amber-50 shadow-md" : "border-neutral-200 bg-neutral-50"}`}>
-      <p className="text-xs font-medium uppercase tracking-wider text-neutral-500">{label}</p>
-      <p className="mt-2 text-2xl font-bold text-neutral-900">{value}</p>
-      <p className="mt-1 font-mono text-[11px] text-neutral-400">{technical}</p>
-    </div>
-  );
-}
-
-function signalLabel(key) {
-  return key
-    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
-    .replace(/^./, (character) => character.toUpperCase());
-}
-
-function formatSignalValue(key, value) {
-  if (value === null || value === undefined || value === "") return "–";
-  if (key === "processCompleted" || key.toLowerCase().includes("timestamp")) {
-    return formatTimestamp(value);
-  }
-  if (typeof value === "boolean") return value ? "Ja" : "Nein";
-  return typeof value === "object" ? JSON.stringify(value) : String(value);
-}
-
-function handshakeSnapshot(roles) {
-  return {
-    xStart: roles.workRequest,
-    xQryBusy: roles.requestBusy,
-    xDone: roles.requestAccepted || roles.requestCompleted,
-    xError: roles.requestRejected,
-  };
-}
-
-function formatTimestamp(value) {
-  if (!value) return "–";
-  const timestamp = new Date(value);
-  return Number.isNaN(timestamp.getTime()) ? "–" : timestamp.toLocaleTimeString("de-DE");
-}
-
-function ageInSeconds(value, now) {
-  return Math.max(0, Math.floor((now - new Date(value).getTime()) / 1000));
-}
-
-function isRecent(value, now) {
-  return Boolean(value && now - value < 2500);
-}
-
-function carrierStatus(status, t = (s) => s) {
-  return ({ available: "Verfügbar", assigned: "Zugeordnet", in_process: "In Arbeit", completed: t("shopfloor.completed_label"), error: t("shopfloor.failed") })[status] || status;
-}
-
-function formatMqttValue(value) {
-  return typeof value === "object" ? JSON.stringify(value) : String(value);
-}
+function formatLidColor(value) { return ({ 0: "Keine Dose", 1: "Rot", 2: "Blau", 3: "Grün" })[value] || "–"; }
+function formatTimestamp(value) { if (!value) return "–"; const timestamp = new Date(value); return Number.isNaN(timestamp.getTime()) ? "–" : timestamp.toLocaleTimeString("de-DE"); }
+function ageInSeconds(value, now) { return Math.max(0, Math.floor((now - new Date(value).getTime()) / 1000)); }
+function isRecent(value, now) { return Boolean(value && now - value < 2500); }
+function formatMqttValue(value) { return typeof value === "object" ? JSON.stringify(value) : String(value); }
 
 const CONTROL_COMMANDS = [
-  { command: "start", label: "Starten", color: "bg-emerald-600 hover:bg-emerald-700 text-white" },
-  { command: "pause", label: "Pause", color: "bg-amber-500 hover:bg-amber-600 text-white" },
-  { command: "reset", label: "Reset", color: "bg-neutral-500 hover:bg-neutral-600 text-white" },
-  { command: "stop", label: "Stop", color: "bg-red-600 hover:bg-red-700 text-white" },
+  { command: "start", labelKey: "shopfloor.start", color: "bg-emerald-600 hover:bg-emerald-700 text-white" },
+  { command: "pause", labelKey: "shopfloor.pause", color: "bg-amber-500 hover:bg-amber-600 text-white" },
+  { command: "reset", labelKey: "shopfloor.reset", color: "bg-neutral-500 hover:bg-neutral-600 text-white" },
+  { command: "stop", labelKey: "shopfloor.stop", color: "bg-red-600 hover:bg-red-700 text-white" },
 ];
 
-function MachineControlPanel({ resourceId, displayName, signals, roles, commands, loading, onControl }) {
-  const { t } = useTranslation();
-  const hasError = Boolean(signals.stateError || signals.stateErrorL0 || signals.stateErrorL1 || signals.stateErrorL2);
-  const isActive = Boolean(roles.processActive || signals.stateAuto);
-  const stateLabel = hasError ? "Fehler/Stop" : isActive ? "Aktiv" : "Bereit";
-  const stateColor = hasError ? "bg-red-50 text-red-700" : isActive ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700";
-  return (
-    <section className="rounded-xl border border-neutral-200 bg-white p-4 shadow-sm">
-      <div className="mb-3 flex items-center justify-between">
-        <h3 className="font-mono text-sm font-semibold text-neutral-800">{displayName || `Station ${resourceId}`}</h3>
-        <span className={`rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider ${stateColor}`}>{stateLabel}</span>
-      </div>
-      <p className="mb-3 text-xs leading-5 text-neutral-500">Sendet den freigegebenen Steuerbefehl über die konfigurierte Maschinenschnittstelle.</p>
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-        {CONTROL_COMMANDS.filter((cmd) => commands.includes(cmd.command)).map((cmd) => (
-          <button
-            key={cmd.command}
-            onClick={() => onControl(cmd.command)}
-            disabled={loading}
-            className={`rounded-lg px-3 py-2 text-xs font-semibold transition-all ${cmd.color} disabled:opacity-40`}
-          >
-            {loading ? t("shopfloor.control_send") + "..." : cmd.label}
-          </button>
-        ))}
-        {commands.length === 0 && <p className="col-span-full text-xs text-neutral-400">Für diese Station sind im Profil keine Steuerbefehle freigegeben.</p>}
-      </div>
-    </section>
-  );
+function getMachineState(state, stale) {
+  if (stale) return { label: "stationStale", tone: "warn" };
+  if (!state || !Object.values(state).some((value) => typeof value === "boolean")) return { label: "stationWaiting", tone: "neutral" };
+  if (state.xErrL0 || state.xErrL1 || state.xErrL2) return { label: "stationFault", tone: "bad" };
+  if (state.xReset) return { label: "stationReset", tone: "warn" };
+  if (state.xBusy) return { label: "stationWorking", tone: "good" };
+  if (state.xManual) return { label: "stationManual", tone: "warn" };
+  if (state.xAuto) return { label: "stationAuto", tone: "good" };
+  if (state.xAuto === false) return { label: "stationInactive", tone: "neutral" };
+  return { label: "stationWaiting", tone: "neutral" };
 }
 
-function formatJobInterface(jobInterface) {
-  return ({
-    signal_handshake: "Signal-Handshake",
-    job_control: "Job Control",
-    telemetry_only: "Nur Telemetrie",
-  })[jobInterface] || jobInterface;
+function MachineControlPanel({ resourceId, stationState, stale, blocked, canControl, loading, busy, feedback, onControl, t }) {
+  const { label, tone } = getMachineState(stationState, stale);
+  return (
+    <article className="shopfloor-panel shopfloor-station">
+      <h3>{STATION_CODES[resourceId] && <span>{STATION_CODES[resourceId]}</span>}{stationName(resourceId, t)}</h3>
+      <div className="shopfloor-station-state">
+        <strong data-tone={tone}>{t(`shopfloor.${label}`)}</strong>
+        <p>{t(`shopfloor.${label}Hint`)}</p>
+      </div>
+      {canControl && (
+        <details className="shopfloor-controls">
+          <summary>{t("shopfloor.machineControl")}</summary>
+          <div className="shopfloor-control-content">
+            <p>{t(blocked ? "shopfloor.controlsOffline" : "shopfloor.controlDescription")}</p>
+            <div className="shopfloor-command-grid">{CONTROL_COMMANDS.map((cmd) => (
+              <button key={cmd.command} type="button" onClick={() => onControl(cmd.command)}
+                disabled={busy || blocked} className={`rounded-md px-3 py-2 text-sm font-semibold ${cmd.color} disabled:opacity-50`}>
+                {t(cmd.labelKey)}
+              </button>
+            ))}</div>
+            <p role="status" data-command-result={feedback || undefined}>
+              {loading ? t("shopfloor.sending") : feedback && t(`shopfloor.${feedback}`)}
+            </p>
+          </div>
+        </details>
+      )}
+    </article>
+  );
 }

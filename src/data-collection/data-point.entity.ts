@@ -14,7 +14,7 @@ export class DataPointEntity {
   @Column({ type: 'float8' })
   value: number;
 
-  @Column({ type: 'enum', enum: ['good', 'bad', 'uncertain'], default: 'uncertain' })
+  @Column({ type: 'enum', enum: ['good', 'bad', 'uncertain'], default: 'good' })
   quality: 'good' | 'bad' | 'uncertain';
 
   @Column({ type: 'timestamp', default: () => 'CURRENT_TIMESTAMP' })

@@ -20,6 +20,9 @@ export class UserEntity {
   @Column({ type: 'enum', enum: UserRoleEnum, default: UserRoleEnum.VIEWER })
   role: UserRoleEnum;
 
+  @Column({ type: 'timestamp', nullable: true })
+  last_logon: Date;
+
   @CreateDateColumn()
   created_at: Date;
 

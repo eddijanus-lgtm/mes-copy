@@ -1,36 +1,34 @@
-import {
-  BadRequestException,
-  Injectable,
-  NotFoundException,
-  ServiceUnavailableException,
-} from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
-import {
-  CarrierEntity,
-  CarrierPhysicalStateEnum,
-  CarrierStatusEnum,
-  isCarrierPhysicallyAvailable,
-} from '../carriers/carrier.entity';
+import { CarrierEntity, CarrierStatusEnum } from '../carriers/carrier.entity';
 import { MachineEntity } from '../machines/machine.entity';
 import { OrderEntity } from './order.entity';
 import { OrderRouteStepEntity } from './order-route-step.entity';
 import { ReplaceOrderRouteDto } from './routing.dto';
-import { OrderProductionLogService } from './order-production-log.service';
-import { ProductEntity } from '../products/product.entity';
-import { ProductRouteStepEntity } from '../products/product-route-step.entity';
-import { MachineProfileService } from '../machines/profiles/machine-profile.service';
-import type { RoutingOutcome } from './routing-outcome';
-import {
-  ExecutionStepSource,
-} from '../execution-steps/execution-step.entity';
-import { ExecutionStepsService } from '../execution-steps/execution-steps.service';
+import { randomUUID } from 'crypto';
 
-export type ExternalProductionOrderPayload = {
-  orderName?: string;
-  productId?: string;
-  partNo?: string;
-  parameters: Record<string, number>;
+export enum DemoRoutingResultCode {
+  OK = 0,
+  CARRIER_UNKNOWN = 1,
+  ORDER_MISSING = 2,
+  WRONG_RESOURCE = 3,
+  STEP_ALREADY_COMPLETED = 4,
+  INTERNAL_ERROR = 9,
+}
+
+const DEMO_PRODUCTION_ROUTE = [
+  { step_no: 1, resource_id: 1, operation_no: 10, operation: 'Deckelfarbe bereitstellen', parameters: { iPar1: 1, iPar2: 3, iPar3: 5, iPar4: 7 } },
+  { step_no: 2, resource_id: 2, operation_no: 20, operation: 'Kugeln dosieren', parameters: { iPar1: 1, iPar2: 3, iPar3: 5, iPar4: 7 } },
+  { step_no: 3, resource_id: 3, operation_no: 30, operation: 'Deckel und Kugeln pruefen', parameters: { iPar1: 1, iPar2: 3, iPar3: 5, iPar4: 7 } },
+];
+const DEMO_CARRIER_NUMBERS = [128, 129];
+
+export type WebshopProductionPayload = {
+  bDeckelfarbe: number;
+  uiKugelRot: number;
+  uiKugelGruen: number;
+  uiKugelBlau: number;
   xAuftragAusstehend?: boolean;
   uiAnzahlAustehenderAuftraege?: number;
 };
@@ -39,157 +37,96 @@ export type ExternalProductionOrderPayload = {
 export class RoutingService {
   constructor(
     private readonly dataSource: DataSource,
-    @InjectRepository(OrderRouteStepEntity)
-    private readonly routeSteps: Repository<OrderRouteStepEntity>,
-    private readonly productionLogs: OrderProductionLogService,
-    private readonly profiles: MachineProfileService,
-    private readonly executionSteps: ExecutionStepsService,
+    @InjectRepository(OrderRouteStepEntity) private readonly routeSteps: Repository<OrderRouteStepEntity>,
   ) {}
 
   getRoute(orderId: string) {
-    return this.routeSteps.find({
-      where: { order_id: orderId },
-      order: { step_no: 'ASC' },
-    });
+    return this.routeSteps.find({ where: { order_id: orderId }, order: { step_no: 'ASC' } });
   }
 
   async replaceRoute(orderId: string, dto: ReplaceOrderRouteDto) {
-    if (!dto.steps.length)
-      throw new BadRequestException('Route requires at least one step');
+    if (!dto.steps.length) throw new BadRequestException('Route requires at least one step');
     const uniqueSteps = new Set(dto.steps.map((step) => step.step_no));
-    if (uniqueSteps.size !== dto.steps.length)
-      throw new BadRequestException('Route step numbers must be unique');
+    if (uniqueSteps.size !== dto.steps.length) throw new BadRequestException('Route step numbers must be unique');
 
     return this.dataSource.transaction(async (manager) => {
-      if (!(await manager.findOne(OrderEntity, { where: { id: orderId } })))
-        throw new NotFoundException('Order not found');
+      if (!await manager.findOne(OrderEntity, { where: { id: orderId } })) throw new NotFoundException('Order not found');
       await manager.delete(OrderRouteStepEntity, { order_id: orderId });
-      return manager.save(
-        OrderRouteStepEntity,
-        dto.steps.map((step) =>
-          manager.create(OrderRouteStepEntity, {
-            ...step,
-            order_id: orderId,
-            parameters: step.parameters || {},
-          }),
-        ),
-      );
+      return manager.save(OrderRouteStepEntity, dto.steps.map((step) => manager.create(OrderRouteStepEntity, {
+        ...step,
+        order_id: orderId,
+        parameters: step.parameters || {},
+      })));
     });
   }
 
-  async createExternalProductionOrder(payload: ExternalProductionOrderPayload) {
+  async releaseDemoProductionOrder(orderId: string, quantity: number) {
     return this.dataSource.transaction(async (manager) => {
-      const profile = this.profiles.getProfile();
-      const defaultRoute = profile.stations
-        .filter(
-          (station) =>
-            station.enabled &&
-            station.routing &&
-            station.routing.enabled !== false,
-        )
-        .sort(
-          (left, right) =>
-            left.routing!.sequence - right.routing!.sequence,
-        );
-      if (!defaultRoute.length) {
-        throw new NotFoundException(
-          'Machine profile contains no routable stations',
-        );
+      const order = await manager.findOne(OrderEntity, { where: { id: orderId } });
+      if (!order) throw new NotFoundException('Order not found');
+
+      await manager.delete(OrderRouteStepEntity, { order_id: orderId });
+      const route = await manager.save(OrderRouteStepEntity, DEMO_PRODUCTION_ROUTE.map((step) => manager.create(OrderRouteStepEntity, {
+        ...step,
+        order_id: orderId,
+      })));
+
+      order.status = 'in_progress';
+      order.completed_quantity = 0;
+      order.start_time = new Date();
+      await manager.save(order);
+
+      const carrierNumbers = DEMO_CARRIER_NUMBERS.slice(0, Math.max(1, Math.min(quantity, DEMO_CARRIER_NUMBERS.length)));
+      const carriers: CarrierEntity[] = [];
+      for (const carrierNumber of carrierNumbers) {
+        let carrier = await manager.findOne(CarrierEntity, { where: { carrier_number: carrierNumber } });
+        if (carrier && (carrier.status !== CarrierStatusEnum.AVAILABLE || carrier.order_id)) {
+          throw new BadRequestException(`Carrier ${carrierNumber} is already assigned`);
+        }
+        if (!carrier) carrier = manager.create(CarrierEntity, { carrier_number: carrierNumber });
+        carrier.order_id = orderId;
+        carrier.current_step_no = 1;
+        carrier.current_resource_id = null;
+        carrier.status = CarrierStatusEnum.ASSIGNED;
+        carriers.push(await manager.save(carrier));
       }
 
-      const product = payload.productId
-        ? await manager.findOne(ProductEntity, {
-            where: { id: payload.productId, is_active: true },
-          })
-        : payload.partNo
-          ? await manager.findOne(ProductEntity, {
-              where: { part_no: payload.partNo, is_active: true },
-            })
-          : null;
-      if ((payload.productId || payload.partNo) && !product) {
-        throw new NotFoundException(
-          'Configured external-order product was not found',
-        );
-      }
-      const productRoute = product
-        ? await manager.find(ProductRouteStepEntity, {
-            where: { product_id: product.id },
-            order: { step_no: 'ASC' },
-          })
-        : [];
-      const routeDefinition = productRoute.length
-        ? productRoute.map((step) => ({
-            resourceId: step.resource_id,
-            operationNo: step.operation_no,
-            operation: step.operation,
-            parameters: step.parameters || {},
-          }))
-        : defaultRoute.map((station) => ({
-            resourceId: station.resourceId,
-            operationNo: station.routing!.operationNo,
-            operation: station.routing!.operation,
-            parameters: {},
-          }));
+      return { order, route, carriers };
+    });
+  }
 
-      const startStation = await manager.findOne(MachineEntity, {
-        where: { resource_id: routeDefinition[0].resourceId },
-      });
-      if (!startStation) {
-        throw new NotFoundException(
-          `Profile station ${routeDefinition[0].resourceId} is not synchronized`,
-        );
-      }
+  async createWebshopProductionOrder(payload: WebshopProductionPayload) {
+    return this.dataSource.transaction(async (manager) => {
+      const startStation = await manager.findOne(MachineEntity, { where: { resource_id: 1 } });
+      if (!startStation) throw new NotFoundException('Start station resource 1 not found');
 
-      const order = await manager.save(
-        OrderEntity,
-        manager.create(OrderEntity, {
-          name:
-            payload.orderName ??
-            `EXTERNAL-${new Date()
-              .toISOString()
-              .replace(/[-:.TZ]/g, '')
-              .slice(0, 14)}`,
-          priority: 1,
-          machine_id: startStation.id,
-          product_id: product?.id || null,
-          operation: product?.name || routeDefinition[0].operation,
-          quantity: 1,
-          completed_quantity: 0,
-          status: 'pending',
-        }),
-      );
+      const order = await manager.save(OrderEntity, manager.create(OrderEntity, {
+        name: `WEBSHOP-${new Date().toISOString().replace(/[-:.TZ]/g, '').slice(0, 14)}-${randomUUID().slice(0, 8)}`,
+        priority: 1,
+        machine_id: startStation.id,
+        operation: 'Webshop-Produkt konfigurieren',
+        quantity: 1,
+        completed_quantity: 0,
+        red_balls: payload.uiKugelRot,
+        green_balls: payload.uiKugelGruen,
+        blue_balls: payload.uiKugelBlau,
+        status: 'pending',
+      }));
 
-      const parameters = payload.parameters;
-      const route = await manager.save(
-        OrderRouteStepEntity,
-        routeDefinition.map((step, index) =>
-          manager.create(OrderRouteStepEntity, {
-            step_no: index + 1,
-            resource_id: step.resourceId,
-            operation_no: step.operationNo,
-            operation: step.operation,
-            order_id: order.id,
-            parameters: { ...step.parameters, ...parameters },
-          }),
-        ),
-      );
+      const parameters = {
+        iPar1: payload.bDeckelfarbe,
+        iPar2: payload.uiKugelRot,
+        iPar3: payload.uiKugelGruen,
+        iPar4: payload.uiKugelBlau,
+      };
+      const route = await manager.save(OrderRouteStepEntity, DEMO_PRODUCTION_ROUTE.map((step) => manager.create(OrderRouteStepEntity, {
+        ...step,
+        order_id: order.id,
+        parameters,
+      })));
 
-      const candidateCarriers = await manager.find(CarrierEntity, {
-        where: { status: CarrierStatusEnum.AVAILABLE },
-        order: { carrier_number: 'ASC' },
-      });
-      let carrier = candidateCarriers.find(isCarrierPhysicallyAvailable);
-      if (!carrier)
-        throw new BadRequestException(
-          'No available carrier found for external order',
-        );
-      carrier.order_id = order.id;
-      carrier.current_step_no = route[0].step_no;
-      carrier.current_resource_id = null;
-      carrier.status = CarrierStatusEnum.ASSIGNED;
-      carrier = await manager.save(carrier);
-
-      return { order, route, carriers: [carrier], parameters };
+      const carriers = await this.assignNextPendingOrder(manager);
+      return { order, route, carriers: carriers.filter((carrier) => carrier.order_id === order.id), parameters };
     });
   }
 
@@ -199,82 +136,33 @@ export class RoutingService {
         where: { carrier_number: carrierNumber },
         lock: { mode: 'pessimistic_write' },
       });
-      if (!carrier)
-        return { outcome: 'carrier_unknown' as RoutingOutcome };
-      if (!carrier.order_id || carrier.current_step_no == null)
-        return { outcome: 'order_missing' as RoutingOutcome };
+      if (!carrier) return { resultCode: DemoRoutingResultCode.CARRIER_UNKNOWN };
+      if (!carrier.order_id) return { resultCode: DemoRoutingResultCode.ORDER_MISSING };
 
-      const order = await manager.findOne(OrderEntity, {
-        where: { id: carrier.order_id },
-      });
-      const product = order?.product_id
-        ? await manager.findOne(ProductEntity, {
-            where: { id: order.product_id },
-          })
-        : null;
+      const order = await manager.findOne(OrderEntity, { where: { id: carrier.order_id } });
       const step = await manager.findOne(OrderRouteStepEntity, {
         where: { order_id: carrier.order_id, step_no: carrier.current_step_no },
       });
-      if (!order || !step)
-        return { outcome: 'order_missing' as RoutingOutcome };
-      if (order.status === 'completed') {
-        carrier.status = CarrierStatusEnum.AVAILABLE;
-        carrier.order_id = null;
-        carrier.current_step_no = null;
-        carrier.current_resource_id = null;
-        await manager.save(carrier);
-        return { outcome: 'already_completed' as RoutingOutcome };
-      }
-      if (step.resource_id !== resourceId)
-        return { outcome: 'wrong_resource' as RoutingOutcome };
+      if (!order || !step) return { resultCode: DemoRoutingResultCode.ORDER_MISSING };
+      if (step.resource_id !== resourceId) return { resultCode: DemoRoutingResultCode.WRONG_RESOURCE };
       if (carrier.status === CarrierStatusEnum.COMPLETED) {
-        return { outcome: 'already_completed' as RoutingOutcome };
+        return { resultCode: DemoRoutingResultCode.STEP_ALREADY_COMPLETED };
       }
 
       carrier.current_resource_id = resourceId;
       carrier.status = CarrierStatusEnum.IN_PROCESS;
-      if (carrier.inventory_managed) {
-        carrier.physical_state = CarrierPhysicalStateEnum.AT_STATION;
-        carrier.last_seen_at = new Date();
-        carrier.inventory_stale = false;
-      }
       await manager.save(carrier);
-      const startedAt = new Date();
-      if (this.transitionOrderToInProgress(order, startedAt)) {
-        await manager.save(order);
-      }
 
-      const route = await manager.find(OrderRouteStepEntity, {
-        where: { order_id: carrier.order_id },
-        order: { step_no: 'ASC' },
+      const nextStep = await manager.findOne(OrderRouteStepEntity, {
+        where: { order_id: carrier.order_id, step_no: carrier.current_step_no + 1 },
       });
-      const currentIndex = route.findIndex(
-        (candidate) => candidate.id === step.id,
-      );
-      const nextStep =
-        currentIndex >= 0 ? route[currentIndex + 1] : undefined;
-      await this.executionSteps.start(
-        {
-          orderId: order.id,
-          carrierId: carrier.id,
-          carrierNumber: carrier.carrier_number,
-          resourceId,
-          operationNo: step.operation_no,
-          operation: step.operation,
-          stepNo: step.step_no,
-          source: ExecutionStepSource.MACHINE,
-          startedAt,
-        },
-        manager,
-      );
       return {
-        outcome: 'accepted' as RoutingOutcome,
+        resultCode: DemoRoutingResultCode.OK,
         orderNo: order.name,
-        partNo: product?.part_no || order.name,
+        partNo: order.name,
         operationNo: step.operation_no,
         stepNo: step.step_no,
-        nextResourceId:
-          nextStep?.resource_id ?? this.terminalResourceId(),
+        nextResourceId: nextStep?.resource_id || 0,
         parameters: step.parameters || {},
         carrierId: carrier.id,
         orderId: order.id,
@@ -282,119 +170,45 @@ export class RoutingService {
     });
   }
 
-  private terminalResourceId(): number {
-    const terminalResourceId =
-      this.profiles.getProfile().routing?.terminalResourceId;
-    if (
-      !Number.isInteger(terminalResourceId) ||
-      Number(terminalResourceId) < 0
-    ) {
-      throw new ServiceUnavailableException(
-        'Machine profile requires routing.terminalResourceId for the final route step',
-      );
-    }
-    return Number(terminalResourceId);
-  }
-
-  private transitionOrderToInProgress(
-    order: OrderEntity,
-    startedAt = new Date(),
-  ): boolean {
-    if (order.status !== 'pending') return false;
-    order.status = 'in_progress';
-    order.start_time = startedAt;
-    return true;
-  }
-
-  async completeStationStep(
-    resourceId: number,
-    carrierNumber: number,
-    completedAt: Date,
-  ) {
-    let finalizedOrderId: string | undefined;
-    const completed = await this.dataSource.transaction(async (manager) => {
+  async completeStationStep(resourceId: number, carrierNumber: number, completedAt: Date) {
+    return this.dataSource.transaction(async (manager) => {
       const carrier = await manager.findOne(CarrierEntity, {
         where: { carrier_number: carrierNumber },
         lock: { mode: 'pessimistic_write' },
       });
-      if (!carrier?.order_id || carrier.current_step_no == null) return false;
-
-      const order = await manager.findOne(OrderEntity, {
-        where: { id: carrier.order_id },
-      });
-      if (order?.status === 'completed') {
-        carrier.status = CarrierStatusEnum.AVAILABLE;
-        carrier.order_id = null;
-        carrier.current_step_no = null;
-        carrier.current_resource_id = null;
-        await manager.save(carrier);
-        return false;
-      }
-      if (carrier.current_resource_id !== resourceId) return false;
+      if (!carrier?.order_id || carrier.current_resource_id !== resourceId) return false;
 
       const step = await manager.findOne(OrderRouteStepEntity, {
         where: { order_id: carrier.order_id, step_no: carrier.current_step_no },
       });
       if (!step) return false;
-      const route = await manager.find(OrderRouteStepEntity, {
-        where: { order_id: carrier.order_id },
-        order: { step_no: 'ASC' },
+      const nextStep = await manager.findOne(OrderRouteStepEntity, {
+        where: { order_id: carrier.order_id, step_no: carrier.current_step_no + 1 },
       });
-      const currentIndex = route.findIndex(
-        (candidate) => candidate.id === step.id,
-      );
-      const nextStep =
-        currentIndex >= 0 ? route[currentIndex + 1] : undefined;
-
-      await this.executionSteps.complete(
-        {
-          orderId: carrier.order_id,
-          carrierId: carrier.id,
-          carrierNumber: carrier.carrier_number,
-          resourceId,
-          operationNo: step.operation_no,
-          operation: step.operation,
-          stepNo: step.step_no,
-          source: ExecutionStepSource.MACHINE,
-          startedAt: order?.start_time ?? completedAt,
-          completedAt,
-          result: { outcome: 'completed' },
-        },
-        manager,
-      );
 
       if (nextStep) {
         carrier.current_step_no = nextStep.step_no;
         carrier.current_resource_id = null;
         carrier.status = CarrierStatusEnum.ASSIGNED;
-        if (carrier.inventory_managed) {
-          carrier.physical_state = CarrierPhysicalStateEnum.IN_TRANSIT;
-          carrier.last_seen_at = completedAt;
-          carrier.inventory_stale = false;
-        }
         await manager.save(carrier);
       } else {
         carrier.current_resource_id = null;
         carrier.status = CarrierStatusEnum.COMPLETED;
+        const order = await manager.findOne(OrderEntity, { where: { id: carrier.order_id } });
         if (order) {
-          order.completed_quantity = Math.min(
-            order.quantity,
-            order.completed_quantity + 1,
-          );
+          order.completed_quantity = Math.min(order.quantity, order.completed_quantity + 1);
           if (order.completed_quantity >= order.quantity) {
             order.status = 'completed';
             order.end_time = completedAt;
-            finalizedOrderId = order.id;
-            const orderCarriers = await manager.find(CarrierEntity, {
-              where: { order_id: order.id },
-            });
+            const orderCarriers = await manager.find(CarrierEntity, { where: { order_id: order.id } });
             for (const oc of orderCarriers) {
               oc.status = CarrierStatusEnum.AVAILABLE;
               oc.order_id = null;
-              oc.current_step_no = null;
+              oc.current_step_no = 1;
               oc.current_resource_id = null;
             }
             await manager.save(orderCarriers);
+            await this.assignNextPendingOrder(manager);
           } else {
             await manager.save(carrier);
           }
@@ -405,40 +219,28 @@ export class RoutingService {
       }
       return true;
     });
-    if (finalizedOrderId) await this.productionLogs.finalize(finalizedOrderId);
-    return completed;
   }
 
-  async failStationStep(
-    resourceId: number,
-    carrierNumber: number,
-    failedAt: Date,
-  ): Promise<boolean> {
-    return this.dataSource.transaction(async (manager) => {
-      const carrier = await manager.findOne(CarrierEntity, {
-        where: { carrier_number: carrierNumber },
-      });
-      if (
-        !carrier?.order_id ||
-        carrier.current_step_no == null ||
-        carrier.current_resource_id !== resourceId
-      ) {
-        return false;
-      }
-      const failed = await this.executionSteps.fail(
-        {
-          orderId: carrier.order_id,
-          carrierId: carrier.id,
-          stepNo: carrier.current_step_no,
-          failedAt,
-          result: {
-            outcome: 'failed',
-            reason: 'job_dispatch_failed',
-          },
-        },
-        manager,
-      );
-      return failed !== null;
+  private async assignNextPendingOrder(manager: import('typeorm').EntityManager): Promise<CarrierEntity[]> {
+    const carrier = await manager.findOne(CarrierEntity, {
+      where: { carrier_number: DEMO_CARRIER_NUMBERS[0] },
+      lock: { mode: 'pessimistic_write' },
     });
+    if (carrier && (carrier.status !== CarrierStatusEnum.AVAILABLE || carrier.order_id)) return [];
+    const pending = await manager.findOne(OrderEntity, {
+      where: { status: 'pending', operation: 'Webshop-Produkt konfigurieren' },
+      order: { created_at: 'ASC' },
+      lock: { mode: 'pessimistic_write' },
+    });
+    if (!pending) return [];
+    const assigned = carrier ?? manager.create(CarrierEntity, { carrier_number: DEMO_CARRIER_NUMBERS[0] });
+    assigned.order_id = pending.id;
+    assigned.current_step_no = 1;
+    assigned.current_resource_id = null;
+    assigned.status = CarrierStatusEnum.ASSIGNED;
+    pending.status = 'in_progress';
+    pending.start_time = new Date();
+    await manager.save(pending);
+    return [await manager.save(assigned)];
   }
 }

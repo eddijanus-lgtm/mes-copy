@@ -1,0 +1,123 @@
+name: MES CI/CD
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    name: Backend-Tests und Build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24.x'
+          cache: npm
+      - run: npm ci
+      - run: npm test -- --ci --runInBand
+      - run: npm run test:e2e -- --ci --runInBand
+      - run: npm run build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: backend
+          path: dist/
+          if-no-files-found: error
+          retention-days: 1
+
+  frontend:
+    name: Frontend-Build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24.x'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npm run build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: frontend
+          path: frontend/dist/
+          if-no-files-found: error
+          retention-days: 1
+
+  release:
+    name: Release- und Startprüfung
+    needs: [backend, frontend]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: mes_ci
+          POSTGRES_PASSWORD: mes_ci_password
+          POSTGRES_DB: mes_ci
+        ports:
+          - 5432/tcp
+        options: >-
+          --health-cmd "pg_isready -U mes_ci -d mes_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24.x'
+          cache: npm
+      - uses: actions/download-artifact@v5
+        with:
+          name: backend
+          path: dist
+      - uses: actions/download-artifact@v5
+        with:
+          name: frontend
+          path: frontend/dist
+      - name: Release-Archiv erstellen
+        run: |
+          test -f dist/main.js
+          test -f frontend/dist/index.html
+          test -f tools/opcua-test-server.js
+          tar -czf "mes-${GITHUB_SHA}.tar.gz" dist frontend/dist package.json package-lock.json \
+            tools/create-admin.js tools/opcua-test-server.js tools/phase3-apply.js \
+            tools/seed-demo-alarms.js tools/seed-stmes-demo.js docker-compose.yml deploy/mosquitto.conf
+      - name: Entpacktes Release gegen PostgreSQL prüfen
+        env:
+          NODE_ENV: production
+          PORT: '3000'
+          DB_HOST: 127.0.0.1
+          DB_PORT: ${{ job.services.postgres.ports[5432] }}
+          DB_USERNAME: mes_ci
+          DB_PASSWORD: mes_ci_password
+          DB_DATABASE: mes_ci
+          JWT_SECRET: mes-ci-only-placeholder-not-for-deployment
+          ADMIN_USERNAME: ci-admin
+          ADMIN_PASSWORD: ci-smoke-password
+          MQTT_BROKER_URL: mqtt://127.0.0.1:1
+          OPC_UA_SERVER_ADDRESS: opc.tcp://127.0.0.1:1/UA/WaraMesTest
+        run: |
+          release_dir=$(mktemp -d)
+          tar -xzf "mes-${GITHUB_SHA}.tar.gz" -C "$release_dir"
+          bash deploy/smoke-test-release.sh "$release_dir"
+      - uses: actions/upload-artifact@v4
+        if: github.ref == 'refs/heads/main'
+        with:
+          name: mes-${{ github.sha }}
+          path: mes-${{ github.sha }}.tar.gz
+          if-no-files-found: error
+          retention-days: 30

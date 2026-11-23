@@ -1,0 +1,143 @@
+require('dotenv').config({ quiet: true });
+
+// DEMO DATA ONLY: remove this seed and replace the node contract when the real stMES UDT is available.
+const baseUrl = process.env.MES_BASE_URL || 'http://localhost:3000/api';
+const username = process.env.DEMO_ADMIN_USERNAME || process.env.ADMIN_USERNAME;
+const password = process.env.DEMO_ADMIN_PASSWORD || process.env.ADMIN_PASSWORD;
+const endpoint = process.env.OPC_UA_SERVER_ADDRESS || 'opc.tcp://localhost:4840/UA/WaraMesTest';
+
+async function request(path, options = {}, token) {
+  const response = await fetch(baseUrl + path, {
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...options.headers,
+    },
+    body: options.body ? JSON.stringify(options.body) : undefined,
+  });
+  if (!response.ok) throw new Error(`${options.method || 'GET'} ${path}: ${response.status} ${await response.text()}`);
+  const text = await response.text();
+  return text ? JSON.parse(text) : null;
+}
+
+async function seed() {
+  if (!username || !password) throw new Error('Set DEMO_ADMIN_USERNAME and DEMO_ADMIN_PASSWORD.');
+  const login = await request('/auth/login', { method: 'POST', body: { username, password } });
+  const token = login.access_token;
+
+  const machines = await request('/machines', {}, token);
+  const stationIds = {};
+  const stationDefinitions = [
+    {
+      resource_id: 1,
+      name: 'S01 Deckelzufuehrung',
+      status: 'online',
+      type: 'lid_feeder',
+      location: 'Webshop Demo Linie',
+      model: 'WARA-DEMO-S01',
+      opcua_endpoint_url: process.env.OPC_UA_STATION_1_ADDRESS || endpoint,
+      opcua_node_prefix: 'ns=1;s=Station1',
+      opcua_enabled: true,
+    },
+    {
+      resource_id: 2,
+      name: 'S02 Kugeldosierung',
+      status: 'online',
+      type: 'ball_dispenser',
+      location: 'Webshop Demo Linie',
+      model: 'WARA-DEMO-S02',
+      opcua_endpoint_url: process.env.OPC_UA_STATION_2_ADDRESS || endpoint.replace(/:(\d+)(\/|$)/, (_, port, suffix) => `:${Number(port) + 1}${suffix}`),
+      opcua_node_prefix: 'ns=1;s=Station2',
+      opcua_enabled: true,
+    },
+    {
+      resource_id: 3,
+      name: 'Q01 Endkontrolle',
+      status: 'online',
+      type: 'quality_gate',
+      location: 'Webshop Demo Linie',
+      model: 'WARA-DEMO-Q01',
+      opcua_endpoint_url: process.env.OPC_UA_STATION_3_ADDRESS || endpoint.replace(/:(\d+)(\/|$)/, (_, port, suffix) => `:${Number(port) + 2}${suffix}`),
+      opcua_node_prefix: 'ns=1;s=Station3',
+      opcua_enabled: true,
+    },
+  ];
+  for (const definition of stationDefinitions) {
+    const resourceId = definition.resource_id;
+    let station = machines.find((machine) => machine.resource_id === resourceId);
+    if (!station) {
+      station = await request('/machines', {
+        method: 'POST',
+        body: definition,
+      }, token);
+    } else {
+      station = await request(`/machines/${station.id}`, {
+        method: 'PATCH',
+        body: definition,
+      }, token);
+    }
+    stationIds[resourceId] = station.id;
+  }
+
+  const orders = await request('/orders', {}, token);
+  let order = orders.find((entry) => entry.name === 'DEMO-ORDER-001');
+  const carriers = await request('/carriers', {}, token);
+  const demoCarriers = [];
+  for (const carrierNumber of [128, 129]) {
+    let carrier = carriers.find((entry) => entry.carrier_number === carrierNumber);
+    if (carrier?.order_id && carrier.order_id !== order?.id) {
+      throw new Error(`Carrier ${carrierNumber} belongs to another order.`);
+    }
+    if (!carrier) {
+      carrier = await request('/carriers', { method: 'POST', body: { carrier_number: carrierNumber } }, token);
+      carriers.push(carrier);
+    }
+    demoCarriers.push(carrier);
+  }
+  if (!order) {
+    const nextCarriers = carriers
+      .filter((carrier) => carrier.status === 'available')
+      .sort((a, b) => a.carrier_number - b.carrier_number)
+      .slice(0, demoCarriers.length);
+    if (demoCarriers.some((carrier, index) => carrier.id !== nextCarriers[index]?.id)) {
+      throw new Error('Carriers 128 and 129 must be next in the available carrier pool.');
+    }
+    order = await request('/orders', {
+      method: 'POST',
+      body: { name: 'DEMO-ORDER-001', priority: 1, machine_id: stationIds[1], operation: 'Webshop-Produkt konfigurieren', quantity: 2 },
+    }, token);
+  }
+  await request(`/orders/${order.id}`, {
+    method: 'PATCH',
+    body: { name: 'DEMO-ORDER-001', priority: 1, machine_id: stationIds[1], operation: 'Webshop-Produkt konfigurieren', quantity: 2 },
+  }, token);
+  await request(`/orders/${order.id}`, {
+    method: 'PATCH',
+    body: { status: 'in_progress', completed_quantity: 0 },
+  }, token);
+  await request(`/orders/${order.id}/route`, {
+    method: 'PATCH',
+    body: {
+      steps: [
+        { step_no: 1, resource_id: 1, operation_no: 10, operation: 'Deckelfarbe bereitstellen', parameters: { iPar1: 1, iPar2: 3, iPar3: 5, iPar4: 7 } },
+        { step_no: 2, resource_id: 2, operation_no: 20, operation: 'Kugeln dosieren', parameters: { iPar1: 1, iPar2: 3, iPar3: 5, iPar4: 7 } },
+        { step_no: 3, resource_id: 3, operation_no: 30, operation: 'Deckel und Kugeln pruefen', parameters: { iPar1: 1, iPar2: 3, iPar3: 5, iPar4: 7 } },
+      ],
+    },
+  }, token);
+
+  for (const carrier of demoCarriers) {
+    await request(`/carriers/${carrier.id}/assignment`, {
+      method: 'POST',
+      body: { order_id: order.id, current_step_no: 1 },
+    }, token);
+  }
+
+  console.log('DEMO data ready: webshop product on resources 1/2/3, carriers 128/129 start at step 1.');
+}
+
+seed().catch((error) => {
+  console.error('DEMO seed failed:', error.message);
+  process.exit(1);
+});

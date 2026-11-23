@@ -8,9 +8,8 @@ _Status: demo verified - not production compatible_
 
 ## Demo-Topologie
 
-- Ein lokaler OPC-UA-Server stellt zwei unabhängige Stationen bereit.
-- `Station1` besitzt Resource-ID 1 und Demo-Carrier 128.
-- `Station2` besitzt Resource-ID 2 und Demo-Carrier 129.
+- Ein eigener OPC-UA-Prozess simuliert drei Stationen: Deckelzuführung (Resource 1), Kugeldosierung (Resource 2) und Endkontrolle (Resource 3).
+- Die Demo-Carrier 128 und 129 starten an der Deckelzuführung und folgen der vom MES gemeldeten nächsten Resource.
 - Jede Station besitzt eigene `stMES.State`, `stMES.Query` und `dbProcessData [DB151]`-Bäume.
 - Das Backend verarbeitet Stationen parallel, aber pro Station seriell.
 
@@ -76,35 +75,17 @@ Präfix: `ns=1;s=Station<resourceId>.stMES.Query.`
 
 ## Demo starten
 
-```bash
-npm run start:test-machine
-npm run start:prod
-DEMO_ADMIN_USERNAME=<admin> DEMO_ADMIN_PASSWORD=<password> npm run seed:test-machine
-```
+Die [Startanleitung](../../README.md#mes-mit-simulierter-maschine-betreiben) beschreibt die lokale Konfiguration. Der Seed richtet `DEMO-ORDER-001` mit drei Routenschritten und den Carriern 128 und 129 ein. Beide Carrier durchlaufen die drei Stationen und der Auftrag erreicht nach der Endkontrolle eine Fertigmenge von 2.
 
-Der Seed legt ausschließlich folgende Testdaten an beziehungsweise aktualisiert sie:
-
-- `Demo Station 1`, Resource 1
-- `Demo Station 2`, Resource 2
-- `DEMO-ORDER-001`
-- Carrier 128 und 129
-- zwei Demo-Routenschritte mit Parametern 1, 3, 5 und 7
-
-Für einen vollständig sichtbaren Lauf zuerst den Seed ausführen, dann die Edge-Seite öffnen und anschließend den Testserver neu starten. Der Simulator führt danach selbstständig einen SPS-getriebenen Ablauf aus:
-
-1. Station 1 fordert Carrier 128 an und meldet Schritt 1 als abgeschlossen.
-2. Station 2 fordert Carrier 129 an und schließt dessen Route ab.
-3. Station 2 übernimmt Carrier 128, führt Schritt 2 aus und schließt dessen Route ab.
-4. Der Auftrag erreicht dadurch `2/2 completed`.
-5. Zusätzliche Anfragen demonstrieren die Ablehnung eines Carriers an der falschen Station und eines unbekannten Carriers.
+Standardmäßig verwendet der Simulator die MES-API für die Auswahl zugewiesener Carrier. Mit `DEMO_CARRIER_IDS=128,129` kann stattdessen ein fester simulierter Wareneingang eingerichtet werden. Die Maschinenkommunikation läuft in beiden Betriebsarten über OPC UA.
 
 ## Austauschgrenze zur realen SPS
 
-- Ausschließlich `test-machines/opcua-simulator/server.js` spielt die Rolle der SPS und initiiert Prozesssignale. Das MES verwendet dabei den echten `OpcUaMachineAdapter`.
+- Ausschließlich `tools/opcua-test-server.js` spielt die Rolle der SPS und initiiert Prozesssignale.
 - Backend und Frontend enthalten keinen Demo-Replay-Endpunkt und treiben die SPS nicht künstlich an.
 - Das MES reagiert auf `xStart`, schreibt die Antwortfelder und wertet die SPS-Quittierung sowie `ldtTimeStamp` aus.
-- Für die reale SPS wird `MACHINE_PROFILE_PATH` auf ein validiertes Anlagenprofil gesetzt. Endpoint, Namespace-URIs, Stationen, Rollen, Datentypen, Routing und Security werden aus diesem Profil geladen.
-- Der Simulator darf eigene NodeIds und Signalnamen besitzen: Das MES arbeitet nur mit den semantischen Rollen des jeweils aktiven Profils. Der produktive Adapter bleibt dabei derselbe.
+- Wenn die reale SPS denselben Vertrag und dieselben NodeIds bereitstellt, wird der Testserver beendet und `OPC_UA_SERVER_ADDRESS` auf den realen Endpoint gesetzt.
+- Solange die echte UDT-Dokumentation fehlt, ist ein reiner Endpoint-Wechsel nicht garantiert. Abweichende NodeIds, Typen oder Signalfolgen müssen zuerst im Vertrag und in der Konfiguration umgesetzt und gegen den Simulator getestet werden.
 
 ## Vor realer SPS-Anbindung zwingend ersetzen
 

@@ -13,12 +13,12 @@ Phase 1 ist lokal implementiert und verifiziert. Es wurde nichts committed oder 
 | PostgreSQL | `localhost:5432` |
 | OPC-UA-Testserver | `opc.tcp://localhost:4840/UA/WaraMesTest` |
 | MQTT | `mqtt://localhost:1883` |
-| Telemetrie-WebSocket | `ws://localhost:3000/api/v1/shopfloor/ws` |
+| Telemetrie-WebSocket | `ws://localhost:3000/api/shopfloor/ws` |
 
 ## Entwicklungsbefehle
 
 ```bash
-npm run start:test-machine
+npm run start:opcua-test
 npm run start:dev
 cd frontend && npm run dev
 ```

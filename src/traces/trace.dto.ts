@@ -1,5 +1,5 @@
 import { Transform } from 'class-transformer';
-import { IsDefined, IsEnum, IsInt, IsNotEmpty, IsObject, IsOptional, IsString, IsUUID, Max, Min } from 'class-validator';
+import { IsDefined, IsEnum, IsIn, IsInt, IsNotEmpty, IsNumber, IsObject, IsOptional, IsString, IsUUID, Max, Min } from 'class-validator';
 
 export type TraceCategoryType = 'process_data' | 'quality' | 'material' | 'energy' | 'op_input';
 
@@ -30,6 +30,10 @@ export class CreateTraceDto {
 
 export class TraceQueryDto {
   @IsOptional()
+  @IsIn(['true'])
+  include_data_points?: 'true';
+
+  @IsOptional()
   @IsUUID()
   machine_id?: string;
 
@@ -43,12 +47,12 @@ export class TraceQueryDto {
 
   @IsOptional()
   @Transform(({ value }) => Number(value))
-  @IsInt()
+  @IsNumber()
   min_value?: number;
 
   @IsOptional()
   @Transform(({ value }) => Number(value))
-  @IsInt()
+  @IsNumber()
   max_value?: number;
 }
 

@@ -1,14 +1,12 @@
-import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
-import { Controller, Get, Post, Patch, Delete, Body, HttpCode, HttpStatus, Param, ParseUUIDPipe, Query } from '@nestjs/common';
+import { ApiTags, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
+import { Controller, Get, Post, Patch, Delete, Body, Param, Query } from '@nestjs/common';
 import { MaterialsService } from './materials.service';
 import { Roles } from '../auth/roles.decorator';
 import { UserRoleEnum } from '../users/user.entity';
-import { CreateMaterialDto, RegisterConsumptionDto, UpdateMaterialDto } from './material.dto';
+import { CreateMaterialDto, RegisterConsumptionDto } from './material.dto';
 import { MaterialTypeEnum } from './material.entity';
 
 @Controller('materials')
-@ApiTags('Materials')
-@ApiBearerAuth('JWT-auth')
 export class MaterialsController {
   constructor(private readonly materialsService: MaterialsService) {}
 
@@ -27,30 +25,29 @@ export class MaterialsController {
   @Roles(UserRoleEnum.ADMIN, UserRoleEnum.OPERATOR)
   findLowStock() { return this.materialsService.findLowStock(); }
 
-  @Get('orders/:orderId/consumption')
+  @Get(':id/consumption/:orderId')
   @Roles(UserRoleEnum.ADMIN, UserRoleEnum.OPERATOR, UserRoleEnum.VIEWER)
-  getConsumptionByOrder(@Param('orderId', ParseUUIDPipe) orderId: string) {
+  getConsumptionByOrder(@Param('orderId') orderId: string) {
     return this.materialsService.getConsumptionByOrder(orderId);
   }
 
-  @Get('orders/:orderId/consumption/summary')
+  @Get(':id/total-consumption/:orderId')
   @Roles(UserRoleEnum.ADMIN, UserRoleEnum.OPERATOR, UserRoleEnum.VIEWER)
-  getTotalConsumption(@Param('orderId', ParseUUIDPipe) orderId: string) {
+  getTotalConsumption(@Param('orderId') orderId: string) {
     return this.materialsService.getTotalConsumptionForOrder(orderId);
   }
 
   @Get(':id')
   @Roles(UserRoleEnum.ADMIN, UserRoleEnum.OPERATOR, UserRoleEnum.VIEWER)
-  findOne(@Param('id', ParseUUIDPipe) id: string) { return this.materialsService.findOne(id); }
+  findOne(@Param('id') id: string) { return this.materialsService.findOne(id); }
 
   @Patch(':id')
   @Roles(UserRoleEnum.ADMIN, UserRoleEnum.OPERATOR)
-  update(@Param('id', ParseUUIDPipe) id: string, @Body() dto: UpdateMaterialDto) { return this.materialsService.update(id, dto); }
+  update(@Param('id') id: string, @Body() dto: CreateMaterialDto) { return this.materialsService.update(id, dto); }
 
   @Delete(':id')
   @Roles(UserRoleEnum.ADMIN)
-  @HttpCode(HttpStatus.NO_CONTENT)
-  remove(@Param('id', ParseUUIDPipe) id: string) { return this.materialsService.remove(id); }
+  remove(@Param('id') id: string) { return this.materialsService.remove(id); }
 
   @Post('consumption')
   @Roles(UserRoleEnum.ADMIN, UserRoleEnum.OPERATOR)

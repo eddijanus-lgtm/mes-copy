@@ -1,13 +1,12 @@
-import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
-import { Controller, Get, Post, Patch, Delete, Body, Param, HttpCode, HttpStatus, ParseArrayPipe, Query, ParseUUIDPipe } from '@nestjs/common';
+import { ApiTags, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
+import { Controller, Get, Post, Patch, Delete, Body, Param, HttpCode, HttpStatus, Query, Req, Res, ParseUUIDPipe } from '@nestjs/common';
 import { AlarmsService } from './alarms.service';
 import { CreateAlarmDto, UpdateAlarmDto } from './alarm.dto';
 import { Roles } from '../auth/roles.decorator';
 import { UserRoleEnum } from '../users/user.entity';
+import type { Request, Response } from 'express';
 
 @Controller('alarms')
-@ApiTags('Alarms')
-@ApiBearerAuth('JWT-auth')
 export class AlarmsController {
   constructor(private readonly alarmsService: AlarmsService) {}
 
@@ -36,11 +35,11 @@ export class AlarmsController {
   @Post('bulk/acknowledge')
   @Roles(UserRoleEnum.ADMIN, UserRoleEnum.OPERATOR)
   @HttpCode(HttpStatus.OK)
-  bulkAcknowledge(@Body(new ParseArrayPipe({ items: String })) ids: string[]) { return this.alarmsService.bulkAcknowledge(ids); }
+  bulkAcknowledge(@Body() ids: string[]) { return this.alarmsService.bulkAcknowledge(ids); }
 
   @Delete('bulk')
   @Roles(UserRoleEnum.ADMIN)
-  bulkRemove(@Body(new ParseArrayPipe({ items: String })) ids: string[]) { return this.alarmsService.bulkRemove(ids); }
+  bulkRemove(@Body() ids: string[]) { return this.alarmsService.bulkRemove(ids); }
 
   @Get('export/csv')
   @Roles(UserRoleEnum.ADMIN, UserRoleEnum.OPERATOR, UserRoleEnum.VIEWER)
@@ -67,6 +66,5 @@ export class AlarmsController {
 
   @Delete(':id')
   @Roles(UserRoleEnum.ADMIN)
-  @HttpCode(HttpStatus.NO_CONTENT)
   remove(@Param('id', ParseUUIDPipe) id: string) { return this.alarmsService.remove(id); }
 }

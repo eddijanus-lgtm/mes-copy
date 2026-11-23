@@ -1,6 +1,6 @@
 # MES Production Control System – Roadmap 2026
 
-_Document version: v1.4 — July 2026_
+_Document version: v1.3 — July 2026_
 
 ---
 
@@ -19,15 +19,14 @@ A professional, scalable Manufacturing Execution System that connects machines v
 
 ## 2. Phases & Milestones
 
-### Current Progress - 2026-07-27 CEST
+### Current Progress - 2026-07-24 CEST
 
 | Bewertung | Rechnung | Fortschritt |
-|---|---:|---:|---:|
-| Nur vollständig abgeschlossene Aufgaben (Phasen 1–7) | 47 von 48 | **97,92 %** |
-| Teilaufgaben zu jeweils 50 % angerechnet | 47,5 von 48 | **98,96 %** |
-| Phase 8 — Machine Profile System | 7 von 8 | **87,5 %** |
+|---|---|---:|---:|
+| Nur vollständig abgeschlossene Aufgaben | 45 von 48 | **93,75 %** |
+| Teilaufgaben zu jeweils 50 % angerechnet | 46 von 48 | **95,8 %** |
 
-Aktueller Planungswert: **~98 % der Gesamtroadmap (Phasen 1–7); Phase 8 im Aufbau**.
+Aktueller Planungswert: **rund 95 % der Gesamtroadmap**.
 
 #### Zusammenfassung Phase by Phase
 
@@ -40,23 +39,16 @@ Aktueller Planungswert: **~98 % der Gesamtroadmap (Phasen 1–7); Phase 8 im Auf
 | Phase 5 — Dashboard Intelligence | ✅ fertig (WebSocket-KPI-Stream abgeschlossen) | **100 %** |
 | Phase 6 — Reliability & Observability | 🟡 Test-/E2E-Infrastruktur abgeschlossen; Coverage-Ziel formal offen | **92 %** |
 | Phase 7 — Notifications & Advanced Features | ✅ fertig | **100 %** |
-| Phase 8 — Machine Profile System | 🟡 Frontend-Features und NovaPress-Konvertierung abgeschlossen | **87 %** |
 
 #### Wichtige Errungenschaften seit letzter Roadmap-Aktualisierung
 
-- **Maschinen-Profil-System (Phase 8)**: Neues, versioniertes Profilsystem für Maschinen-Stations-Hierarchien. Profile werden in `/machine-profiles` als versionierte Dokumente verwaltet mit Status `draft → structurally_valid → live_validated → active`. Jedes Profil enthält Stammdaten, OPC-UA-Verbindungsparameter, Stationsbaum, Routing und Signalschemata.
-- **Profil-Wizard im Frontend**: Schrittweiser Assistent (6 Schritte: Stammdaten → OPC UA → Stationen → Routing → Signale → Abschluss) mit Inline-Editoren für Stationen und Signale, OPC-UA-Browser-Anbindung und Validierungs-/Aktivierungsfunktionen. Admins sehen immer Vollzugriff ("Steuern") unabhängig vom Betriebsmodus.
-- **Uncommissionierte Profile in Maschinentabelle**: Profile, die noch keiner realen Ressource zugeordnet sind, werden als "Inaktiv"-Einträge direkt in die Haupttabelle gemerged und können dort bearbeitet oder gelöscht werden.
-- **Baumansicht mit Unicode-Connectoren**: `flattenEquipmentTree` liefert `_treeConnectors[]` und `_isLastChild` für die Darstellung von `│`, `├`, `└`-Linien in der Maschinen-Stations-Hierarchie.
-- **Bearbeiten springt direkt in Stations-Editor**: Klick auf "Bearbeiten" einer Station im Maschinenbaum öffnet den Wizard direkt in Schritt 3 (Stationen) mit geöffnetem Inline-Editor für genau diese Station.
-- **Tab "Stationen" → "Maschinen" umbenannt**: i18n-Locales (DE/EN) und PageInfo-Hilfetexte aktualisiert.
-- **NovaPress NX-9000 konvertiert**: Erstes produktives Maschinenprofil angelegt (R70 NovaPress NX-9000 mit 3 Sub-Stationen R71–R73 inkl. OPC-UA-Signale und Routing).
+- **FIFO-Queue pro Station**: `requestMesData` legt Carrier bei besetzter Station in eine `waitingQueue[]`; nach Fertigstellung/Abweisung/Timeout wird der nächste Carrier mittels `processNextInQueue()` automatisch nachgezogen. Explizite Logs (`in die Queue Position N`, `naechster Carrier X aus der Queue (N verbleibend)`) machen die Warteschlange sichtbar. Queue wird bei `xCmdReset` geleert.
 - **Polling erkennt fallende xStart-Flanke**: Die OPC UA Polling-Schleife ruft jetzt auch `acknowledge` auf, wenn `xStart` von `true` auf `false` wechselt. Damit wird das `processing`-Set einer Station immer korrekt freigegeben, auch wenn die Subscription den Ablauf verpasst.
 - **MES-Timeout zählt als Rejection**: Der 15s-Timeout im Testserver inkrementiert jetzt `rejectCounts`. Nach 3 Timeouts pro Carrier stoppt die Station (`xAuto=false, xErrL0=true`). Die Stuck-Erkennung greift somit auch bei Verbindungsabbrüchen.
 - **ConnectionRecoveryService**: Neues Modul in `src/opcua/connection-recovery.service.ts`. Erzeugt `critical`-Alarm bei OPC UA Disconnect während aktiver Produktion. Nach Reconnect/Startup: Carrier-Positionsabgleich via OPC UA `readNode`, Step-Korrektur wenn Carrier an einer Station gefunden wird.
 
 - `Edge Gateway` wurde fachlich korrekt zu `Shopfloor Gateway` umbenannt. Der Shopfloor Gateway ist die OT/IT-Vermittlungsschicht zwischen SPS und MES — keine Produktionsroute.
-- Alle API-Pfade, Frontend-Routen und Telemetrie-Typen auf `/api/v1/shopfloor/*`, `shopfloor.telemetry`, `/api/v1/shopfloor/ws` aktualisiert; Backend- und Frontend-Builds unverändert erfolgreich.
+- Alle API-Pfade, Frontend-Routen und Telemetrie-Typen auf `/shopfloor/*`, `shopfloor.telemetry`, `/api/shopfloor/ws` aktualisiert; Backend- und Frontend-Builds unverändert erfolgreich.
 - Echtzeit-MQTT-Anbindung: Webshop-Bestellungen landen über `i4.0/production/orders` automatisch als MES-Auftrag mit korrekt gemappten Parametern `bDeckelfarbe → iPar1`, `uiKugelRot → iPar2`, `uiKugelGruen → iPar3`, `uiKugelBlau → iPar4`.
 - OPC-UA-Demoanlage: 3 Stationen (S01/S02/Q01) mit kurzen Demo-Zeitmodi (`5 s / 6 s / 4 s`). Ein kompletter Auftrag durchläuft in ≈ **20 Sekunden + bis zu 30 s Release-Takt**.
 - Carrier-Routing: `CarrierEntity` tracked mit `current_step_no`, `current_resource_id`; Sendeübertragung über OPC-UA-Stationswechsel.
@@ -68,16 +60,16 @@ Aktueller Planungswert: **~98 % der Gesamtroadmap (Phasen 1–7); Phase 8 im Auf
 - Phase 4 wurde Demo-/MES-seitig abgeschlossen: Materialverbrauchs-Backend, Maschinen-Control per OPC-UA write-back, Downtime-Logging-Backend und Shopfloor-Control-UI wurden ergänzt. Die OPC-UA-Control-Kommandos nutzen im Demo-Simulator einen eigenen `stMES.Control`-Block (`xCmdStart`, `xCmdPause`, `xCmdStop`, `xCmdReset`) und erhalten Carrier bei Stop/Pause korrekt an der Station.
 - Demo-Validierung nach Phase-4-Control-Fix: hängender `DEMO-ORDER-004` wurde bereinigt; `DEMO-ORDER-005` wurde neu angelegt und Station-2 Stop/Start erfolgreich fortgesetzt.
 - Phase 5 Dashboard Intelligence umgesetzt (Partial):
-  - Neues Backend-Modul `src/dashboard/` mit `GET /api/v1/dashboard/kpis`.
+  - Neues Backend-Modul `src/dashboard/` mit `GET /api/dashboard/kpis`.
   - OEE-Berechnung: Availability aus Downtime-Zeit, Performance aus Auftragsfortschritt, Quality/Yield aus DataPoint-Quality; alle im 8h-Fenster.
   - KPI-Vektor enthält zusätzlich: Durchsatz (Einheiten/Stunde), Fertigmengen, aktive Aufträge, Maschinenstatus-Verteilung.
   - Dashboard-Komponenten erweitert um OEE-Gauges, Status-Meter und Mini-Metriken; Live-Aktualisierung alle 2 Sekunden via Polling.
   - Robuste Query-Fallbacks für nicht existente Phase-4/Timescale-Tabellen (keine Crashes bei fehlenden Tables).
-- Phase 5 Trend-Endpunkte stabilisiert: `GET /api/v1/dashboard/trends/all` und `GET /api/v1/dashboard/trends/pareto` sind im Backend registriert; `/trends/all` liefert das vom Frontend erwartete `trends[]`-Format für Sensorwerte, Order-Progress, OEE, Downtime, Quality, Throughput und Maschinenstatus.
+- Phase 5 Trend-Endpunkte stabilisiert: `GET /api/dashboard/trends/all` und `GET /api/dashboard/trends/pareto` sind im Backend registriert; `/trends/all` liefert das vom Frontend erwartete `trends[]`-Format für Sensorwerte, Order-Progress, OEE, Downtime, Quality, Throughput und Maschinenstatus.
 - Dashboard-Fehlerfenster entschärft: optionale Trend-/Pareto-Hintergrundabfragen nutzen `api.getSilent()`, damit bereits behandelte Ladefehler keine globalen Toasts anzeigen. Downtime-Pareto ist als eigener Dashboard-Tab ergänzt.
 - Dashboard-PDF-Export ergänzt: Tagesbericht und Schichtbericht erzeugen einen druckbaren Report mit OEE, Availability, Performance, Quality/Yield, Durchsatz, Maschinenstatus, Stationen-Live und Systemhinweisen; Browser-PDF-Dialog wird automatisch geöffnet.
 - WebSocket-KPI-Stream implementiert: TelemetryGateway sendet alle 2 Sekunden aktuelle KPIs via WebSocket an das Dashboard; Frontend empfängt und aktualisiert OEE-Gauges, Status-Meter und Mini-Metriken in Echtzeit; Polling als Fallback (alle 5s) aktiv für Ausfallsicherheit.
-- Phase 5 finalisiert: Continuous Aggregate `data_points_quality_1min` für Qualitäts-/OEE-Berechnung ergänzt, `/api/v1/dashboard/trends/all` nutzt die `time_bucket()`-optimierten Trendmethoden, Downtime-Pareto zählt offene Stillstände bis zum Abfrage-Ende und liefert Maschinenverfügbarkeit sowie kumulierte Pareto-Prozente.
+- Phase 5 finalisiert: Continuous Aggregate `data_points_quality_1min` für Qualitäts-/OEE-Berechnung ergänzt, `/api/dashboard/trends/all` nutzt die `time_bucket()`-optimierten Trendmethoden, Downtime-Pareto zählt offene Stillstände bis zum Abfrage-Ende und liefert Maschinenverfügbarkeit sowie kumulierte Pareto-Prozente.
 - Dashboard-/Shopfloor-UI stabilisiert: Systemstatus-Overlay und Produktionsfluss (`DEMO-ORDER-*`) sind vollständig im Lightmode; Dashboard-Graphen für Quality/Yield, OEE Trend, Maschinenstatus, Downtime und Pareto haben feste Chart-Container, damit Chart.js nicht unendlich nach unten expandiert.
 - Phase 6.2 Integration/E2E abgeschlossen: `npm run test:e2e` läuft mit 4 Suites / 9 Tests grün (Health combined, Shopfloor OPC-UA/MQTT contracts, Order-Routing-Progress, Alarm-Lifecycle). `npm test -- --runInBand` läuft mit 12 Suites / 110 Tests grün; `npm run build` erfolgreich. Formal offen bleibt nur das globale Coverage-Ziel (`npm run test:cov -- --runInBand`: 28,85% Statements / 29,64% Lines).
 
@@ -139,8 +131,8 @@ Aktueller Planungswert: **~98 % der Gesamtroadmap (Phasen 1–7); Phase 8 im Auf
 | # | Task | Priority | Effort | Status |
 |---|------|----------|--------|--------|
 | 3.5.1 | Umstellung `Edge Gateway` → `Shopfloor Gateway` (fachlicher Name) | High | 2–3 hrs | ✅ complete |
-| 3.5.2 | API-Pfade: `/api/edge/*` → `/api/v1/shopfloor/*` | Critical | 1 hr | ✅ complete |
-| 3.5.3 | WebSocket: `/api/edge/ws` → `/api/v1/shopfloor/ws` + `edge.telemetry` → `shopfloor.telemetry` | Critical | 1 hr | ✅ complete |
+| 3.5.2 | API-Pfade: `/api/edge/*` → `/api/shopfloor/*` | Critical | 1 hr | ✅ complete |
+| 3.5.3 | WebSocket: `/api/edge/ws` → `/api/shopfloor/ws` + `edge.telemetry` → `shopfloor.telemetry` | Critical | 1 hr | ✅ complete |
 | 3.5.4 | Dateiumbenennungen: `EdgeController` → `ShopfloorGatewayController`, `EdgeTelemetryEvent` → `ShopfloorTelemetryEvent`, etc. | Medium | 2–3 hrs | ✅ complete |
 | 3.5.5 | Frontend-Route: `/edge` → `/shopfloor`, Sidebar/Labels aktualisiert | Medium | 1 hr | ✅ complete |
 | 3.5.6 | Dokumentation (`architecture.md`, `api.md`, `production-flow-protocol.md`) aktualisieren | High | 2–3 hrs | ✅ complete |
@@ -157,7 +149,7 @@ Aktueller Planungswert: **~98 % der Gesamtroadmap (Phasen 1–7); Phase 8 im Auf
 | # | Task | Priority | Effort | Status |
 |---|------|----------|--------|--------|
 | 4.1 | Order workflow states: `draft` → `released` → `in_progress` → `completed` / `cancelled` | Critical | 2–3 days | ✅ complete |
-| 4.2 | Production step tracking (operation sequencing per order) | High | 2 days | ✅ complete — Carrier-Routing-System; stMES-Handshake mit OPC UA write-back und Backend-Antwort; Webshop-Auto-Erstellung für Produktionsaufträge über MQTT `i4.0/production/orders`; externe 3-Station-Testmaschine in `test-machines/opcua-simulator/server.js` mit kurzen Laufzeiten (5/6/4 Sekunden). MES und Testmaschine kommunizieren über den produktiven OPC-UA-Adapter. Reconnect-Hardening: bereits aktive `xStart=true` SPS-Anfragen werden beim Polling nacherkannt. |
+| 4.2 | Production step tracking (operation sequencing per order) | High | 2 days | ✅ complete — Carrier-Routing-System; stMES-Handshake mit OPC UA write-back und Backend-Antwort; Webshop-Auto-Erstellung für Produktionsaufträge über MQTT `i4.0/production/orders`; 3-Station-Simulation in `tools/opcua-test-server.js` mit kurzen Demo-Zeiten (5/6/4 Sekunden). Reconnect-Hardening: bereits aktive `xStart=true` SPS-Anfragen werden beim Polling nacherkannt. Demo-Läufe mit Carrier 128/129 erfolgreich abgeschlossen; echter SPS-Node-Vertrag bleibt für Realanlagen-Anbindung offen. |
 | 4.3 | Material consumption tracking (link materials to orders) | Medium | 1–2 days | ✅ complete — Backend-Modul `materials` mit Materialstamm, Verbrauchsbuchung pro Auftrag, Bestandsprüfung und Order-Consumption-Abfrage ergänzt. |
 | 4.4 | Start/Stop commands via OPC UA write-back to machines | High | 2–3 days | ✅ complete — Backend `POST /shopfloor/machine/control`, Frontend-Control-Panel pro Station und Demo-OPC-UA-Control-Block `stMES.Control` (`xCmdStart`, `xCmdPause`, `xCmdStop`, `xCmdReset`). Stop/Pause erhalten Carrier an der Station; Start setzt den wartenden Zyklus fort. |
 | 4.5 | Error handling & downtime logging per machine | High | 1–2 days | ✅ complete — Downtime-Entity, DTOs, Service und API-Endpunkte für Stop/Resume, Downtime-Listen und Maschinenstatistiken ergänzt. |
@@ -173,8 +165,8 @@ Aktueller Planungswert: **~98 % der Gesamtroadmap (Phasen 1–7); Phase 8 im Auf
 | # | Task | Priority | Effort | Status |
 |---|------|----------|--------|--------|
 | 5.1 | OEE calculation (Availability × Performance × Quality) with Timescale continuous aggregates | Critical | 3–4 days | ✅ complete — `data_points_quality_1min` als Timescale Continuous Aggregate ergänzt; KPI-Qualitätsanteil nutzt Aggregatdaten mit Rohdaten-Fallback, Availability und Performance bleiben robust aus Downtime-/Order-Daten berechnet. |
-| 5.2 | Real-time KPI widgets on Dashboard: throughput, yield, machine status (live via WebSocket) | High | 2–3 days | ✅ complete — WebSocket-KPI-Stream über `/api/v1/shopfloor/ws` implementiert; TelemetryGateway broadcastet alle 2 Sekunden aktuelle KPIs; Frontend empfängt und aktualisiert OEE-Gauges, Status-Meter und Mini-Metriken in Echtzeit; Polling-Fallback (5s) für Ausfallsicherheit aktiv. |
-| 5.3 | Historical trend charts for key metrics (time-range selector) | High | 2–3 days | ✅ complete — `/api/v1/dashboard/trends/all` nutzt die bestehenden `time_bucket()`-optimierten Trendmethoden für Telemetrie, Orders, OEE, Downtime, Quality, Throughput und Maschinenstatus; Zeitfenster/Intervall bleibt steuerbar. |
+| 5.2 | Real-time KPI widgets on Dashboard: throughput, yield, machine status (live via WebSocket) | High | 2–3 days | ✅ complete — WebSocket-KPI-Stream über /api/shopfloor/ws implementiert; TelemetryGateway broadcastet alle 2 Sekunden aktuelle KPIs; Frontend empfängt und aktualisiert OEE-Gauges, Status-Meter und Mini-Metriken in Echtzeit; Polling-Fallback (5s) für Ausfallsicherheit aktiv. |
+| 5.3 | Historical trend charts for key metrics (time-range selector) | High | 2–3 days | ✅ complete — `/api/dashboard/trends/all` nutzt die bestehenden `time_bucket()`-optimierten Trendmethoden für Telemetrie, Orders, OEE, Downtime, Quality, Throughput und Maschinenstatus; Zeitfenster/Intervall bleibt steuerbar. |
 | 5.4 | Machine availability and downtime Pareto chart | Medium | 1–2 days | ✅ complete — Pareto-Endpunkt berechnet Downtime inklusive offener Stillstände bis zum Abfrage-Ende, Maschinenverfügbarkeit und kumulierte Pareto-Prozente je Maschine. |
 | 5.5 | Export dashboards to PDF per shift/day | Low | 1 day | ✅ complete — Dashboard bietet Tagesbericht- und Schichtbericht-PDF über druckbare HTML-Reports mit KPI-, Status- und Stationsdaten. |
 
@@ -190,7 +182,7 @@ Aktueller Planungswert: **~98 % der Gesamtroadmap (Phasen 1–7); Phase 8 im Auf
 |---|------|----------|--------|--------|
 | 6.1 | Unit test suite: reach ≥60% coverage across all NestJS modules | Critical | 3–5 days | 🟡 test suite complete, coverage target open — **110 Unit/Integration Tests über 12 Test-Suites, 0 Failures.** Neue Tests für: `alarms.service`, `data-collection.service`, `carriers.service`, `materials.service`, `traces.service`, `routing.service`, `opcua.service` integration contract, `app.service` erweitert. Bestehende Tests stabil: `auth.service`, `machines.service`, `orders.service`, `dashboard.service`. Service Coverage stark verbessert (`orders.service` 97.6%, `machines.service` 95.5%, `traces.service` 100%, `carriers.service` 100%, `materials.service` 94.4%, `data-collection.service` 87.5%). Globaler Jest-Coverage-Wert bleibt wegen Scope noch bei 28.85%; 60%-Ziel formal offen. |
 | 6.2 | Integration tests for OPC UA simulation (mock PLC) + E2E test flows | High | 3–4 days | ✅ complete — **4 E2E-Suites, 9 Tests, 0 Failures**: Health combined endpoint, Shopfloor Gateway OPC-UA/MQTT contracts, Order → Routing → Progress completion flow, Alarm create/filter/acknowledge/export/bulk lifecycle. Zusätzlich `opcua.service.integration.spec.ts` ergänzt: erlaubte Node-Prefixes, disconnected handling, Session-read/write contract und BadGateway-Wrapping. Verifikation: `npm run test:e2e` grün, `npm test -- --runInBand` grün, `npm run build` grün. |
-| 6.3 | Health check endpoint (`GET /health`) combining DB, OPC UA MQTTF status | Medium | 1 day | 🟢 `/api/v1/health` (DB) + `/api/v1/shopfloor/health` (OPC UA/MQTT) beide operational; kombinierter Single-Endpoint `/api/v1/health/combined` mit DB-, Shopfloor-, Uptime- und Memory-Statistik implementiert. |
+| 6.3 | Health check endpoint (`GET /health`) combining DB, OPC UA MQTTF status | Medium | 1 day | 🟢 /api/health (DB) + /shopfloor/health (OPC UA/MQTT) beide operational; kombinierter Single-Endpoint `/health/combined` mit DB-, Shopfloor-, Uptime- und Memory-Statistik implementiert. |
 | 6.4 | Graceful shutdown handling (finish in-flight requests, close OPC UA sessions) | High | 2–3 hrs | ✅ complete — SIGINT/SIGTERM Handler mit app.close(), OPC UA session cleanup und strukturierter Logging-Ausgabe; enableShutdownHooks erweitert auf explizite Signal-Handler. |
 | 6.5 | Structured logging with correlation IDs (all log entries traceable) | Medium | 1 day | ✅ complete — X-Request-ID Header auf allen Requests, Logger instanziiert mit NestJS Logger, Shutdown-Ereignisse werden geloggt. |
 | 6.6 | Swagger/OpenAPI auto-generated docs (`@nestjs/swagger`) | Low | 2 hrs | ✅ complete — Swagger-Dokumentation unter `/api/docs` verfuegbar; alle Controller haben ApiTags-Decorator; JWT-Bearer-Auth im Swagger UI konfigurierbar. |
@@ -210,25 +202,6 @@ Aktueller Planungswert: **~98 % der Gesamtroadmap (Phasen 1–7); Phase 8 im Auf
 
 ---
 
-### Phase 8 — Machine Profile System _(Weeks 29–32)_
-
-**Goal:** Versioniertes Maschinen-Profil-System für OPC-UA-Konfiguration, Stations-Hierarchie, Routing und Signalschemata. Ersetzt die statische `/machines`-Tabelle durch profilgesteuerte Maschinen.
-
-| # | Task | Priority | Effort | Status |
-|---|------|----------|--------|--------|
-| 8.1 | Backend: `/machine-profiles` CRUD-API mit Versionierung, Aktivierung/Deaktivierung, Validierung und Live-Verifikation | Critical | 3–5 days | ✅ complete — Versionierte Dokumente mit Status `draft → structurally_valid → live_validated → active`. PATCH erzeugt neue Version, POST aktiviert/deaktiviert. Validierung prüft required fields + Signal-Referenzen; Live-Verifikation liest OPC-UA-Nodes und gleicht mit Profil ab. |
-| 8.2 | Frontend: `MachineProfileWizard` mit 6-Schritte-Assistent (Stammdaten, OPC UA, Stationen, Routing, Signale, Abschluss) | Critical | 2–3 days | ✅ complete — Inline-Editoren für Stationen und Signale, OPC-UA-Browser-Anbindung, Validierungs-/Aktivierungs-Dialog. `editProfileId`-Prop erlaubt direktes Editieren eines bestehenden Profils ohne Profilauswahl. |
-| 8.3 | Profilgesteuerte Maschinentabelle: Uncommissionierte Profile als "Inaktiv"-Einträge gemerged | High | 1 day | ✅ complete — `/machine-profiles`-Liste wird parallel geladen; nicht in `/machines` vorhandene Profile werden als `_isUncommissioned`-Einträge mit Badge "Inaktiv" eingeblendet und können bearbeitet/gelöscht werden. |
-| 8.4 | Baumansicht mit Unicode-Connectoren für Stations-Hierarchie | High | 1 day | ✅ complete — `flattenEquipmentTree` liefert `_treeConnectors[]`/`_isLastChild`; Tabelle zeigt `│`/`├`/`└`-Linien. |
-| 8.5 | Stations-Editor direkt aus Maschinentabelle: Bearbeiten-Button einer Station öffnet Wizard mit geöffnetem Inline-Editor | High | 1 day | ✅ complete — `editStationResourceId`-Prop; Wizard springt zu Schritt 3 (Stationen) und öffnet den Editor für die spezifische Station. |
-| 8.6 | Admin-Vollzugriff: Admins sehen immer "Steuern / Vollzugriff" unabhängig vom Betriebsmodus | Medium | 2 hrs | ✅ complete — `MasterDataStep` zeigt bei `disabled=false` immer `control`-Modus. |
-| 8.7 | Tab "Stationen" → "Maschinen" umbenannt (i18n DE/EN) | Low | 30 min | ✅ complete — `nav.stations`, `machines.title`/`search`/`no_results` und PageInfo-Hilfetexte aktualisiert. |
-| 8.8 | Erste produktive Profile anlegen: NovaPress NX-9000 und ggf. weitere | High | 2–3 hrs | 🟡 NovaPress NX-9000 (R70–R73) angelegt — weitere Altanlagen-Konvertierungen offen. |
-
-**Exit Criteria:** ⚠️ Profilsystem technisch vollständig. NovaPress NX-9000 als erster produktiver Profileintrag konvertiert. Ausstehend: Konvertierung weiterer Altanlagen, Integration mit Shopfloor-Routing und OPC-UA-Aktivierungstests gegen reale SPS.
-
----
-
 ## 3. Technology Stack Summary
 
 | Layer | Current Stack | Planned Changes |
@@ -236,8 +209,8 @@ Aktueller Planungswert: **~98 % der Gesamtroadmap (Phasen 1–7); Phase 8 im Auf
 | **Backend** | NestJS 11 + TypeScript 5.7 | passport-jwt, `@nestjs/swagger`, class-validator |
 | **Frontend** | React 19 + Vite 7 + Tailwind 4 | Chart.js / Recharts (Phase 5), Dashboard KPI-OEE (Phase 5 umgesetzt), WebSocket client |
 | **Database** | PostgreSQL 16 (Docker) | → TimescaleDB extension (Phase 3) |
-| **Shopfloor Gateway** | `src/opcua/shopfloor-gateway.*` | OPC-UA Client, MQTT Adapter, stMES-Vermittlung, Webshop-Auto-Erstellung `/api/v1/shopfloor/*`, `/api/v1/shopfloor/ws` |
-| **OPC UA** | `node-opcua` v2.175 | Produktiver Adapter mit Connection retry + write-back; externe 3-Station-Testmaschine unter `test-machines/opcua-simulator/` |
+| **Shopfloor Gateway** | `src/opcua/shopfloor-gateway.*` | OPC-UA Client, MQTT Adapter, stMES-Vermittlung, Webshop-Auto-Erstellung `/api/shopfloor/*`, `/api/shopfloor/ws` |
+| **OPC UA** | `node-opcua` v2.175 | Connection retry + write-back support; 3-Station-Simulation in `tools/opcua-test-server.js` mit schnellen Demo-Zeiten (5/6/4 Sekunden) |
 | **MQTT** | `mqtt` v5.15 | QoS configuration, topic routing (`i4.0/production/orders`), Webshop-Auto-Erstellung auf MES |
 | **Tests** | Jest + Supertest — 110 Unit/Integration tests + 9 E2E tests; Phase 6.2 E2E-Flows operational |
 | **Deploy** | pm2 / Docker Compose / nginx | Docker Swarm or K8s evaluation (future) |
@@ -356,7 +329,7 @@ docs/
 ```
 src/dashboard/
   dashboard.module.ts      ← new module registering DashboardModule
-  dashboard.controller.ts  ← GET /api/v1/dashboard/kpis
+  dashboard.controller.ts  ← GET /api/dashboard/kpis
   dashboard.service.ts     ← OEE, Availability, Performance, Quality calculations
 src/orders/order.entity.ts ← read for throughput / yield KPIs
 machines/                  ← read downtime & machine stats for KPIs
@@ -367,4 +340,4 @@ docs/
 ---
 
 _Roadmap owner: mes-app team_
-_Last updated: 2026-07-27 CEST (v1.4) — Maschinen-Profil-System (Phase 8), NovaPress NX-9000 konvertiert, Wizard mit Stations-Editor-Sprung. Rest: Coverage-Ziel (Phase 6), echte SPS-Anbindung, Altanlagen-Konvertierung (Phase 8.8)._
+_Last updated: 2026-07-24 CEST (v1.3) — FIFO-Queue pro Station, Polling-fallende-Flanke, MES-Timeout-Rejection, ConnectionRecoveryService. Rest: Coverage-Ziel (Phase 6), echte SPS-Anbindung._

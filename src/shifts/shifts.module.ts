@@ -5,19 +5,21 @@ import { ShiftsService } from './shifts.service';
 import { ShiftsController } from './shifts.controller';
 import { OrderEntity } from '../orders/order.entity';
 import { MachineEntity } from '../machines/machine.entity';
-import { DashboardModule } from '../dashboard/dashboard.module';
+import { DowntimeLogEntity } from '../machines/downtime.entity';
+import { DataPointEntity } from '../data-collection/data-point.entity';
+import { AlarmEntity } from '../alarms/alarm.entity';
 
 @Module({
-  imports: [
-    DashboardModule,
-    TypeOrmModule.forFeature([
-      ShiftEntity,
-      ShiftReportEntity,
-      ProductionBatchEntity,
-      OrderEntity,
-      MachineEntity,
-    ]),
-  ],
+  imports: [TypeOrmModule.forFeature([
+    ShiftEntity,
+    ShiftReportEntity,
+    ProductionBatchEntity,
+    OrderEntity,
+    MachineEntity,
+    DowntimeLogEntity,
+    DataPointEntity,
+    AlarmEntity,
+  ])],
   controllers: [ShiftsController],
   providers: [ShiftsService],
   exports: [ShiftsService],

@@ -4,12 +4,12 @@ _Status: verified - 2026-07-22_
 
 ## Ablauf
 
-1. Client verbindet sich mit `/api/v1/shopfloor/ws`.
+1. Client verbindet sich mit `/api/shopfloor/ws`.
 2. Innerhalb von fünf Sekunden muss eine Auth-Nachricht mit JWT folgen.
 3. Das Backend bestätigt mit `auth.ok`.
 4. OPC-UA- und MQTT-Ereignisse werden als `shopfloor.telemetry` gesendet.
 
-Die Shopfloor-Seite zeigt MQTT-Nachrichten in einem eigenen Subscribe-Bereich. Der Backend-Prozess haelt die letzten 50 Nachrichten im Speicher, sodass sie ueber `GET /api/v1/shopfloor/mqtt/messages` auch nach einem Browser-Reload sichtbar sind; ein Backend-Neustart leert diesen fluechtigen Verlauf.
+Die Shopfloor-Seite zeigt MQTT-Nachrichten in einem eigenen Subscribe-Bereich. Der Backend-Prozess haelt die letzten 50 Nachrichten im Speicher, sodass sie ueber `GET /api/shopfloor/mqtt/messages` auch nach einem Browser-Reload sichtbar sind; ein Backend-Neustart leert diesen fluechtigen Verlauf.
 
 ```json
 {
@@ -35,7 +35,7 @@ Ungültige Clients werden mit WebSocket-Code 4401 getrennt. Das Frontend verbind
 ## Testserver
 
 ```bash
-npm run start:test-machine
+npm run start:opcua-test
 ```
 
 Der Server bildet `dbProcessData [DB151]` aus der Siemens-Dokumentation nach. Alle Variablen sind les- und schreibbar.
