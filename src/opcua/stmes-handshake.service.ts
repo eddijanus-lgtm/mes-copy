@@ -8,7 +8,8 @@ import { StMesHandshakeEntity, StMesHandshakeStatusEnum } from './stmes-handshak
 @Injectable()
 export class StMesHandshakeService implements OnModuleInit {
   private readonly logger = new Logger(StMesHandshakeService.name);
-  private readonly processing = new Set<number>();
+  private readonly requestQueues = new Map<number, Promise<void>>();
+  private readonly processing = new Map<number, string | null>();
 
   constructor(
     private readonly opcUa: OpcUaService,
@@ -18,8 +19,15 @@ export class StMesHandshakeService implements OnModuleInit {
 
   onModuleInit() {
     this.opcUa.onStMesRequest((resourceId, active) => {
-      if (active) void this.dispatch(resourceId);
-      else void this.acknowledge(resourceId);
+      const previous = this.requestQueues.get(resourceId) ?? Promise.resolve();
+      const queued = previous.then(async () => {
+        if (active) await this.dispatch(resourceId);
+        else if (this.processing.has(resourceId)) await this.acknowledge(resourceId);
+      }).catch(error => this.logger.error(`stMES request failed at ${resourceId}: ${error.message}`));
+      this.requestQueues.set(resourceId, queued);
+      void queued.then(() => {
+        if (this.requestQueues.get(resourceId) === queued) this.requestQueues.delete(resourceId);
+      });
     });
     this.opcUa.onProcessCompleted((resourceId, timestamp) => void this.completeProcess(resourceId, timestamp));
   }
@@ -30,7 +38,7 @@ export class StMesHandshakeService implements OnModuleInit {
 
   private async dispatch(resourceId: number) {
     if (this.processing.has(resourceId)) return;
-    this.processing.add(resourceId);
+    this.processing.set(resourceId, null);
     const prefix = this.queryPrefix(resourceId);
     let journal: StMesHandshakeEntity | undefined;
 
@@ -44,6 +52,7 @@ export class StMesHandshakeService implements OnModuleInit {
         carrier_number: Number(carrierNumber),
         request_payload: { carrierNumber, requestedResourceId },
       }));
+      this.processing.set(resourceId, journal.id);
       this.opcUa.publishStMesEvent({
         resourceId,
         phase: 'requested',
@@ -149,11 +158,10 @@ export class StMesHandshakeService implements OnModuleInit {
         { nodeId: prefix + 'xDone', dataType: 'Boolean', value: false },
         { nodeId: prefix + 'xError', dataType: 'Boolean', value: false },
       ]);
-      const latest = await this.handshakes.findOne({
-        where: { resource_id: resourceId },
-        order: { created_at: 'DESC' },
-      });
-      if (latest && latest.status !== StMesHandshakeStatusEnum.ACKNOWLEDGED) {
+      const journalId = this.processing.get(resourceId);
+      if (!journalId) return;
+      const latest = await this.handshakes.findOneBy({ id: journalId });
+      if (latest && latest.status === StMesHandshakeStatusEnum.RESPONDED) {
         latest.status = StMesHandshakeStatusEnum.ACKNOWLEDGED;
         latest.acknowledged_at = new Date();
         await this.handshakes.save(latest);

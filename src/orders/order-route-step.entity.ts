@@ -1,4 +1,5 @@
-import { Column, CreateDateColumn, Entity, Index, PrimaryGeneratedColumn, Unique, UpdateDateColumn } from 'typeorm';
+import { OrderEntity } from './order.entity';
+import { ForeignKey, Column, CreateDateColumn, Entity, Index, PrimaryGeneratedColumn, Unique, UpdateDateColumn } from 'typeorm';
 
 @Entity('order_route_steps')
 @Unique(['order_id', 'step_no'])
@@ -8,6 +9,7 @@ export class OrderRouteStepEntity {
   id: string;
 
   @Column({ type: 'uuid' })
+  @ForeignKey(() => OrderEntity, 'id', { name: 'fk_order_route_steps_order', onDelete: 'RESTRICT' })
   order_id: string;
 
   @Column({ type: 'int' })

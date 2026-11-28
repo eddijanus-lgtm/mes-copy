@@ -12,7 +12,7 @@ describe('Orders production flow (e2e)', () => {
   const machineId = '22222222-2222-4222-8222-222222222222';
   const order = { id: orderId, name: 'E2E Order', machine_id: machineId, priority: 1, operation: 'assemble', quantity: 2, completed_quantity: 0, status: 'pending' };
   const ordersService = {
-    create: jest.fn(async () => order),
+    create: jest.fn(async () => ({ ...order, status: 'in_progress', route: [{ step_no: 1, resource_id: 1 }], carriers: [{ carrier_number: 128 }] })),
     findAll: jest.fn(async () => [order]),
     findOne: jest.fn(async () => order),
     update: jest.fn(async (_id, dto) => ({ ...order, ...dto })),
@@ -22,7 +22,6 @@ describe('Orders production flow (e2e)', () => {
     getActiveOrders: jest.fn(async () => [{ ...order, status: 'in_progress' }]),
   };
   const routingService = {
-    releaseDemoProductionOrder: jest.fn(async () => ({ order: { ...order, status: 'in_progress' }, route: [{ step_no: 1, resource_id: 1 }], carriers: [{ carrier_number: 128 }] })),
     getRoute: jest.fn(async () => [{ step_no: 1, resource_id: 1 }, { step_no: 2, resource_id: 2 }, { step_no: 3, resource_id: 3 }]),
     replaceRoute: jest.fn(async () => [{ step_no: 1, resource_id: 1 }]),
   };
@@ -53,6 +52,8 @@ describe('Orders production flow (e2e)', () => {
       .send({ name: 'E2E Order', machine_id: machineId, priority: 1, operation: 'assemble', quantity: 2 })
       .expect(201);
 
+    expect(ordersService.create).toHaveBeenCalledTimes(1);
+    expect(ordersService.create).toHaveBeenCalledWith(expect.objectContaining({ quantity: 2 }), true);
     expect(response.body.order.status).toBe('in_progress');
     expect(response.body.route).toHaveLength(1);
     expect(response.body.carriers[0].carrier_number).toBe(128);

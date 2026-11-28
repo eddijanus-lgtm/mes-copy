@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, IsNull, Repository } from 'typeorm';
 import { OrderEntity } from './order.entity';
 import type { CreateOrderDto, UpdateOrderDto } from './order.dto';
 import { CarrierEntity, CarrierStatusEnum } from '../carriers/carrier.entity';
@@ -17,60 +17,72 @@ export class OrdersService {
     private readonly routeStepsRepo: Repository<OrderRouteStepEntity>,
   ) {}
 
-  async create(dto: CreateOrderDto) {
+  async create(dto: CreateOrderDto, demo = false) {
     const skippedStationIds = new Set(dto.skipped_station_ids || []);
     if (dto.skip_first_station) skippedStationIds.add(1);
     if ([...skippedStationIds].some((id) => ![1, 2, 3].includes(id)) || skippedStationIds.size === 3) {
       throw new BadRequestException('At least one valid station must remain in the route');
     }
-    const availableCarriers = await this.carriersRepo.find({
-      where: { status: CarrierStatusEnum.AVAILABLE },
-      order: { carrier_number: 'ASC' },
-    });
+    return this.ordersRepo.manager.transaction(async (manager) => {
+      const orders = manager.getRepository(OrderEntity);
+      const steps = manager.getRepository(OrderRouteStepEntity);
+      const carriers = manager.getRepository(CarrierEntity);
+      const numbers = [128, 129].slice(0, dto.quantity);
+      if (demo) {
+        if (dto.quantity > numbers.length) throw new BadRequestException('Demo supports at most two carriers');
+        await carriers.createQueryBuilder().insert().values(numbers.map(carrier_number => ({ carrier_number }))).orIgnore().execute();
+      }
+      const availableCarriers = await carriers.find({
+        where: { status: CarrierStatusEnum.AVAILABLE, order_id: IsNull(), ...(demo ? { carrier_number: In(numbers) } : {}) },
+        take: dto.quantity,
+        lock: { mode: 'pessimistic_write' },
+        order: { carrier_number: 'ASC' },
+      });
 
-    if (availableCarriers.length < dto.quantity) {
-      throw new BadRequestException(
-        `Nicht genügend Carrier verfügbar: ${dto.quantity} benötigt, ${availableCarriers.length} verfügbar`,
+      if (availableCarriers.length < dto.quantity) {
+        throw new BadRequestException(
+          `Nicht genügend Carrier verfügbar: ${dto.quantity} benötigt, ${availableCarriers.length} verfügbar`,
+        );
+      }
+
+      const order = orders.create({
+        name: dto.name,
+        priority: dto.priority,
+        machine_id: dto.machine_id,
+        operation: dto.operation,
+        quantity: dto.quantity,
+        status: 'in_progress',
+        start_time: dto.start_time ?? new Date(),
+        target_complete_time: dto.target_complete_time,
+        completed_quantity: 0,
+        red_balls: dto.red_balls ?? (demo ? 3 : 0),
+        green_balls: dto.green_balls ?? (demo ? 5 : 0),
+        blue_balls: dto.blue_balls ?? (demo ? 7 : 0),
+      });
+      const savedOrder = await orders.save(order);
+
+      const parameters = { iPar1: 1, iPar2: savedOrder.red_balls, iPar3: savedOrder.green_balls, iPar4: savedOrder.blue_balls };
+      const routeStepsData = [
+        { step_no: 1, resource_id: 1, operation_no: 10, operation: 'Kugeln dosieren', parameters },
+        { step_no: 2, resource_id: 2, operation_no: 20, operation: 'Deckelfarbe bereitstellen', parameters },
+        { step_no: 3, resource_id: 3, operation_no: 30, operation: 'Deckel und Kugeln pruefen', parameters },
+      ];
+      const selectedSteps = routeStepsData.filter((step) => !skippedStationIds.has(step.resource_id))
+        .map((step, index) => ({ ...step, step_no: index + 1 }));
+      const route = await steps.save(
+        selectedSteps.map(step => steps.create({ ...step, order_id: savedOrder.id })),
       );
-    }
 
-    const order = this.ordersRepo.create({
-      name: dto.name,
-      priority: dto.priority,
-      machine_id: dto.machine_id,
-      operation: dto.operation,
-      quantity: dto.quantity,
-      status: 'in_progress',
-      start_time: dto.start_time ?? new Date(),
-      target_complete_time: dto.target_complete_time,
-      completed_quantity: 0,
-      red_balls: dto.red_balls ?? 0,
-      green_balls: dto.green_balls ?? 0,
-      blue_balls: dto.blue_balls ?? 0,
+      for (const carrier of availableCarriers) {
+        carrier.order_id = savedOrder.id;
+        carrier.current_step_no = 1;
+        carrier.current_resource_id = null;
+        carrier.status = CarrierStatusEnum.ASSIGNED;
+      }
+      const assignedCarriers = await carriers.save(availableCarriers);
+
+      return { ...savedOrder, carriers: assignedCarriers, route };
     });
-    const savedOrder = await this.ordersRepo.save(order);
-
-    const routeStepsData = [
-      { step_no: 1, resource_id: 1, operation_no: 10, operation: 'Kugeln dosieren', parameters: { iPar1: 1, iPar2: dto.red_balls ?? 0, iPar3: dto.green_balls ?? 0, iPar4: dto.blue_balls ?? 0 } },
-      { step_no: 2, resource_id: 2, operation_no: 20, operation: 'Deckelfarbe bereitstellen', parameters: { iPar1: 1, iPar2: dto.red_balls ?? 0, iPar3: dto.green_balls ?? 0, iPar4: dto.blue_balls ?? 0 } },
-      { step_no: 3, resource_id: 3, operation_no: 30, operation: 'Deckel und Kugeln pruefen', parameters: { iPar1: 1, iPar2: dto.red_balls ?? 0, iPar3: dto.green_balls ?? 0, iPar4: dto.blue_balls ?? 0 } },
-    ];
-    const selectedSteps = routeStepsData.filter((step) => !skippedStationIds.has(step.resource_id))
-      .map((step, index) => ({ ...step, step_no: index + 1 }));
-    const route = await this.routeStepsRepo.save(
-      selectedSteps.map(step => this.routeStepsRepo.create({ ...step, order_id: savedOrder.id })),
-    );
-
-    const carriersToAssign = availableCarriers.slice(0, dto.quantity);
-    for (const carrier of carriersToAssign) {
-      carrier.order_id = savedOrder.id;
-      carrier.current_step_no = 1;
-      carrier.current_resource_id = null;
-      carrier.status = CarrierStatusEnum.ASSIGNED;
-    }
-    const assignedCarriers = await this.carriersRepo.save(carriersToAssign);
-
-    return { ...savedOrder, carriers: assignedCarriers, route };
   }
 
   async findAll(): Promise<OrderEntity[]> {

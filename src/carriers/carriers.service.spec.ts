@@ -14,6 +14,11 @@ describe('CarriersService', () => {
     const carrierA = { id: 'c1', carrier_number: 128, status: CarrierStatusEnum.AVAILABLE, order_id: undefined };
     mockSave = jest.fn(async (val: any) => ({ ...carrierA, ...val }));
     carriersRepo = {
+      manager: { transaction: (fn) => fn({
+        findOne: (entity, options) => entity === CarrierEntity ? carriersRepo.findOne(options) : { id: options.where.id },
+        findOneBy: () => ({ step_no: 1 }),
+        save: mockSave,
+      }) },
       create: jest.fn((v: any) => v),
       save: mockSave,
       find: jest.fn(),

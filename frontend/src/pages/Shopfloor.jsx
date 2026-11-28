@@ -437,7 +437,15 @@ function EventTimeline({ events, t }) {
   );
 }
 
-function journalEvent(entry) { const resultCode = entry.result_code; return { timestamp: entry.responded_at || entry.created_at, phase: entry.status === "error" ? "error" : "acknowledged", resultCode, message: `Carrier ${entry.carrier_number}: ${RESULT_TEXT[resultCode] || entry.status}` }; }
+function journalEvent(entry) {
+  const phases = { received: "requested", responded: "done", acknowledged: "acknowledged", error: "error" };
+  return {
+    timestamp: entry.acknowledged_at || entry.responded_at || entry.created_at,
+    phase: phases[entry.status] || entry.status,
+    resultCode: entry.result_code,
+    message: `Carrier ${entry.carrier_number}: ${RESULT_TEXT[entry.result_code] || entry.status}`,
+  };
+}
 function MetricCard({ label, value, technical, changed }) { return <div className={`rounded-lg border p-4 transition-all duration-500 ${changed ? "border-amber-300 bg-amber-50 shadow-md" : "border-neutral-200 bg-neutral-50"}`}><p className="text-xs font-medium uppercase tracking-wider text-neutral-500">{label}</p><p className="mt-2 text-2xl font-bold text-neutral-900">{value}</p><p className="mt-1 font-mono text-[11px] text-neutral-400">{technical}</p></div>; }
 
 function formatLidColor(value) { return ({ 0: "Keine Dose", 1: "Rot", 2: "Blau", 3: "Grün" })[value] || "–"; }

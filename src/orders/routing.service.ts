@@ -22,7 +22,7 @@ const DEMO_PRODUCTION_ROUTE = [
   { step_no: 2, resource_id: 2, operation_no: 20, operation: 'Deckelfarbe bereitstellen', parameters: { iPar1: 1, iPar2: 3, iPar3: 5, iPar4: 7 } },
   { step_no: 3, resource_id: 3, operation_no: 30, operation: 'Deckel und Kugeln pruefen', parameters: { iPar1: 1, iPar2: 3, iPar3: 5, iPar4: 7 } },
 ];
-const DEMO_CARRIER_NUMBERS = [128, 129];
+const WEBSHOP_CARRIER_NUMBER = 128;
 
 export type WebshopProductionPayload = {
   bDeckelfarbe: number;
@@ -53,7 +53,7 @@ export class RoutingService {
     }
 
     return this.dataSource.transaction(async (manager) => {
-      const carriers = await manager.find(CarrierEntity, { where: { order_id: orderId }, lock: { mode: 'pessimistic_write' } });
+      const carriers = await manager.find(CarrierEntity, { where: { order_id: orderId }, order: { carrier_number: 'ASC' }, lock: { mode: 'pessimistic_write' } });
       const order = await manager.findOne(OrderEntity, { where: { id: orderId }, lock: { mode: 'pessimistic_write' } });
       if (!order) throw new NotFoundException('Order not found');
       if (!['pending', 'in_progress'].includes(order.status) || order.completed_quantity > 0 ||
@@ -66,41 +66,6 @@ export class RoutingService {
         order_id: orderId,
         parameters: step.parameters || {},
       })));
-    });
-  }
-
-  async releaseDemoProductionOrder(orderId: string, quantity: number) {
-    return this.dataSource.transaction(async (manager) => {
-      const order = await manager.findOne(OrderEntity, { where: { id: orderId } });
-      if (!order) throw new NotFoundException('Order not found');
-
-      await manager.delete(OrderRouteStepEntity, { order_id: orderId });
-      const route = await manager.save(OrderRouteStepEntity, DEMO_PRODUCTION_ROUTE.map((step) => manager.create(OrderRouteStepEntity, {
-        ...step,
-        order_id: orderId,
-      })));
-
-      order.status = 'in_progress';
-      order.completed_quantity = 0;
-      order.start_time = new Date();
-      await manager.save(order);
-
-      const carrierNumbers = DEMO_CARRIER_NUMBERS.slice(0, Math.max(1, Math.min(quantity, DEMO_CARRIER_NUMBERS.length)));
-      const carriers: CarrierEntity[] = [];
-      for (const carrierNumber of carrierNumbers) {
-        let carrier = await manager.findOne(CarrierEntity, { where: { carrier_number: carrierNumber } });
-        if (carrier && (carrier.status !== CarrierStatusEnum.AVAILABLE || carrier.order_id)) {
-          throw new BadRequestException(`Carrier ${carrierNumber} is already assigned`);
-        }
-        if (!carrier) carrier = manager.create(CarrierEntity, { carrier_number: carrierNumber });
-        carrier.order_id = orderId;
-        carrier.current_step_no = 1;
-        carrier.current_resource_id = null;
-        carrier.status = CarrierStatusEnum.ASSIGNED;
-        carriers.push(await manager.save(carrier));
-      }
-
-      return { order, route, carriers };
     });
   }
 
@@ -181,10 +146,15 @@ export class RoutingService {
 
   async completeStationStep(resourceId: number, carrierNumber: number, completedAt: Date) {
     return this.dataSource.transaction(async (manager) => {
-      const carrier = await manager.findOne(CarrierEntity, {
-        where: { carrier_number: carrierNumber },
+      const assignment = await manager.findOneBy(CarrierEntity, { carrier_number: carrierNumber });
+      if (!assignment?.order_id) return false;
+      // All completions of an order acquire its carriers in the same order.
+      const orderCarriers = await manager.find(CarrierEntity, {
+        where: { order_id: assignment.order_id },
+        order: { carrier_number: 'ASC' },
         lock: { mode: 'pessimistic_write' },
       });
+      const carrier = orderCarriers.find(row => row.carrier_number === carrierNumber);
       if (!carrier?.order_id || carrier.current_resource_id !== resourceId) return false;
 
       const step = await manager.findOne(OrderRouteStepEntity, {
@@ -203,13 +173,12 @@ export class RoutingService {
       } else {
         carrier.current_resource_id = null;
         carrier.status = CarrierStatusEnum.COMPLETED;
-        const order = await manager.findOne(OrderEntity, { where: { id: carrier.order_id } });
+        const order = await manager.findOne(OrderEntity, { where: { id: carrier.order_id }, lock: { mode: 'pessimistic_write' } });
         if (order) {
           order.completed_quantity = Math.min(order.quantity, order.completed_quantity + 1);
           if (order.completed_quantity >= order.quantity) {
             order.status = 'completed';
             order.end_time = completedAt;
-            const orderCarriers = await manager.find(CarrierEntity, { where: { order_id: order.id } });
             for (const oc of orderCarriers) {
               oc.status = CarrierStatusEnum.AVAILABLE;
               oc.order_id = null;
@@ -217,7 +186,9 @@ export class RoutingService {
               oc.current_resource_id = null;
             }
             await manager.save(orderCarriers);
-            await this.assignNextPendingOrder(manager);
+            if (orderCarriers.some(row => row.carrier_number === WEBSHOP_CARRIER_NUMBER)) {
+              await this.assignNextPendingOrder(manager);
+            }
           } else {
             await manager.save(carrier);
           }
@@ -231,25 +202,26 @@ export class RoutingService {
   }
 
   private async assignNextPendingOrder(manager: import('typeorm').EntityManager): Promise<CarrierEntity[]> {
-    const carrier = await manager.findOne(CarrierEntity, {
-      where: { carrier_number: DEMO_CARRIER_NUMBERS[0] },
+    await manager.createQueryBuilder().insert().into(CarrierEntity)
+      .values({ carrier_number: WEBSHOP_CARRIER_NUMBER }).orIgnore().execute();
+    const carrier = await manager.findOneOrFail(CarrierEntity, {
+      where: { carrier_number: WEBSHOP_CARRIER_NUMBER },
       lock: { mode: 'pessimistic_write' },
     });
-    if (carrier && (carrier.status !== CarrierStatusEnum.AVAILABLE || carrier.order_id)) return [];
+    if (carrier.status !== CarrierStatusEnum.AVAILABLE || carrier.order_id) return [];
     const pending = await manager.findOne(OrderEntity, {
       where: { status: 'pending', operation: 'Webshop-Produkt konfigurieren' },
       order: { created_at: 'ASC' },
       lock: { mode: 'pessimistic_write' },
     });
     if (!pending) return [];
-    const assigned = carrier ?? manager.create(CarrierEntity, { carrier_number: DEMO_CARRIER_NUMBERS[0] });
-    assigned.order_id = pending.id;
-    assigned.current_step_no = 1;
-    assigned.current_resource_id = null;
-    assigned.status = CarrierStatusEnum.ASSIGNED;
+    carrier.order_id = pending.id;
+    carrier.current_step_no = 1;
+    carrier.current_resource_id = null;
+    carrier.status = CarrierStatusEnum.ASSIGNED;
     pending.status = 'in_progress';
     pending.start_time = new Date();
     await manager.save(pending);
-    return [await manager.save(assigned)];
+    return [await manager.save(carrier)];
   }
 }

@@ -1,3 +1,5 @@
+import { OrderEntity } from '../orders/order.entity';
+import { OrderRouteStepEntity } from '../orders/order-route-step.entity';
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -26,18 +28,37 @@ export class CarriersService {
   }
 
   async assign(id: string, dto: AssignCarrierDto) {
-    const carrier = await this.findOne(id);
-    carrier.order_id = dto.order_id;
-    carrier.current_step_no = dto.current_step_no;
-    carrier.current_resource_id = null;
-    carrier.status = CarrierStatusEnum.ASSIGNED;
-    return this.carriers.save(carrier);
+    return this.update(id, {
+      order_id: dto.order_id,
+      current_step_no: dto.current_step_no ?? 1,
+      current_resource_id: null,
+      status: CarrierStatusEnum.ASSIGNED,
+    });
   }
 
   async update(id: string, dto: UpdateCarrierDto) {
-    const carrier = await this.findOne(id);
-    Object.assign(carrier, dto);
-    return this.carriers.save(carrier);
+    return this.carriers.manager.transaction(async (manager) => {
+      const carrier = await manager.findOne(CarrierEntity, {
+        where: { id },
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (!carrier) throw new NotFoundException('Carrier not found');
+      if (dto.order_id && carrier.order_id && carrier.order_id !== dto.order_id) {
+        throw new BadRequestException('Carrier is already assigned to another order');
+      }
+      Object.assign(carrier, dto);
+      if (carrier.order_id && (dto.order_id !== undefined || dto.current_step_no !== undefined)) {
+        const order = await manager.findOne(OrderEntity, {
+          where: { id: carrier.order_id }, lock: { mode: 'pessimistic_write' },
+        });
+        if (!order) throw new BadRequestException('Unknown production order');
+        const step = await manager.findOneBy(OrderRouteStepEntity, {
+          order_id: order.id, step_no: carrier.current_step_no,
+        });
+        if (!step) throw new BadRequestException('Unknown route step for this order');
+      }
+      return manager.save(carrier);
+    });
   }
 
   async remove(id: string) {

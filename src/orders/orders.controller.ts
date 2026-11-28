@@ -18,8 +18,8 @@ export class OrdersController {
   @Post('demo-production')
   @Roles(UserRoleEnum.ADMIN, UserRoleEnum.OPERATOR)
   async createDemoProductionOrder(@Body() dto: CreateOrderDto) {
-    const order = await this.ordersService.create(dto);
-    return this.routingService.releaseDemoProductionOrder(order.id, order.quantity);
+    const { route, carriers, ...order } = await this.ordersService.create(dto, true);
+    return { order, route, carriers };
   }
 
   @Get()

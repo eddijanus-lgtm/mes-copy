@@ -1,4 +1,5 @@
-import { Column, CreateDateColumn, Entity, PrimaryGeneratedColumn, UpdateDateColumn, VersionColumn } from 'typeorm';
+import { OrderEntity } from '../orders/order.entity';
+import { ForeignKey, Column, CreateDateColumn, Entity, PrimaryGeneratedColumn, UpdateDateColumn, VersionColumn } from 'typeorm';
 
 export enum CarrierStatusEnum {
   AVAILABLE = 'available',
@@ -17,6 +18,7 @@ export class CarrierEntity {
   carrier_number: number;
 
   @Column({ type: 'uuid', nullable: true })
+  @ForeignKey(() => OrderEntity, 'id', { name: 'fk_carriers_order', onDelete: 'RESTRICT' })
   order_id: string | null;
 
   @Column({ type: 'int', default: 1 })

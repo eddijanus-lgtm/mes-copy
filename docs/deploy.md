@@ -136,3 +136,11 @@ Aktueller lokaler Messwert: `10000` Testpunkte in `0.27s`, ungefähr `36496 writ
 ```bash
 curl http://localhost:3000/api/shopfloor/health
 ```
+
+### Bestehende Produktionsdatenbank aktualisieren
+
+Vor dem Rollout der Carrier-Zuordnung bei ausgeschaltetem Schema-Sync die Migration
+gegen die MES-Datenbank ausführen: `psql -v ON_ERROR_STOP=1 -f deploy/order-integrity.sql`
+(Verbindung über die üblichen PostgreSQL-Verbindungsparameter).
+Die Migration prüft vorhandene Auftragsreferenzen und läuft in einer Transaktion.
+Bei verwaisten Verweisen die betroffenen Zuordnungen fachlich klären und erneut ausführen.

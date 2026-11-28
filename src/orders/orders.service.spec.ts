@@ -9,6 +9,7 @@ import { OrdersService } from './orders.service';
 describe('OrdersService', () => {
   let service: OrdersService;
   const ordersRepo = {
+    manager: { transaction: (fn) => fn({ getRepository: (entity) => entity === OrderEntity ? ordersRepo : entity === CarrierEntity ? carriersRepo : routeStepsRepo }) },
     create: jest.fn((value) => value),
     save: jest.fn(async (value) => ({ id: value.id || 'order-1', ...value })),
     find: jest.fn(),
